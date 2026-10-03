@@ -298,6 +298,11 @@ const SUBPIX_MIN_HALF: u32 = 2;
 const SUBPIX_MAX_HALF: u32 = 4;
 /// Candidate window half-widths as fractions of the marker cell.
 const SUBPIX_CELL_FRACTIONS: [f64; 3] = [0.3, 0.5, 0.75];
+/// Largest fraction of a cell the smallest (2 px) window may cover: markers with cells under
+/// 2 / 0.6 ≈ 3.3 px keep their seed corners. Measured on ChArUco boards of 2.3–2.9 px cells,
+/// where the 2 px window degraded board rotation (0.07° → 0.21° on 2.9 px cells); neutral on
+/// the ICRA, render-tag, AprilGrid, Liu4K and EuRoC benchmarks.
+const SUBPIX_MIN_WINDOW_CELL_FRACTION: f64 = 0.6;
 /// Uncertainty ratio past which a smaller window is preferred over a larger one. Both
 /// uncertainties are residual-variance estimates from a few dozen effective samples, whose
 /// ratio is F-distributed; a factor of 2 is about where a difference stops being noise. Taking
@@ -322,6 +327,11 @@ pub(crate) fn corner_subpix_half_windows(side_px: f64, cells: usize) -> ([u32; 3
     let cell = side_px / cells.max(1) as f64;
     let mut out = [0u32; 3];
     let mut n = 0;
+    // The smallest window must fit well inside a cell, or the junction model cannot hold
+    // anywhere in it: no candidate, so the corner keeps its seed.
+    if f64::from(SUBPIX_MIN_HALF) > SUBPIX_MIN_WINDOW_CELL_FRACTION * cell {
+        return (out, 0);
+    }
     for f in SUBPIX_CELL_FRACTIONS {
         // In [2, 4] after the clamp, so the cast is exact.
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
@@ -352,12 +362,12 @@ const SUBPIX_EPS: f64 = 0.005;
 /// chessboard corner next to the marker's white square, or clutter beside a small tag. A
 /// refined corner is therefore kept only if the image around it still shows the corner of this
 /// marker's black border, as checked by [`marker_corner_consistent`]. A rejected corner keeps
-/// its seed.
+/// its seed. Also returns which corners moved (bit `j` = corner `j`).
 pub(crate) fn subpix_marker_corners(
     img: &ImageView,
     seed: [[f64; 2]; 4],
     cells: usize,
-) -> [[f64; 2]; 4] {
+) -> ([[f64; 2]; 4], u8) {
     let side = (0..4)
         .map(|j| {
             let (p, q) = (seed[j], seed[(j + 1) % 4]);
@@ -368,6 +378,7 @@ pub(crate) fn subpix_marker_corners(
     let (halves, count) = corner_subpix_half_windows(side, cells);
     let probe = (0.5 * side / cells.max(1) as f64).max(1.0);
     let mut out = seed;
+    let mut refined_bits = 0u8;
     for j in 0..4 {
         // Accepted solutions, ascending window size.
         let mut accepted = [None::<Subpix>; 3];
@@ -396,9 +407,10 @@ pub(crate) fn subpix_marker_corners(
             .find(|r| r.uncertainty <= SUBPIX_SIGNIFICANT_RATIO * least)
         {
             out[j] = pick.corner;
+            refined_bits |= 1 << j;
         }
     }
-    out
+    (out, refined_bits)
 }
 
 /// Whether `corner` looks like the corner of a dark-bordered marker whose adjacent corners are
@@ -631,11 +643,13 @@ mod subpix_tests {
         use super::corner_subpix_half_windows as hw;
         let used = |(h, n): ([u32; 3], usize)| h[..n].to_vec();
         // 8-cell markers: cell = side / 8; candidates round(0.3/0.5/0.75 · cell) in [2, 4].
-        assert_eq!(used(hw(16.0, 8)), vec![2]); // cell 2 px
+        assert_eq!(used(hw(16.0, 8)), Vec::<u32>::new()); // cell 2 px: no window fits
+        assert_eq!(used(hw(24.0, 8)), Vec::<u32>::new()); // cell 3 px: under 3.3 px
+        assert_eq!(used(hw(28.0, 8)), vec![2, 3]); // cell 3.5 px: 1.05, 1.75, 2.6
         assert_eq!(used(hw(32.0, 8)), vec![2, 3]); // cell 4 px: 1.2, 2, 3
         assert_eq!(used(hw(48.0, 8)), vec![2, 3, 4]); // cell 6 px: 1.8, 3, 4.5
         assert_eq!(used(hw(400.0, 8)), vec![4]);
-        assert_eq!(used(hw(0.0, 8)), vec![2]);
+        assert_eq!(used(hw(0.0, 8)), Vec::<u32>::new());
     }
 
     /// Bright canvas with the given dark axis-aligned squares `[x0, x1) × [y0, y1)`.

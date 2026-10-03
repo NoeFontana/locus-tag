@@ -178,6 +178,10 @@ impl RegressionHarness {
         mode: locus_core::config::QuadExtractionMode,
     ) -> Self {
         self.config.quad_extraction_mode = mode;
+        // EdLines cases mirror `high_accuracy`, whose whole-edge corners are not re-refined.
+        if mode == locus_core::config::QuadExtractionMode::EdLines {
+            self.config.decoder_corner_subpix = false;
+        }
         self
     }
 

@@ -410,6 +410,170 @@ impl PointCorrespondences<'_> {
     }
 }
 
+// ── Marker-corner photometric inset ───────────────────────────────────────
+
+/// Correspondence group size of marker corners (one group per marker, its four corners).
+const MARKER_GROUP: usize = 4;
+/// Pose/inset alternations. The per-marker inset and the board pose are nearly orthogonal
+/// (the inset moves corners by the same distance about each marker's own centre; pose changes
+/// move them in a board-wide pattern), so the alternation converges in a couple of rounds.
+const INSET_ALTERNATIONS: usize = 2;
+/// Huber scale (px) of the inset estimate: about three times the per-corner scatter of a good
+/// corner, well below a gross corner error.
+const INSET_HUBER_PX: f64 = 0.5;
+/// IRLS iterations of the inset estimate.
+const INSET_IRLS_ITERATIONS: usize = 5;
+/// Standard errors an inset must exceed to be modelled.
+const INSET_SIGNIFICANCE: f64 = 3.0;
+
+/// The board's marker-corner photometric inset model: per-correspondence estimator classes
+/// and one edge offset (px) per class; `None` in a class means that estimator shows no
+/// significant offset.
+#[derive(Clone, Copy)]
+struct CornerInset<'a> {
+    classes: &'a [u8],
+    delta: [Option<f64>; 2],
+}
+
+impl CornerInset<'_> {
+    /// Edge offset of correspondence `k` (0 when its class has none).
+    fn at(&self, k: usize) -> f64 {
+        self.delta[corner_class(self.classes, k)].unwrap_or(0.0)
+    }
+}
+
+/// Corner-estimator class of correspondence `k`: 1 if the decoder's gradient-orthogonality pass
+/// placed it, 0 otherwise (or when no classes are given). The two estimators carry different
+/// photometric offsets (an ERF edge fit vs a junction fit; equal on L-corners, not on
+/// AprilGrid's X-junctions), so each gets its own inset.
+fn corner_class(corner_classes: &[u8], k: usize) -> usize {
+    usize::from(corner_classes.get(k).is_some_and(|&c| c != 0))
+}
+
+/// Image projections of the four corners of the marker whose corners are `start..start + 4`,
+/// in their cyclic order.
+fn project_marker(
+    pose: &Pose,
+    corr: &PointCorrespondences<'_>,
+    intrinsics: &CameraIntrinsics,
+    start: usize,
+) -> Option<[[f64; 2]; MARKER_GROUP]> {
+    let mut out = [[0.0; 2]; MARKER_GROUP];
+    for (slot, obj) in out
+        .iter_mut()
+        .zip(&corr.object_points[start..start + MARKER_GROUP])
+    {
+        let p_cam = pose.rotation * Vector3::new(obj[0], obj[1], obj[2]) + pose.translation;
+        if p_cam.z < 1e-4 {
+            return None;
+        }
+        let z_inv = 1.0 / p_cam.z;
+        *slot = projection_and_gradient(intrinsics, p_cam.x * z_inv, p_cam.y * z_inv, z_inv).0;
+    }
+    Some(out)
+}
+
+/// Image displacement of corner `j` of a projected marker `quad` per pixel of inward edge
+/// offset: when both edges at the corner move inward along their normals by `δ`, the corner
+/// moves to the intersection of the shifted edges, `δ·(n₁ + n₂)/(1 + n₁·n₂)` for inward unit
+/// normals `n₁`, `n₂`. Exact under perspective, where the marker's diagonal is not.
+fn inset_direction(quad: &[[f64; 2]; MARKER_GROUP], j: usize) -> Option<[f64; 2]> {
+    let unit = |to: [f64; 2]| {
+        let (dx, dy) = (to[0] - quad[j][0], to[1] - quad[j][1]);
+        let n = dx.hypot(dy);
+        (n > 1e-9).then(|| [dx / n, dy / n])
+    };
+    let e1 = unit(quad[(j + MARKER_GROUP - 1) % MARKER_GROUP])?;
+    let e2 = unit(quad[(j + 1) % MARKER_GROUP])?;
+    // Inward normal of each edge: its perpendicular pointing toward the other edge.
+    let normal = |e: [f64; 2], other: [f64; 2]| {
+        let along = other[0] * e[0] + other[1] * e[1];
+        let (nx, ny) = (other[0] - along * e[0], other[1] - along * e[1]);
+        let n = nx.hypot(ny);
+        (n > 1e-9).then(|| [nx / n, ny / n])
+    };
+    let (n1, n2) = (normal(e1, e2)?, normal(e2, e1)?);
+    let denom = 1.0 + n1[0] * n2[0] + n1[1] * n2[1];
+    (denom > 1e-6).then(|| [(n1[0] + n2[0]) / denom, (n1[1] + n2[1]) / denom])
+}
+
+/// Photometric inset of the detected marker corners at `pose`, in pixels (positive = detected
+/// inside the model corner), over the inlier markers.
+///
+/// A gradient corner detector locates a blurred edge where the image's tone curve puts it, not
+/// where the linear-light edge is: on sRGB-encoded images every marker corner reads about
+/// 0.6–0.8 px inside, the same for every marker of a frame. On a single tag that offset is
+/// indistinguishable from depth. On a board the layout fixes the marker centres, and the
+/// offset is the location of the per-corner insets along each corner's edge-offset direction
+/// ([`inset_direction`]), estimated with a Huber M-estimator (scale `INSET_HUBER_PX`) so a few gross corners cannot
+/// move it. `None` for non-marker correspondences (ChArUco saddles), fewer than four inlier
+/// markers, or an inset within `INSET_SIGNIFICANCE` standard errors of zero.
+fn estimate_corner_inset(
+    pose: &Pose,
+    corr: &PointCorrespondences<'_>,
+    corner_classes: &[u8],
+    intrinsics: &CameraIntrinsics,
+    inlier_mask: &[u64; 16],
+    class: usize,
+) -> Option<f64> {
+    if corr.group_size != MARKER_GROUP {
+        return None;
+    }
+    // Calls `f` with each inlier marker corner's own least-squares inset.
+    let for_each_residual = |f: &mut dyn FnMut(f64)| -> u32 {
+        let mut groups = 0;
+        for g in 0..corr.num_groups() {
+            if (inlier_mask[g / 64] & (1 << (g % 64))) == 0 {
+                continue;
+            }
+            let start = g * MARKER_GROUP;
+            let Some(quad) = project_marker(pose, corr, intrinsics, start) else {
+                continue;
+            };
+            groups += 1;
+            for (j, &[u, v]) in quad.iter().enumerate() {
+                if corner_class(corner_classes, start + j) != class {
+                    continue;
+                }
+                if let Some([dx, dy]) = inset_direction(&quad, j) {
+                    // Least-squares inset of this corner: (observed − projected)·d / |d|².
+                    let observed = corr.image_points[start + j];
+                    let d2 = dx * dx + dy * dy;
+                    f(((f64::from(observed.x) - u) * dx + (f64::from(observed.y) - v) * dy) / d2);
+                }
+            }
+        }
+        groups
+    };
+    // IRLS for the Huber location, from 0 (no inset).
+    let mut inset = 0.0;
+    let (mut spread, mut weight) = (0.0, 0.0);
+    for _ in 0..INSET_IRLS_ITERATIONS {
+        let (mut sum_wr, mut sum_wrr, mut sum_w) = (0.0, 0.0, 0.0);
+        let groups = for_each_residual(&mut |r| {
+            let a = (r - inset).abs();
+            let w = if a <= INSET_HUBER_PX {
+                1.0
+            } else {
+                INSET_HUBER_PX / a
+            };
+            sum_wr += w * r;
+            sum_wrr += w * r * r;
+            sum_w += w;
+        });
+        if groups < 4 || sum_w <= 0.0 {
+            return None;
+        }
+        inset = sum_wr / sum_w;
+        spread = (sum_wrr / sum_w - inset * inset).max(0.0);
+        weight = sum_w;
+    }
+    // Keep the inset only when it is significant: on boards whose corners carry no photometric
+    // offset (AprilGrid connectors make X-junctions) an estimated zero only adds variance.
+    let standard_error = (spread / weight).sqrt();
+    (inset.abs() > INSET_SIGNIFICANCE * standard_error).then_some(inset)
+}
+
 // ── Sample-homography IPPE-Square RANSAC seed ─────────────────────────────
 
 /// Joint reprojection RMSE (squared mean) of `pose` against the 4 × `group_size`
@@ -776,6 +940,7 @@ impl RobustPoseSolver {
     pub fn estimate(
         &self,
         corr: &PointCorrespondences<'_>,
+        corner_classes: &[u8],
         intrinsics: &CameraIntrinsics,
         outlier_drop_d2_threshold: f64,
     ) -> Option<BoardPose> {
@@ -793,8 +958,36 @@ impl RobustPoseSolver {
             self.evaluate_inliers(&best_pose, corr, intrinsics, self.lo_ransac.tau_aw_lm_sq);
 
         // Phase 3: final AW-LM over the verified, relaxed inlier set.
-        let (refined_pose, covariance) =
-            self.refine_aw_lm(&best_pose, corr, intrinsics, &aw_lm_mask);
+        let (mut refined_pose, mut covariance) =
+            self.refine_aw_lm(&best_pose, corr, intrinsics, &aw_lm_mask, None);
+
+        // Phase 3b: marker-corner photometric inset. A tone curve or blur model mismatch moves
+        // every detected marker corner inward (or outward) by the same distance δ along its
+        // marker's diagonal; the board layout fixes the marker centres, so δ is separable from
+        // the pose and is estimated by alternation (see `estimate_corner_inset`).
+        let mut inset: Option<CornerInset<'_>> = None;
+        for _ in 0..INSET_ALTERNATIONS {
+            let delta: [Option<f64>; 2] = core::array::from_fn(|class| {
+                estimate_corner_inset(
+                    &refined_pose,
+                    corr,
+                    corner_classes,
+                    intrinsics,
+                    &aw_lm_mask,
+                    class,
+                )
+            });
+            if delta.iter().all(Option::is_none) {
+                break;
+            }
+            let model = CornerInset {
+                classes: corner_classes,
+                delta,
+            };
+            inset = Some(model);
+            (refined_pose, covariance) =
+                self.refine_aw_lm(&refined_pose, corr, intrinsics, &aw_lm_mask, inset);
+        }
 
         // Opt-in: outlier-aware drop on the AW-LM result (N-observation
         // form of the per-tag mechanism). If the masked re-fit produced
@@ -809,6 +1002,7 @@ impl RobustPoseSolver {
             intrinsics,
             &aw_lm_mask,
             outlier_drop_d2_threshold,
+            inset,
         ) {
             Some((pose_3, cov_3, _g_dropped)) => {
                 let cov_3_finite = cov_3.iter().all(|v| v.is_finite());
@@ -1235,6 +1429,7 @@ impl RobustPoseSolver {
         intrinsics: &CameraIntrinsics,
         inlier_mask: &[u64; 16],
         threshold: f64,
+        inset: Option<CornerInset<'_>>,
     ) -> Option<(Pose, Matrix6<f64>, usize)> {
         const DOMINANCE_RATIO: f64 = 2.0;
 
@@ -1259,7 +1454,24 @@ impl RobustPoseSolver {
         let mut masked_mask = *inlier_mask;
         masked_mask[g_worst / 64] &= !(1u64 << (g_worst % 64));
 
-        let (pose_3, cov_3) = self.refine_aw_lm(pose_4, corr, intrinsics, &masked_mask);
+        // Re-estimate the inset without the dropped marker.
+        let inset_3 = inset.map(|model| CornerInset {
+            delta: core::array::from_fn(|class| {
+                model.delta[class].and_then(|previous| {
+                    estimate_corner_inset(
+                        pose_4,
+                        corr,
+                        model.classes,
+                        intrinsics,
+                        &masked_mask,
+                        class,
+                    )
+                    .or(Some(previous))
+                })
+            }),
+            ..model
+        });
+        let (pose_3, cov_3) = self.refine_aw_lm(pose_4, corr, intrinsics, &masked_mask, inset_3);
 
         // Self-rejection over the kept groups under the original
         // (unmasked) info matrices. Both sums are computed in a single
@@ -1294,9 +1506,11 @@ impl RobustPoseSolver {
         corr: &PointCorrespondences<'_>,
         intrinsics: &CameraIntrinsics,
         inlier_mask: &[u64; 16],
+        inset: Option<CornerInset<'_>>,
     ) -> (Pose, Matrix6<f64>) {
         let gs = corr.group_size;
         let num_groups = corr.num_groups();
+        let inset = inset.filter(|_| gs == MARKER_GROUP);
 
         let compute_equations = |current_pose: &Pose| -> (f64, Matrix6<f64>, Vector6<f64>) {
             let mut ne = BodyFrameNormalEquations::new(current_pose);
@@ -1307,6 +1521,8 @@ impl RobustPoseSolver {
                     continue;
                 }
                 let start = g * gs;
+                let quad =
+                    inset.and_then(|_| project_marker(current_pose, corr, intrinsics, start));
 
                 for k in start..(start + gs) {
                     let obj = corr.object_points[k];
@@ -1321,8 +1537,14 @@ impl RobustPoseSolver {
                     let yn = p_cam.y * z_inv;
                     let ([u, v], du_dp, dv_dp) = projection_and_gradient(intrinsics, xn, yn, z_inv);
 
-                    let res_u = f64::from(corr.image_points[k].x) - u;
-                    let res_v = f64::from(corr.image_points[k].y) - v;
+                    // The observed corner, moved back out by the board's photometric inset
+                    // (see `estimate_corner_inset`).
+                    let delta = inset.map_or(0.0, |model| model.at(k));
+                    let [ox, oy] = quad
+                        .and_then(|q| inset_direction(&q, k - start))
+                        .map_or([0.0, 0.0], |[dx, dy]| [delta * dx, delta * dy]);
+                    let res_u = f64::from(corr.image_points[k].x) - ox - u;
+                    let res_v = f64::from(corr.image_points[k].y) - oy - v;
 
                     let info = corr.information_matrices[k];
                     let (weight, cost) =
@@ -1385,6 +1607,7 @@ pub struct BoardEstimator {
     scratch_img: Box<[Point2f]>,
     scratch_obj: Box<[[f64; 3]]>,
     scratch_info: Box<[Matrix2<f64>]>,
+    scratch_class: Box<[u8]>,
 }
 
 impl BoardEstimator {
@@ -1407,6 +1630,7 @@ impl BoardEstimator {
             scratch_img: vec![Point2f { x: 0.0, y: 0.0 }; Self::MAX_CORR].into_boxed_slice(),
             scratch_obj: vec![[0.0f64; 3]; Self::MAX_CORR].into_boxed_slice(),
             scratch_info: vec![Matrix2::zeros(); Self::MAX_CORR].into_boxed_slice(),
+            scratch_class: vec![0u8; Self::MAX_CORR].into_boxed_slice(),
         }
     }
 
@@ -1452,8 +1676,12 @@ impl BoardEstimator {
 
         // Phase 2–4: LO-RANSAC → GN verification → AW-LM refinement
         // (+ optional outlier-aware drop when threshold > 0.0).
-        self.solver
-            .estimate(&corr, intrinsics, outlier_drop_d2_threshold)
+        self.solver.estimate(
+            &corr,
+            &self.scratch_class[..m],
+            intrinsics,
+            outlier_drop_d2_threshold,
+        )
     }
 
     // ── Private helpers ──────────────────────────────────────────────────
@@ -1479,6 +1707,7 @@ impl BoardEstimator {
             for (j, obj_pt) in obj.iter().enumerate() {
                 self.scratch_img[base + j] = batch.corners[i][j];
                 self.scratch_obj[base + j] = *obj_pt;
+                self.scratch_class[base + j] = (batch.corner_refined[i] >> j) & 1;
                 // Invert the per-corner covariance into an information matrix.
                 // Fall back to identity if the covariance is singular.
                 self.scratch_info[base + j] = Matrix2::new(
@@ -1925,6 +2154,63 @@ mod tests {
         );
     }
 
+    /// A uniform photometric inset of every marker edge (here 0.7 px, the sRGB-render scale)
+    /// biases a board fit that ignores it, and is recovered from the corner residuals.
+    #[test]
+    fn corner_inset_is_recovered_and_removes_the_translation_bias() {
+        const INSET_PX: f64 = 0.7;
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
+        let intrinsics = test_intrinsics();
+        let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (mut batch, num_valid) =
+            build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
+        let (mut img, obj, info) =
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
+        // Every edge moves inward by INSET_PX, so every corner moves by INSET_PX · d.
+        for group in img.chunks_mut(MARKER_GROUP) {
+            let quad: [[f64; 2]; MARKER_GROUP] =
+                core::array::from_fn(|j| [f64::from(group[j].x), f64::from(group[j].y)]);
+            for (j, p) in group.iter_mut().enumerate() {
+                let [dx, dy] = inset_direction(&quad, j).expect("non-degenerate marker");
+                p.x = (quad[j][0] + INSET_PX * dx) as f32;
+                p.y = (quad[j][1] + INSET_PX * dy) as f32;
+            }
+        }
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: MARKER_GROUP,
+        };
+        let all_inliers = [u64::MAX; 16];
+
+        let inset = estimate_corner_inset(&true_pose, &corr, &[], &intrinsics, &all_inliers, 0)
+            .expect("enough marker groups");
+        assert!(
+            (inset - INSET_PX).abs() < 0.01,
+            "estimated inset {inset:.4} px"
+        );
+
+        let solver = RobustPoseSolver::new();
+        let (ignored, _) = solver.refine_aw_lm(&true_pose, &corr, &intrinsics, &all_inliers, None);
+        let model = CornerInset {
+            classes: &[],
+            delta: [Some(inset), None],
+        };
+        let (modelled, _) =
+            solver.refine_aw_lm(&true_pose, &corr, &intrinsics, &all_inliers, Some(model));
+        let err = |p: &Pose| (p.translation - true_pose.translation).norm();
+        assert!(
+            err(&modelled) < 0.1 * err(&ignored),
+            "inset modelled {:.2e} m vs ignored {:.2e} m",
+            err(&modelled),
+            err(&ignored)
+        );
+    }
+
     #[test]
     fn test_gn_step_singular_returns_original() {
         // With no inliers the normal equations are all-zero (singular);
@@ -1979,7 +2265,8 @@ mod tests {
         let all_inliers = [u64::MAX; 16];
 
         let solver = RobustPoseSolver::new();
-        let (refined, cov) = solver.refine_aw_lm(&perturbed, &corr, &intrinsics, &all_inliers);
+        let (refined, cov) =
+            solver.refine_aw_lm(&perturbed, &corr, &intrinsics, &all_inliers, None);
 
         let t_error = (refined.translation - true_pose.translation).norm();
         assert!(
@@ -2017,7 +2304,7 @@ mod tests {
         let all_inliers = [u64::MAX; 16];
 
         let solver = RobustPoseSolver::new();
-        let (_, cov) = solver.refine_aw_lm(&pose, &corr, &intrinsics, &all_inliers);
+        let (_, cov) = solver.refine_aw_lm(&pose, &corr, &intrinsics, &all_inliers, None);
 
         for i in 0..6 {
             for j in (i + 1)..6 {
@@ -2056,7 +2343,7 @@ mod tests {
         let no_inliers = [0u64; 16];
 
         let solver = RobustPoseSolver::new();
-        let (_, cov) = solver.refine_aw_lm(&pose, &corr, &intrinsics, &no_inliers);
+        let (_, cov) = solver.refine_aw_lm(&pose, &corr, &intrinsics, &no_inliers, None);
 
         assert!(
             cov[(0, 0)].is_nan(),

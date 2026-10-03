@@ -9,6 +9,7 @@
     missing_docs
 )]
 use locus_core::bench_api::{compute_corner_error, generate_synthetic_test_image};
+use locus_core::config::DetectorConfig;
 use locus_core::pose::CameraIntrinsics;
 use locus_core::{DetectorBuilder, ImageView, TagFamily};
 
@@ -24,7 +25,13 @@ struct Run {
 
 fn run(data: &[u8], upscale: usize, decimation: usize, pose: bool) -> Run {
     let img = ImageView::new(data, CANVAS, CANVAS, CANVAS).unwrap();
+    // Coordinate-mapping test: the ERF corner model is exact on this unblurred render, while
+    // the gradient-orthogonality pass carries ~0.1 px there, so it is held off.
     let mut det = DetectorBuilder::new()
+        .with_config(DetectorConfig {
+            decoder_corner_subpix: false,
+            ..DetectorConfig::default()
+        })
         .with_family(FAMILY)
         .with_decimation(decimation)
         .with_upscale_factor(upscale)

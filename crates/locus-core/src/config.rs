@@ -310,7 +310,7 @@ pub struct DetectorConfig {
     /// for small dictionaries (tag16h5) where textured candidates decode by chance. Partial
     /// occlusion of the border consumes the budget.
     pub decoder_max_border_error_rate: f32,
-    /// Gradient-orthogonality corner refinement of every decoded marker (default: off).
+    /// Gradient-orthogonality corner refinement of every decoded marker (default: on).
     ///
     /// Each corner `c` moves to the minimiser of `Σ w·(∇I(p)·(c − p))²` over a Gaussian-weighted
     /// window around it, iterated (the `cv::cornerSubPix` model). It runs after the configured
@@ -521,7 +521,7 @@ impl Default for DetectorConfig {
             nthreads: 0,
             decoder_min_contrast: 20.0,
             decoder_max_border_error_rate: 1.0,
-            decoder_corner_subpix: false,
+            decoder_corner_subpix: true,
             refinement_mode: CornerRefinementMode::Erf,
             max_hamming_error: None,
             huber_delta_px: 1.5,

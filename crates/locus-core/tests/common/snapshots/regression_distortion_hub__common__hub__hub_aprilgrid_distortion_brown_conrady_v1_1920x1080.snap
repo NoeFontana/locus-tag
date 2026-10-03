@@ -1,18 +1,19 @@
 ---
 source: crates/locus-core/tests/common/hub.rs
+assertion_line: 473
 expression: report
 ---
 summary:
   dataset_size: 50
   mean_recall: 0.9401445551338812
   mean_precision: 0.9943428530899331
-  mean_rmse: 0.8896
-  mean_reprojection_rmse: 0.9633
-  p50_translation_error: 0.064
-  p90_translation_error: 0.2677
-  p99_translation_error: 1.1069
-  p50_rotation_error: 1.8354
-  p90_rotation_error: 10.8231
+  mean_rmse: 0.1538
+  mean_reprojection_rmse: 0.347
+  p50_translation_error: 0.0372
+  p90_translation_error: 0.2459
+  p99_translation_error: 1.0953
+  p50_rotation_error: 1.7267
+  p90_rotation_error: 8.8569
   p99_rotation_error: 112.9038
   mean_hamming: 0.0083
   mean_total_ms: "[DURATION]"
@@ -24,16 +25,16 @@ summary:
     - filename: scene_0010_cam_0000.png
       missed: 8
       extra: 0
-      rmse: 0.9056
-    - filename: scene_0035_cam_0000.png
-      missed: 6
-      extra: 1
-      rmse: 0.8932
+      rmse: 0.0997
     - filename: scene_0000_cam_0000.png
       missed: 6
       extra: 1
-      rmse: 0.7446
-    - filename: scene_0011_cam_0000.png
+      rmse: 0.0852
+    - filename: scene_0035_cam_0000.png
+      missed: 6
+      extra: 1
+      rmse: 0.0719
+    - filename: scene_0026_cam_0000.png
       missed: 6
       extra: 0
-      rmse: 0.8495
+      rmse: 0.5849

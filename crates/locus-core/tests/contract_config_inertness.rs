@@ -679,7 +679,7 @@ fn cases() -> Vec<FieldCase> {
         FieldCase {
             field: "decoder_corner_subpix",
             base: noop,
-            mutate: |c| c.decoder_corner_subpix = true,
+            mutate: |c| c.decoder_corner_subpix = false,
             inert_reason: None,
         },
         FieldCase {
@@ -801,7 +801,9 @@ fn cases() -> Vec<FieldCase> {
         },
         FieldCase {
             field: "quad_refine_before_decode",
-            base: noop,
+            // With `decoder_corner_subpix` on, both orders converge to the same corners on these
+            // frames, so the ordering is observed with the corner pass off.
+            base: |c| c.decoder_corner_subpix = false,
             mutate: |c| c.quad_refine_before_decode = false,
             inert_reason: None,
         },

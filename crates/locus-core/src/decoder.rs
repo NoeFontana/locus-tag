@@ -1498,6 +1498,7 @@ fn decode_batch_soa_generic(
     let error_rates_out = &mut batch.error_rates[..n];
     let corners_out = &mut batch.corners[..n];
     let homographies_out = &mut batch.homographies[..n];
+    let refined_out = &mut batch.corner_refined[..n];
 
     // Rayon `Zip` truncates to the shortest input; guard the disjoint-slice
     // contract so a future off-by-one fix on any column fails loudly in
@@ -1516,8 +1517,12 @@ fn decode_batch_soa_generic(
         .zip(error_rates_out.par_iter_mut())
         .zip(corners_out.par_iter_mut())
         .zip(homographies_out.par_iter_mut())
+        .zip(refined_out.par_iter_mut())
         .for_each(
-            |(((((status_slot, id_slot), payload_slot), err_slot), corners_slot), h_slot)| {
+            |(
+                (((((status_slot, id_slot), payload_slot), err_slot), corners_slot), h_slot),
+                refined_slot,
+            )| {
                 if *status_slot != CandidateState::Active {
                     // Bypass: preserve status_mask and error_rates (no-op
                     // writes in the original drain); zero ids/payloads to
@@ -2086,12 +2091,14 @@ fn decode_batch_soa_generic(
                 // Gradient-orthogonality refinement of the accepted corners, after the
                 // configured refinement mode (`decoder.corner_subpix`).
                 let subpix = state == CandidateState::Valid && config.decoder_corner_subpix;
+                let mut refined_bits = 0u8;
                 if subpix {
                     let seed = core::array::from_fn(|j| {
                         [f64::from(corners_slot[j].x), f64::from(corners_slot[j].y)]
                     });
-                    let refined =
+                    let (refined, bits) =
                         crate::refinement::subpix_marker_corners(img, seed, subpix_cells);
+                    refined_bits = bits;
                     for (slot, r) in corners_slot.iter_mut().zip(refined) {
                         *slot = Point2f {
                             x: r[0] as f32,
@@ -2108,7 +2115,11 @@ fn decode_batch_soa_generic(
                         *item = corners_slot[src_idx];
                     }
                     *corners_slot = temp_corners;
+                    // Corner j now holds the old corner (j + rot) % 4.
+                    let r = u32::from(rot) % 4;
+                    refined_bits = ((refined_bits >> r) | (refined_bits << (4 - r))) & 0x0F;
                 }
+                *refined_slot = refined_bits;
 
                 // Recompute the homography whenever corners changed — ERF or sub-pixel
                 // refinement, *or* rotation. Without the ERF branch, a

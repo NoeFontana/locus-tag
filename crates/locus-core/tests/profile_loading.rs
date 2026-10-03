@@ -40,7 +40,6 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
         d.decoder_max_border_error_rate
     );
     assert_eq!(cfg.quad_refine_before_decode, d.quad_refine_before_decode);
-    assert_eq!(cfg.decoder_corner_subpix, d.decoder_corner_subpix);
     // `quad_min_area` is profile-specific (clean-render profiles raise it to
     // suppress small textured-quad false positives); asserted per-profile.
     // `max_hamming_error` is profile-specific (high_accuracy tightens to 1 to
@@ -66,6 +65,7 @@ fn standard_profile_matches_former_builder() {
     let cfg = DetectorConfig::from_profile("standard");
 
     // Standard-specific overrides.
+    assert_eq!(cfg.decoder_corner_subpix, true);
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, true);
     assert_eq!(cfg.quad_min_area, 36);
@@ -90,6 +90,7 @@ fn standard_profile_matches_former_builder() {
 #[test]
 fn grid_profile_matches_former_builder() {
     let cfg = DetectorConfig::from_profile("grid");
+    assert_eq!(cfg.decoder_corner_subpix, true);
 
     // Grid-specific overrides.
     assert_eq!(cfg.threshold_tile_size, 8);
@@ -117,7 +118,9 @@ fn grid_profile_matches_former_builder() {
 fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     let cfg = DetectorConfig::from_profile("high_accuracy");
 
-    // High-accuracy overrides.
+    // High-accuracy overrides. EdLines' whole-edge corners stay unrefined until a fused
+    // corner estimator replaces them.
+    assert_eq!(cfg.decoder_corner_subpix, false);
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
     assert_eq!(cfg.quad_min_area, 400);

@@ -161,6 +161,9 @@ impl Detector {
         new_batch
             .corner_covariances
             .copy_from_slice(&src.corner_covariances);
+        new_batch
+            .corner_refined
+            .copy_from_slice(&src.corner_refined);
         new_batch.routed_to.copy_from_slice(&src.routed_to);
         new_batch.ppb_estimate.copy_from_slice(&src.ppb_estimate);
         new_batch

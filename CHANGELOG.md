@@ -7,7 +7,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
-- **Opt-in gradient-orthogonality corner refinement (`decoder.corner_subpix`, default off).**
+- **Gradient-orthogonality corner refinement (`decoder.corner_subpix`; on in `standard` and `grid`, off in `high_accuracy`).**
   - **Model:** the `cv::cornerSubPix` model, run on every decoded marker after the configured
     `refinement_mode`. Each corner moves to the least-squares point that every gradient in a
     Gaussian-weighted window is orthogonal to, iterated (12 iterations, 0.005 px).
@@ -211,6 +211,48 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Board pose models the marker-corner photometric inset.**
+  - **Why:** gradient corner detectors place blurred marker edges where the tone curve puts
+    them. On sRGB-encoded images every marker corner of a frame reads about 0.6–0.8 px inside.
+    On a single tag that is indistinguishable from depth; on a board the layout fixes the
+    marker centres, so it is a separable nuisance parameter.
+  - **Model:** `BoardEstimator` estimates an edge offset δ per frame for each corner estimator
+    (`DetectionBatch::corner_refined`, new). The ERF edge fit and the gradient-orthogonality
+    junction fit carry different offsets: equal on L-corners, not on AprilGrid's X-junctions.
+    Each corner's own least-squares inset along `(n₁ + n₂)/(1 + n₁·n₂)` (its two edges' inward
+    image normals) is combined with a Huber M-estimator. Each δ is kept only when it exceeds
+    three standard errors, and is alternated with the pose LM.
+  - **Effect vs the previous release**, render-tag boards:
+
+    | Board | Translation mean (mm) | Translation p95 (mm) | Translation p99 (mm) |
+    | :-- | --: | --: | --: |
+    | ChArUco | 2.39 → 0.51 | 9.3 → 2.3 | 12.7 → 8.4 |
+    | AprilGrid | 2.62 → 0.30 | 11.4 → 1.0 | 19.1 → 6.4 |
+
+    Rotation mean and p95 improve on both. Rotation p99 rises (ChArUco 0.225° → 0.259°,
+    AprilGrid 0.173° → 0.202°) on a few small-marker frames.
+  - **Small-marker trade-off:** the cell bound below keeps the ERF corners of markers under
+    ~3.3 px cells. It is right for ChArUco's L-corners but costs AprilGrid's X-junction corners,
+    which the gradient estimator handles even at 2.5 px.
+- **`decoder.corner_subpix` skips markers whose cells are under ~3.3 px.** There, even its
+  smallest window covers more than 0.6 of a cell. Measured on ChArUco boards of 2.3–2.9 px
+  cells (board rotation 0.07° → 0.21°); neutral on ICRA, render-tag, AprilGrid, Liu4K and EuRoC.
+- **Breaking (default output): `standard` and `grid` enable `decoder.corner_subpix`.** Decoded
+  corners move to the gradient-orthogonality solution, so default corner and pose outputs
+  change (15 snapshots re-baselined).
+  - **SOTA scoreboard** (debiased gate): `standard` 32 → 46 accuracy cells.
+  - **Snapshots improved:**
+    - distortion-board corner RMSE 0.89 → 0.10 px (Brown–Conrady) and 1.27 → 0.22 px
+      (Kannala–Brandt);
+    - rotation p99 26° → 0.28° (raw_pipeline), 17.5° → 0.56° (tag16h5) and 1.75° → 0.44–0.49°
+      (high_iso, moments);
+    - AprilGrid board p95 translation 11 → 2 mm.
+  - **Trade-off:** on sRGB renders the gradient corner sits about 0.07 px further inside than
+    ERF, the photometric offset the debiased gate sets aside. ChArUco board translation p99
+    rises 12.7 → 18.5 mm and render-tag translation p99 rises slightly (0.050 → 0.066 m at
+    high_iso), while rotation improves.
+  - `high_accuracy` keeps its EdLines whole-edge corners until a fused corner estimator
+    replaces them. EdLines regression cases in the test harness mirror that.
 - **SOTA scoreboard judges corners on debiased error** (`tools/bench/sota`).
   - **What:** each detector's mean radial corner offset on a benchmark
     (`corner_bias_common`, + = outward) is removed before the per-tag RMSE that the win

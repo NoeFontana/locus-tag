@@ -53,7 +53,7 @@
       "additionalProperties": false,
       "properties": {
         "corner_subpix": {
-          "default": false,
+          "default": true,
           "title": "Corner Subpix",
           "type": "boolean"
         },

@@ -452,7 +452,7 @@ impl CharucoRefiner {
                 group_size: 1,
             };
             self.solver
-                .estimate(&corr, intrinsics, outlier_drop_d2_threshold)
+                .estimate(&corr, &[], intrinsics, outlier_drop_d2_threshold)
         } else {
             None
         };
