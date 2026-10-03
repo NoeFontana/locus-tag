@@ -1449,6 +1449,15 @@ fn decode_batch_soa_generic(
     use crate::batch::CandidateState;
     use rayon::prelude::*;
 
+    // Cells across a marker side (payload plus the one-cell black border), which sizes the
+    // `decoder.corner_subpix` window. With several families the finest grid is the
+    // conservative choice: it gives the smallest cell, so the window stays inside the border.
+    let subpix_cells = decoders
+        .iter()
+        .map(|d| d.dimension() + 2)
+        .max()
+        .unwrap_or(8);
+
     // Resolve `max_hamming_error` once per registered decoder so the
     // inner per-scale per-decoder loop reads a plain `u32`. `None` in
     // the config means "use family defaults"; an explicit `Some(n)`
@@ -2075,15 +2084,22 @@ fn decode_batch_soa_generic(
                 }
 
                 // Gradient-orthogonality refinement of the accepted corners, after the
-                // configured refinement mode (`decoder.corner_subpix_half_window`).
-                let subpix = state == CandidateState::Valid
-                    && config.decoder_corner_subpix_half_window > 0;
+                // configured refinement mode (`decoder.corner_subpix`).
+                let subpix = state == CandidateState::Valid && config.decoder_corner_subpix;
                 if subpix {
+                    let side = (0..4)
+                        .map(|j| {
+                            let (p, q) = (corners_slot[j], corners_slot[(j + 1) % 4]);
+                            f64::from(q.x - p.x).hypot(f64::from(q.y - p.y))
+                        })
+                        .sum::<f64>()
+                        * 0.25;
+                    let half = crate::refinement::corner_subpix_half_window(side, subpix_cells);
                     for corner in corners_slot.iter_mut() {
                         let r = crate::refinement::corner_subpix(
                             img,
                             [f64::from(corner.x), f64::from(corner.y)],
-                            config.decoder_corner_subpix_half_window,
+                            half,
                         );
                         *corner = Point2f {
                             x: r[0] as f32,

@@ -52,12 +52,10 @@
     "DecoderConfig": {
       "additionalProperties": false,
       "properties": {
-        "corner_subpix_half_window": {
-          "default": 0,
-          "maximum": 16,
-          "minimum": 0,
-          "title": "Corner Subpix Half Window",
-          "type": "integer"
+        "corner_subpix": {
+          "default": false,
+          "title": "Corner Subpix",
+          "type": "boolean"
         },
         "gwlf_transversal_alpha": {
           "default": 0.01,

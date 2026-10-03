@@ -40,10 +40,7 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
         d.decoder_max_border_error_rate
     );
     assert_eq!(cfg.quad_refine_before_decode, d.quad_refine_before_decode);
-    assert_eq!(
-        cfg.decoder_corner_subpix_half_window,
-        d.decoder_corner_subpix_half_window
-    );
+    assert_eq!(cfg.decoder_corner_subpix, d.decoder_corner_subpix);
     // `quad_min_area` is profile-specific (clean-render profiles raise it to
     // suppress small textured-quad false positives); asserted per-profile.
     // `max_hamming_error` is profile-specific (high_accuracy tightens to 1 to
@@ -213,7 +210,7 @@ fn to_profile_json_round_trips_every_field() {
         // Decoder
         decoder_min_contrast: 12.5,
         decoder_max_border_error_rate: 0.25,
-        decoder_corner_subpix_half_window: 3,
+        decoder_corner_subpix: true,
         refinement_mode: CornerRefinementMode::Erf,
         max_hamming_error: Some(2),
         gwlf_transversal_alpha: 0.03,

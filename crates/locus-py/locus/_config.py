@@ -275,10 +275,10 @@ class DecoderConfig(BaseModel):
     max_border_error_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     """Largest fraction of the black border ring that may read bright for a decoded
     candidate to be accepted. ``1.0`` disables the check."""
-    corner_subpix_half_window: int = Field(default=0, ge=0, le=16)
-    """Half-width of the gradient-orthogonality corner refinement (the ``cv::cornerSubPix``
-    model) run on every decoded marker after ``refinement_mode``. ``0`` disables it; ``4``
-    (a 9×9 window) is the reference operating point. Undistorted cameras only."""
+    corner_subpix: bool = False
+    """Gradient-orthogonality corner refinement (the ``cv::cornerSubPix`` model) of every
+    decoded marker, after ``refinement_mode``. The window is sized from the marker's cell
+    size, not configured. Undistorted cameras only."""
 
 
 class PoseConfig(BaseModel):
