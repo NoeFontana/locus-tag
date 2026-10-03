@@ -258,6 +258,27 @@ not `high_accuracy`.**
   fixes for the 2160p recall gap. None moved the needle on detector
   recall — the gap was the SoA truncation bug, not segmentation.
   Documented in `render_tag_2160p_20260425.md` §2.
+- **Latency negatives on the decode-first front end (2026-10-03,
+  [scoreboard checkpoint](sota_scoreboard_20261003.md)).**
+  - **Area-averaged decimation 2** keeps decode and refinement at full
+    resolution. It still loses recall to aruco_nano (Liu4K 66.6 →
+    61.6 %, ICRA forward 73.4 → 44.5 %) and makes corners 30–100 %
+    worse. Decode-first seeds from a decimated contour are too coarse.
+  - **Crack-tracing every border of a byte mask** instead of run-based
+    CCL is no faster (Liu4K 35 vs 33 ms):
+    - it is memory-latency bound, at about 13 ns per vertex;
+    - two thirds of the vertices belong to discarded specks.
+  - **Exact micro-optimisations that measured slower or under 1 %:**
+    - fusing threshold and RLE;
+    - carrying the run's root across union-find links (+3 %);
+    - an unchecked trace;
+    - hoisting the square root out of the farthest-point search;
+    - a lane-accumulated ERF Gauss–Newton with a polynomial `exp`
+      (+21 % AoS, +50 % SoA, because it evaluates samples the scalar
+      loop skips).
+
+    The ERF cost lies outside Gauss–Newton: band-limited scans (#423)
+    and the cached d-scan (#424) were the wins.
 
 ### §4.6 AdaptivePpb gracefully falls back on distortion
 
