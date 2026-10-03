@@ -293,32 +293,48 @@ pub(crate) fn apply_detector_gwlf(
     Some((gwlf_fallback_count, gwlf_avg_delta))
 }
 
-/// Window half-width bounds of [`corner_subpix`] (px); see [`corner_subpix_half_window`].
+/// Window half-width bounds of [`corner_subpix`] (px); see [`corner_subpix_half_windows`].
 const SUBPIX_MIN_HALF: u32 = 2;
 const SUBPIX_MAX_HALF: u32 = 4;
-/// Largest window half-width as a fraction of the marker cell.
-const SUBPIX_CELL_FRACTION: f64 = 0.75;
+/// Candidate window half-widths as fractions of the marker cell.
+const SUBPIX_CELL_FRACTIONS: [f64; 3] = [0.3, 0.5, 0.75];
+/// Uncertainty ratio past which a smaller window is preferred over a larger one. Both
+/// uncertainties are residual-variance estimates from a few dozen effective samples, whose
+/// ratio is F-distributed; a factor of 2 is about where a difference stops being noise. Taking
+/// the plain minimum instead picks small windows on noise and costs EuRoC LOO 0.30 → 0.39 px.
+const SUBPIX_SIGNIFICANT_RATIO: f64 = 2.0;
 /// Patch side for the largest window: `2·(MAX + 1) + 1` samples, one ring beyond the window
 /// for the central-difference gradients.
 const SUBPIX_PATCH_MAX: usize = 2 * (SUBPIX_MAX_HALF as usize + 1) + 1;
 
-/// Window half-width of [`corner_subpix`] for a marker whose side spans `cells` cells over
-/// `side_px` pixels: `clamp(min(4, round(0.75·cell)), 2, 4)`.
+/// Candidate window half-widths of [`corner_subpix`] for a marker whose side spans `cells`
+/// cells over `side_px` pixels: `clamp(round(f·cell), 2, 4)` for `f` in 0.3, 0.5, 0.75 cell,
+/// deduplicated, ascending. Returns the array and how many entries are used.
 ///
-/// Both bounds come from the corner model. The estimator assumes an ideal L-junction, so
+/// The bounds come from the corner model. The estimator assumes an ideal L-junction, so
 /// gradients near the blurred apex are not orthogonal to `p − c`; the window must reach past
-/// the blur, and 4 px covers the PSFs measured on the benchmarks. The junction model holds
-/// only within the black border cell inside the marker and the quiet zone outside, so the
-/// window may not exceed a cell: on small markers a fixed 4 px window reaches the data bits
-/// (ICRA forward: 0.96 → 0.14 px debiased scatter at 0.75 cell). The 2 px floor keeps a 5×5
-/// window.
-pub(crate) fn corner_subpix_half_window(side_px: f64, cells: usize) -> u32 {
+/// the blur (2 px floor, 4 px cap covering the PSFs measured on the benchmarks). The model
+/// holds only within the black border cell and the quiet zone, so the window stays under a
+/// cell. Inside those bounds the best size depends on how close other structure sits to the
+/// corner, which only the image shows, so [`subpix_marker_corners`] tries each candidate and
+/// keeps the most certain result.
+pub(crate) fn corner_subpix_half_windows(side_px: f64, cells: usize) -> ([u32; 3], usize) {
     let cell = side_px / cells.max(1) as f64;
-    let by_cell = (SUBPIX_CELL_FRACTION * cell).round();
-    // In [2, 4] after the clamp, so the cast is exact.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-    let half = by_cell.clamp(f64::from(SUBPIX_MIN_HALF), f64::from(SUBPIX_MAX_HALF)) as u32;
-    half
+    let mut out = [0u32; 3];
+    let mut n = 0;
+    for f in SUBPIX_CELL_FRACTIONS {
+        // In [2, 4] after the clamp, so the cast is exact.
+        #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+        let half = (f * cell)
+            .round()
+            .clamp(f64::from(SUBPIX_MIN_HALF), f64::from(SUBPIX_MAX_HALF))
+            as u32;
+        if n == 0 || out[n - 1] != half {
+            out[n] = half;
+            n += 1;
+        }
+    }
+    (out, n)
 }
 /// Iteration cap and step tolerance (px) of [`corner_subpix`] (the `cv::cornerSubPix` values
 /// aruco_nano uses).
@@ -328,7 +344,10 @@ const SUBPIX_EPS: f64 = 0.005;
 /// Gradient-orthogonality refinement of a decoded marker's four corners (the
 /// `decoder.corner_subpix` pass), keeping only moves the marker model accepts.
 ///
-/// The window is sized from the marker ([`corner_subpix_half_window`]). The estimator converges
+/// Each candidate window ([`corner_subpix_half_windows`]) is tried, and the largest accepted one
+/// whose [`Subpix::uncertainty`] is within `SUBPIX_SIGNIFICANT_RATIO` of the smallest is kept:
+/// a larger clean window averages more gradients, while structure entering the window inflates
+/// the residual by far more than that ratio. The estimator converges
 /// on any junction in its window, including structure outside the marker: a ChArUco
 /// chessboard corner next to the marker's white square, or clutter beside a small tag. A
 /// refined corner is therefore kept only if the image around it still shows the corner of this
@@ -346,21 +365,37 @@ pub(crate) fn subpix_marker_corners(
         })
         .sum::<f64>()
         * 0.25;
-    let half = corner_subpix_half_window(side, cells);
+    let (halves, count) = corner_subpix_half_windows(side, cells);
     let probe = (0.5 * side / cells.max(1) as f64).max(1.0);
     let mut out = seed;
     for j in 0..4 {
-        if let Some(refined) = corner_subpix(img, seed[j], half)
-            && marker_corner_consistent(
-                img,
-                refined,
-                seed[(j + 3) % 4],
-                seed[(j + 1) % 4],
-                seed[j],
-                probe,
-            )
+        // Accepted solutions, ascending window size.
+        let mut accepted = [None::<Subpix>; 3];
+        for (slot, &half) in accepted.iter_mut().zip(&halves[..count]) {
+            *slot = corner_subpix(img, seed[j], half).filter(|refined| {
+                marker_corner_consistent(
+                    img,
+                    refined.corner,
+                    seed[(j + 3) % 4],
+                    seed[(j + 1) % 4],
+                    seed[j],
+                    probe,
+                )
+            });
+        }
+        let least = accepted
+            .iter()
+            .flatten()
+            .map(|r| r.uncertainty)
+            .fold(f64::INFINITY, f64::min);
+        // The largest window that is not significantly less certain than the best one.
+        if let Some(pick) = accepted
+            .iter()
+            .flatten()
+            .rev()
+            .find(|r| r.uncertainty <= SUBPIX_SIGNIFICANT_RATIO * least)
         {
-            out[j] = refined;
+            out[j] = pick.corner;
         }
     }
     out
@@ -416,7 +451,7 @@ fn marker_corner_consistent(
 /// the image, or the normal matrix is singular (a flat or single-edge patch). Locus pixel
 /// convention (+0.5 centres), like the rest of the crate. `half` must be in
 /// `1..=SUBPIX_MAX_HALF`.
-pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Option<[f64; 2]> {
+pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Option<Subpix> {
     debug_assert!((1..=SUBPIX_MAX_HALF).contains(&half));
     let hw = half as usize;
     let span = 2 * hw + 1; // window side
@@ -431,6 +466,7 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Optio
     let reach = (hw + 1) as f64;
 
     let mut corner = seed;
+    let mut uncertainty = f64::INFINITY;
     for _ in 0..SUBPIX_MAX_ITER {
         // Patch sample (row, col) sits at corner + (col − hw − 1, row − hw − 1); in array
         // coordinates (pixel centres at integers) its top-left is corner − 0.5 − (hw + 1).
@@ -463,8 +499,10 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Optio
             }
         }
 
-        // Normal equations: [sxx sxy; sxy syy] · step = [rhs_x; rhs_y].
+        // Normal equations: [sxx sxy; sxy syy] · step = [rhs_x; rhs_y], with q = ∇I·(p − c)
+        // per sample; `sqq` = Σ w·q² gives the residual at the solution in closed form.
         let (mut sxx, mut sxy, mut syy, mut rhs_x, mut rhs_y) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        let mut sqq = 0.0;
         for wy in 0..span {
             let py = wy as f64 - hw as f64;
             let row = (wy + 1) * side;
@@ -480,6 +518,8 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Optio
                 syy += gyy;
                 rhs_x += gxx * px + gxy * py;
                 rhs_y += gxy * px + gyy * py;
+                let q = gx * px + gy * py;
+                sqq += weight * q * q;
             }
         }
         let det = sxx * syy - sxy * sxy;
@@ -491,16 +531,36 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Optio
             (sxx * rhs_y - sxy * rhs_x) / det,
         ];
         corner = [corner[0] + step[0], corner[1] + step[1]];
+        // Σ w·(∇I·(c' − p))² = sᵀAs − 2sᵀb + Σ w·q² for the step s from window centre c.
+        let residual = step[0] * (sxx * step[0] + sxy * step[1])
+            + step[1] * (sxy * step[0] + syy * step[1])
+            - 2.0 * (step[0] * rhs_x + step[1] * rhs_y)
+            + sqq;
+        uncertainty = residual.max(0.0) * (sxx + syy) / det;
         if step[0] * step[0] + step[1] * step[1] <= SUBPIX_EPS * SUBPIX_EPS {
             break;
         }
     }
     let limit = f64::from(half);
     if (corner[0] - seed[0]).abs() <= limit && (corner[1] - seed[1]).abs() <= limit {
-        Some(corner)
+        Some(Subpix {
+            corner,
+            uncertainty,
+        })
     } else {
         None
     }
+}
+
+/// A converged [`corner_subpix`] solution.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Subpix {
+    /// The refined corner (Locus pixel convention).
+    pub(crate) corner: [f64; 2],
+    /// `Σ w·r² · tr(A⁻¹)`: the weighted residual of the gradient-orthogonality fit times the
+    /// trace of the inverse normal matrix, i.e. the trace of the corner covariance up to the
+    /// window's weight normalisation. Comparable across windows on the same corner.
+    pub(crate) uncertainty: f64,
 }
 
 #[cfg(test)]
@@ -554,7 +614,9 @@ mod subpix_tests {
             let apex = [31.27 + 0.11 * k as f64, 30.64 - 0.07 * k as f64];
             let data = wedge(apex, theta);
             let img = ImageView::new(&data, W, W, W).unwrap();
-            let got = corner_subpix(&img, [apex[0] + 1.3, apex[1] - 0.9], 4).unwrap();
+            let got = corner_subpix(&img, [apex[0] + 1.3, apex[1] - 0.9], 4)
+                .unwrap()
+                .corner;
             let d = (got[0] - opencv[k][0]).hypot(got[1] - opencv[k][1]);
             assert!(
                 d < 0.01,
@@ -565,16 +627,15 @@ mod subpix_tests {
     }
 
     #[test]
-    fn half_window_follows_the_cell_up_to_the_blur_bound() {
-        use super::corner_subpix_half_window as hw;
-        // 8-cell markers: cell = side / 8; half = round(0.75·cell) within [2, 4].
-        assert_eq!(hw(16.0, 8), 2); // cell 2 px
-        assert_eq!(hw(24.0, 8), 2); // cell 3 px → 2.25
-        assert_eq!(hw(32.0, 8), 3); // cell 4 px
-        assert_eq!(hw(48.0, 8), 4); // cell 6 px → 4.5, capped
-        assert_eq!(hw(400.0, 8), 4);
-        assert_eq!(hw(36.0, 6), 4); // tag16h5: cell 6 px
-        assert_eq!(hw(0.0, 8), 2);
+    fn candidate_windows_follow_the_cell_within_the_blur_bounds() {
+        use super::corner_subpix_half_windows as hw;
+        let used = |(h, n): ([u32; 3], usize)| h[..n].to_vec();
+        // 8-cell markers: cell = side / 8; candidates round(0.3/0.5/0.75 · cell) in [2, 4].
+        assert_eq!(used(hw(16.0, 8)), vec![2]); // cell 2 px
+        assert_eq!(used(hw(32.0, 8)), vec![2, 3]); // cell 4 px: 1.2, 2, 3
+        assert_eq!(used(hw(48.0, 8)), vec![2, 3, 4]); // cell 6 px: 1.8, 3, 4.5
+        assert_eq!(used(hw(400.0, 8)), vec![4]);
+        assert_eq!(used(hw(0.0, 8)), vec![2]);
     }
 
     /// Bright canvas with the given dark axis-aligned squares `[x0, x1) × [y0, y1)`.
@@ -615,20 +676,20 @@ mod subpix_tests {
     fn declines_without_a_corner() {
         let flat = vec![128u8; W * W];
         let img = ImageView::new(&flat, W, W, W).unwrap();
-        assert_eq!(corner_subpix(&img, [32.2, 31.7], 4), None);
+        assert!(corner_subpix(&img, [32.2, 31.7], 4).is_none());
 
         // A single straight edge constrains one direction only: the normal matrix is singular.
         let edge: Vec<u8> = (0..W * W)
             .map(|i| if i % W < 32 { 40 } else { 220 })
             .collect();
         let img = ImageView::new(&edge, W, W, W).unwrap();
-        assert_eq!(corner_subpix(&img, [32.0, 30.5], 4), None);
+        assert!(corner_subpix(&img, [32.0, 30.5], 4).is_none());
     }
 
     #[test]
     fn declines_when_the_window_leaves_the_image() {
         let data = wedge([3.0, 3.0], 0.0);
         let img = ImageView::new(&data, W, W, W).unwrap();
-        assert_eq!(corner_subpix(&img, [3.4, 2.6], 4), None);
+        assert!(corner_subpix(&img, [3.4, 2.6], 4).is_none());
     }
 }
