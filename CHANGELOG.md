@@ -187,6 +187,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     unchanged;
   - ICRA forward recall 73.74 → 73.69 % (checkerboard grid 70.12 → 70.03 %);
   - the main render-tag, board and distortion snapshots are byte-identical.
+- **Band-restricted ERF scans (output byte-identical).** ERF sample collection and the
+  decoder's initial-offset gradient scan used to visit every pixel of the edge's bounding box
+  and keep those within the band `|n·p + d| ≤ w`. On a diagonal edge that box is mostly empty.
+  Each row now visits only the column interval that can satisfy the band test, widened by two
+  pixels and gated to rows where narrowing pays, with the per-pixel tests unchanged. A proptest
+  checks it never drops an in-band pixel. 1 thread: decode −30 % on Liu4K, −21 % on render-tag
+  1080p and −13 % on 4K; ICRA (short edges) unchanged.
 - **Tracing without the full-frame label image (output byte-identical).**
   - Segmentation returns each surviving component's runs (`LabelResult::component_runs`).
   - Boundary tracing paints a component's runs into a one-pixel-padded mask of its bounding
