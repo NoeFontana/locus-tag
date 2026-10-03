@@ -335,6 +335,9 @@ fn write_runs_rows(
 
 /// Performs Light-Speed Labeling (LSL) / Run-based Union-Find on the extracted RLE segments.
 /// Fully resolves equivalences and outputs the 2D label map expected by the rest of the pipeline.
+///
+/// Benchmark and test entry point; the detector calls [`label_components_lsl_opts`].
+#[cfg(any(test, feature = "bench-internals"))]
 pub fn label_components_lsl<'a>(
     arena: &'a Bump,
     img: &ImageView,

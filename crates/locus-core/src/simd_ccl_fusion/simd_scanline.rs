@@ -1,11 +1,13 @@
 #![allow(unsafe_code, unsafe_op_in_unsafe_fn)]
 
-use super::RleSegment;
-use crate::image::ImageView;
-
-/// SIMD-Accelerated Fused Threshold + RLE extraction.
+/// SIMD-Accelerated Fused Threshold + RLE extraction into a `Vec`: the reference the
+/// arena-backed row sink is differentially tested against.
+#[cfg(test)]
 #[must_use]
-pub fn extract_rle_segments(img: &ImageView, threshold_map: &[u8]) -> Vec<RleSegment> {
+pub fn extract_rle_segments(
+    img: &crate::image::ImageView,
+    threshold_map: &[u8],
+) -> Vec<super::RleSegment> {
     let mut segments = Vec::new();
     let width = img.width;
     let height = img.height;
@@ -262,6 +264,7 @@ unsafe fn process_row_neon<S: super::RunSink>(src: &[u8], thresh: &[u8], y: u16,
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+    use crate::image::ImageView;
     use crate::simd_ccl_fusion::extract_rle_segments_scalar;
     use proptest::prelude::*;
 
