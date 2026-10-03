@@ -454,6 +454,28 @@ fn estimate_ab_per_iter(
     Some((dark_sum / dark_weight, light_sum / light_weight))
 }
 
+/// Conservative column range `[start, end]` (clamped to `[x0, x1]`) of the pixels `px` in one
+/// row whose centre `x = px + 0.5` can satisfy `|nx·x + c| ≤ half_width`, where `c` is the
+/// row's `ny·y + d`. Widened by two columns so rounding never excludes a pixel the exact test
+/// would accept; callers still apply that test. `None` when the row has no such column.
+///
+/// Returns the whole row when narrowing cannot pay for its two divisions: when the band spans
+/// at least half of `[x0, x1]` (short or near-axis edges).
+#[inline]
+fn band_columns(nx: f64, c: f64, half_width: f64, x0: usize, x1: usize) -> Option<(usize, usize)> {
+    let row_span = (x1 - x0 + 1) as f64;
+    // False for NaN as well, which keeps the whole row.
+    let narrow = nx.abs() * row_span > 4.0 * (half_width + 2.0) && c.is_finite();
+    if !narrow {
+        return Some((x0, x1));
+    }
+    let (a, b) = ((-half_width - c) / nx, (half_width - c) / nx);
+    let (lo, hi) = (a.min(b) - 0.5, a.max(b) - 0.5);
+    let start = (lo.floor() - 2.0).max(x0 as f64);
+    let end = (hi.ceil() + 2.0).min(x1 as f64);
+    (start <= end).then_some((start as usize, end as usize))
+}
+
 // ── SIMD-Accelerated Gauss-Newton Accumulation ───────────────────────────────
 
 /// Accumulate J^T J and J^T r for the Gauss-Newton step.
@@ -611,8 +633,11 @@ fn project_gradients_optimized(
     let mut count = 0;
 
     for py in y0..=y1 {
-        let mut px = x0;
         let y = py as f64 + 0.5;
+        // Only columns that can lie in the band; the per-pixel tests below are unchanged.
+        let Some((mut px, x1)) = band_columns(nx, ny * y + scan_d, 1.0, x0, x1) else {
+            continue;
+        };
 
         #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
         if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
@@ -701,8 +726,11 @@ fn collect_samples_optimized<'a>(
     let inv_len_sq = 1.0 / (len * len);
 
     for py in y0..=y1 {
-        let mut px = x0;
         let y = py as f64 + 0.5;
+        // Only columns that can lie in the band; the per-pixel tests below are unchanged.
+        let Some((mut px, x1)) = band_columns(nx, ny * y + d, window, x0, x1) else {
+            continue;
+        };
 
         #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
         if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
@@ -834,6 +862,34 @@ fn collect_samples_strided<'a>(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    proptest::proptest! {
+        /// `band_columns` keeps every column the exact per-pixel band test accepts.
+        #[test]
+        fn band_columns_never_drops_an_in_band_pixel(
+            angle in 0.0..std::f64::consts::TAU,
+            d in -3000.0..3000.0f64,
+            y in 0.5..2000.5f64,
+            half_width in 0.5..4.0f64,
+            x0 in 0usize..200,
+            span in 1usize..600,
+        ) {
+            let (nx, ny) = (angle.cos(), angle.sin());
+            let x1 = x0 + span;
+            let in_band = |px: usize| (nx * (px as f64 + 0.5) + ny * y + d).abs() <= half_width;
+            match band_columns(nx, ny * y + d, half_width, x0, x1) {
+                Some((start, end)) => {
+                    proptest::prop_assert!(x0 <= start && end <= x1);
+                    for px in x0..=x1 {
+                        if in_band(px) {
+                            proptest::prop_assert!(start <= px && px <= end, "px {} outside [{}, {}]", px, start, end);
+                        }
+                    }
+                },
+                None => proptest::prop_assert!((x0..=x1).all(|px| !in_band(px))),
+            }
+        }
+    }
     use crate::test_utils::subpixel::{Line, SubpixelEdgeRenderer};
 
     /// The SIMD and scalar paths of `project_gradients_optimized` must sample the same
