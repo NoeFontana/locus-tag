@@ -7,7 +7,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
-- **Opt-in gradient-orthogonality corner refinement (`decoder.corner_subpix`, default off).**
+- **Gradient-orthogonality corner refinement (`decoder.corner_subpix`; on in `standard` and `grid`, off in `high_accuracy`).**
   - **Model:** the `cv::cornerSubPix` model, run on every decoded marker after the configured
     `refinement_mode`. Each corner moves to the least-squares point that every gradient in a
     Gaussian-weighted window is orthogonal to, iterated (12 iterations, 0.005 px).
@@ -211,6 +211,22 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Breaking (default output): `standard` and `grid` enable `decoder.corner_subpix`.** Decoded
+  corners move to the gradient-orthogonality solution, so default corner and pose outputs
+  change (15 snapshots re-baselined).
+  - **SOTA scoreboard** (debiased gate): `standard` 32 → 46 accuracy cells.
+  - **Snapshots improved:**
+    - distortion-board corner RMSE 0.89 → 0.10 px (Brown–Conrady) and 1.27 → 0.22 px
+      (Kannala–Brandt);
+    - rotation p99 26° → 0.28° (raw_pipeline), 17.5° → 0.56° (tag16h5) and 1.75° → 0.44–0.49°
+      (high_iso, moments);
+    - AprilGrid board p95 translation 11 → 2 mm.
+  - **Trade-off:** on sRGB renders the gradient corner sits about 0.07 px further inside than
+    ERF, the photometric offset the debiased gate sets aside. ChArUco board translation p99
+    rises 12.7 → 18.5 mm and render-tag translation p99 rises slightly (0.050 → 0.066 m at
+    high_iso), while rotation improves.
+  - `high_accuracy` keeps its EdLines whole-edge corners until a fused corner estimator
+    replaces them. EdLines regression cases in the test harness mirror that.
 - **SOTA scoreboard judges corners on debiased error** (`tools/bench/sota`).
   - **What:** each detector's mean radial corner offset on a benchmark
     (`corner_bias_common`, + = outward) is removed before the per-tag RMSE that the win

@@ -12,6 +12,7 @@
     missing_docs
 )]
 use locus_core::bench_api::*;
+use locus_core::config::DetectorConfig;
 use locus_core::{DetectorBuilder, ImageView, TagFamily};
 
 #[test]
@@ -26,7 +27,13 @@ fn test_decimation_accuracy() {
     let img = ImageView::new(&data, canvas_size, canvas_size, canvas_size).unwrap();
 
     // 1. Detect with decimation 1
+    // Coordinate-mapping test: the ERF corner model is exact on this unblurred render, while
+    // the gradient-orthogonality pass carries ~0.1 px there, so it is held off.
     let mut detector = DetectorBuilder::new()
+        .with_config(DetectorConfig {
+            decoder_corner_subpix: false,
+            ..DetectorConfig::default()
+        })
         .with_family(family)
         .with_decimation(1)
         .build();
@@ -57,6 +64,10 @@ fn test_decimation_accuracy() {
 
     // 2. Detect with decimation 2
     let mut detector2 = DetectorBuilder::new()
+        .with_config(DetectorConfig {
+            decoder_corner_subpix: false,
+            ..DetectorConfig::default()
+        })
         .with_family(family)
         .with_decimation(2)
         .build();
