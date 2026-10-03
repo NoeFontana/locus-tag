@@ -286,6 +286,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Documentation
 
+- **SOTA scoreboard checkpoint (2026-10-03)** (`docs/engineering/benchmarking/sota_scoreboard_20261003.md`):
+  - At `main` `a6199d4`, the opt-in decode-first LocalMean candidate wins 37 of 88 cells and
+    `standard` wins 32.
+  - At 8 threads the candidate is faster than aruco_nano on Liu4K, render-tag 1080p and 4K.
+  - 1-thread latency, corner accuracy (the M6 prerequisite) and a ChArUco recall loss remain.
+  - Latency negatives are recorded in Benchmarking Lessons §4.5.
 - **SOTA scoreboard baseline (2026-10-02)** (`docs/engineering/benchmarking/sota_scoreboard_20261002.md`):
   `standard` wins 31 of 88 judged cells against the best OpenCV 4.10 / aruco_nano operating point
   on 15 benchmarks; every 1-thread latency cell is lost (aruco_nano 4–10× faster).
