@@ -379,6 +379,7 @@ pub(crate) fn subpix_marker_corners(
     let probe = (0.5 * side / cells.max(1) as f64).max(1.0);
     let mut out = seed;
     let mut refined_bits = 0u8;
+    let mut picks = [None::<Subpix>; 4];
     for j in 0..4 {
         // Accepted solutions, ascending window size.
         let mut accepted = [None::<Subpix>; 3];
@@ -408,9 +409,258 @@ pub(crate) fn subpix_marker_corners(
         {
             out[j] = pick.corner;
             refined_bits |= 1 << j;
+            picks[j] = Some(*pick);
+        }
+    }
+    // Fuse each L-corner with the intersection of its two whole-edge lines.
+    let cell = side / cells.max(1) as f64;
+    let half = (0.5 * cell).max(2.0);
+    // Edges between the locally refined corners: their directions are already corrected.
+    let anchors = out;
+    let edges: [Option<EdgeLine>; 4] =
+        core::array::from_fn(|e| fit_marker_edge(img, anchors[e], anchors[(e + 1) % 4], half));
+    for j in 0..4 {
+        let Some(local) = picks[j] else { continue };
+        let (prev, next) = (anchors[(j + 3) % 4], anchors[(j + 1) % 4]);
+        if junction_is_x(img, local.corner, prev, next, anchors[j], probe) {
+            continue;
+        }
+        let (Some(before), Some(after)) = (edges[(j + 3) % 4], edges[j]) else {
+            continue;
+        };
+        let Some((line_corner, line_cov)) = intersect_edges(&before, &after) else {
+            continue;
+        };
+        let moved = (line_corner[0] - anchors[j][0]).hypot(line_corner[1] - anchors[j][1]);
+        if moved > LINE_CORNER_MAX_MOVE_PX {
+            continue;
+        }
+        if let Some(fused) = fuse_corner(local.corner, local.cov, line_corner, line_cov) {
+            out[j] = fused;
         }
     }
     (out, refined_bits)
+}
+
+/// Inverse-covariance fusion of two corner estimates `a`, `b` with covariances `[xx, xy, yy]`.
+///
+/// `None` unless both covariances are positive definite, the estimates agree under their summed
+/// covariance (Mahalanobis d² within `FUSION_GATE_D2`, the χ²₂ 99 % point), and the fused corner
+/// lies between them (within their separation of each), so a degenerate weight cannot throw
+/// it away.
+fn fuse_corner(a: [f64; 2], ca: [f64; 3], b: [f64; 2], cb: [f64; 3]) -> Option<[f64; 2]> {
+    let inv = |c: [f64; 3]| {
+        let det = c[0] * c[2] - c[1] * c[1];
+        (c[0] > 0.0 && det > 1e-18 && det.is_finite())
+            .then(|| [c[2] / det, -c[1] / det, c[0] / det])
+    };
+    let (ia, ib) = (inv(ca)?, inv(cb)?);
+    let s = inv([ca[0] + cb[0], ca[1] + cb[1], ca[2] + cb[2]])?;
+    let d = [b[0] - a[0], b[1] - a[1]];
+    let d2 = d[0] * (s[0] * d[0] + s[1] * d[1]) + d[1] * (s[1] * d[0] + s[2] * d[1]);
+    if d2 > FUSION_GATE_D2 {
+        return None;
+    }
+    let cov = inv([ia[0] + ib[0], ia[1] + ib[1], ia[2] + ib[2]])?;
+    let rhs = [
+        ia[0] * a[0] + ia[1] * a[1] + ib[0] * b[0] + ib[1] * b[1],
+        ia[1] * a[0] + ia[2] * a[1] + ib[1] * b[0] + ib[2] * b[1],
+    ];
+    let fused = [
+        cov[0] * rhs[0] + cov[1] * rhs[1],
+        cov[1] * rhs[0] + cov[2] * rhs[1],
+    ];
+    let span = d[0].hypot(d[1]) + 1e-9;
+    let near = |p: [f64; 2]| (fused[0] - p[0]).hypot(fused[1] - p[1]) <= span;
+    (near(a) && near(b)).then_some(fused)
+}
+
+/// χ²₂ 99 % point: the agreement test of [`fuse_corner`].
+const FUSION_GATE_D2: f64 = 9.21;
+/// Largest distance (px) a whole-edge line corner may sit from its seed and still be fused.
+const LINE_CORNER_MAX_MOVE_PX: f64 = 3.0;
+/// Fraction of each edge, at each end, left out of the line fit: the corner regions, where the
+/// neighbouring edge and the junction blur the profile.
+const EDGE_END_MARGIN: f64 = 0.15;
+/// Spacing (px) of the edge-normal samples of one station.
+const EDGE_PROFILE_STEP: f64 = 0.25;
+/// Profile samples on each side of the central difference: 2 × 0.25 px, a 1 px baseline.
+const EDGE_DERIVATIVE_TAPS: i32 = 2;
+/// Profile buffer size: the widest band (half = 0.5 cell, under 16 px) plus the taps.
+const EDGE_MAX_PROFILE: usize = 160;
+/// Stations per pixel of edge length. Half of 0.7 measured equal on ICRA, ChArUco and
+/// render-tag, at 15 % less latency on dense frames.
+const EDGE_STATION_DENSITY: f64 = 0.35;
+/// Most stations sampled along one edge (stack buffer size).
+const EDGE_MAX_STATIONS: usize = 256;
+
+/// A marker edge as a straight line fitted through its edge stations, with the line's
+/// uncertainty from the stations' own scatter.
+#[derive(Clone, Copy)]
+struct EdgeLine {
+    /// Centroid of the stations.
+    point: [f64; 2],
+    /// Unit direction along the edge.
+    dir: [f64; 2],
+    /// Unit normal.
+    normal: [f64; 2],
+    /// Variance (px²) of the line's offset at `point`.
+    var_offset: f64,
+    /// Variance (rad²) of the line's angle.
+    var_angle: f64,
+}
+
+/// Fits the marker edge from `p0` to `p1`.
+///
+/// Stations are spread over the middle of the edge (`EDGE_END_MARGIN` left out at each end).
+/// At each, the edge's position is the `|∇I·n|`-weighted centroid of samples across the edge
+/// within `±half` px. A total-least-squares line through the station positions gives the edge;
+/// the residual variance `s²` of the stations about it gives `Var(offset) = s²/N` and
+/// `Var(angle) = s²/Σt²`. Bit edges crossing the band, lens curvature or clutter scatter the
+/// stations and so inflate the line's own uncertainty, which is what keeps a contaminated edge
+/// from dominating a fusion.
+fn fit_marker_edge(img: &ImageView, p0: [f64; 2], p1: [f64; 2], half: f64) -> Option<EdgeLine> {
+    let (dx, dy) = (p1[0] - p0[0], p1[1] - p0[1]);
+    let len = dx.hypot(dy);
+    if len < 8.0 {
+        return None;
+    }
+    let (ux, uy) = (dx / len, dy / len);
+    let (nx, ny) = (-uy, ux);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let stations = ((EDGE_STATION_DENSITY * len).round() as usize).clamp(6, EDGE_MAX_STATIONS);
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    let steps = (half / EDGE_PROFILE_STEP).round() as i32;
+    // The intensity profile extends one derivative baseline beyond the band on each side.
+    let reach = steps + EDGE_DERIVATIVE_TAPS;
+    let mut profile = [0.0f64; EDGE_MAX_PROFILE];
+    let samples = (2 * reach + 1) as usize;
+    if samples > EDGE_MAX_PROFILE {
+        return None;
+    }
+    let mut points = [[0.0f64; 2]; EDGE_MAX_STATIONS];
+    let mut count = 0usize;
+    for k in 0..stations {
+        let t = EDGE_END_MARGIN + (1.0 - 2.0 * EDGE_END_MARGIN) * k as f64 / (stations - 1) as f64;
+        let (cx, cy) = (p0[0] + t * dx, p0[1] + t * dy);
+        for (idx, slot) in profile[..samples].iter_mut().enumerate() {
+            let o = f64::from(idx as i32 - reach) * EDGE_PROFILE_STEP;
+            *slot = img.sample_bilinear(cx + o * nx, cy + o * ny);
+        }
+        // Gradient magnitude across the edge as a 1 px central difference of the profile.
+        let (mut sum_w, mut sum_wo) = (0.0, 0.0);
+        for step in -steps..=steps {
+            let at = (step + reach) as usize;
+            let taps = EDGE_DERIVATIVE_TAPS as usize;
+            let w = (profile[at + taps] - profile[at - taps]).abs();
+            let o = f64::from(step) * EDGE_PROFILE_STEP;
+            sum_w += w;
+            sum_wo += w * o;
+        }
+        if sum_w > 1e-9 {
+            let o = sum_wo / sum_w;
+            points[count] = [cx + o * nx, cy + o * ny];
+            count += 1;
+        }
+    }
+    if count < 5 {
+        return None;
+    }
+    let pts = &points[..count];
+    let n = count as f64;
+    let mx = pts.iter().map(|p| p[0]).sum::<f64>() / n;
+    let my = pts.iter().map(|p| p[1]).sum::<f64>() / n;
+    let (mut sxx, mut sxy, mut syy) = (0.0, 0.0, 0.0);
+    for p in pts {
+        let (a, b) = (p[0] - mx, p[1] - my);
+        sxx += a * a;
+        sxy += a * b;
+        syy += b * b;
+    }
+    // Principal direction of the 2×2 scatter matrix.
+    let theta = 0.5 * (2.0 * sxy).atan2(sxx - syy);
+    let dir = [theta.cos(), theta.sin()];
+    let normal = [-dir[1], dir[0]];
+    let (mut rr, mut tt) = (0.0, 0.0);
+    for p in pts {
+        let (a, b) = (p[0] - mx, p[1] - my);
+        let r = a * normal[0] + b * normal[1];
+        let t = a * dir[0] + b * dir[1];
+        rr += r * r;
+        tt += t * t;
+    }
+    let s2 = rr / (n - 2.0);
+    (tt > 1e-9).then_some(EdgeLine {
+        point: [mx, my],
+        dir,
+        normal,
+        var_offset: s2 / n,
+        var_angle: s2 / tt,
+    })
+}
+
+/// Intersection of two edge lines and its covariance `[xx, xy, yy]`.
+///
+/// Each line constrains the corner along its normal, with variance `Var(offset) +
+/// Var(angle)·ℓ²` at distance `ℓ` from its centroid along the line; the two constraints map to
+/// image coordinates through the inverse of the normals matrix.
+fn intersect_edges(a: &EdgeLine, b: &EdgeLine) -> Option<([f64; 2], [f64; 3])> {
+    let det = a.normal[0] * b.normal[1] - a.normal[1] * b.normal[0];
+    if det.abs() < 1e-6 {
+        return None;
+    }
+    let ra = a.normal[0] * a.point[0] + a.normal[1] * a.point[1];
+    let rb = b.normal[0] * b.point[0] + b.normal[1] * b.point[1];
+    // Inverse of [[a.n], [b.n]].
+    let inv = [
+        [b.normal[1] / det, -a.normal[1] / det],
+        [-b.normal[0] / det, a.normal[0] / det],
+    ];
+    let corner = [
+        inv[0][0] * ra + inv[0][1] * rb,
+        inv[1][0] * ra + inv[1][1] * rb,
+    ];
+    let along =
+        |l: &EdgeLine| (corner[0] - l.point[0]) * l.dir[0] + (corner[1] - l.point[1]) * l.dir[1];
+    let va = a.var_offset + a.var_angle * along(a).powi(2);
+    let vb = b.var_offset + b.var_angle * along(b).powi(2);
+    let cov = [
+        inv[0][0] * inv[0][0] * va + inv[0][1] * inv[0][1] * vb,
+        inv[0][0] * inv[1][0] * va + inv[0][1] * inv[1][1] * vb,
+        inv[1][0] * inv[1][0] * va + inv[1][1] * inv[1][1] * vb,
+    ];
+    Some((corner, cov))
+}
+
+/// Whether the marker corner at `corner` is an X-junction: the outward diagonal reads as dark
+/// as the inward one (an AprilGrid connector square touches the corner). There the whole-edge
+/// lines carry the photometric edge offset while the junction point does not, so the two
+/// estimators disagree by a bias rather than by noise and are not fused. Same probe geometry as
+/// [`marker_corner_consistent`].
+fn junction_is_x(
+    img: &ImageView,
+    corner: [f64; 2],
+    prev: [f64; 2],
+    next: [f64; 2],
+    at: [f64; 2],
+    probe: f64,
+) -> bool {
+    let unit = |to: [f64; 2]| {
+        let (dx, dy) = (to[0] - at[0], to[1] - at[1]);
+        let n = dx.hypot(dy);
+        [dx / n, dy / n]
+    };
+    let (u, v) = (unit(prev), unit(next));
+    let at_offset = |a: f64, b: f64| {
+        img.sample_bilinear(
+            corner[0] + probe * (a * u[0] + b * v[0]),
+            corner[1] + probe * (a * u[1] + b * v[1]),
+        )
+    };
+    let inward = at_offset(1.0, 1.0);
+    let outward = at_offset(-1.0, -1.0);
+    let bright = 0.5 * (at_offset(1.0, -1.0) + at_offset(-1.0, 1.0));
+    outward < 0.5 * (inward + bright)
 }
 
 /// Whether `corner` looks like the corner of a dark-bordered marker whose adjacent corners are
@@ -479,6 +729,7 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Optio
 
     let mut corner = seed;
     let mut uncertainty = f64::INFINITY;
+    let mut cov = [f64::INFINITY, 0.0, f64::INFINITY];
     for _ in 0..SUBPIX_MAX_ITER {
         // Patch sample (row, col) sits at corner + (col − hw − 1, row − hw − 1); in array
         // coordinates (pixel centres at integers) its top-left is corner − 0.5 − (hw + 1).
@@ -515,6 +766,7 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Optio
         // per sample; `sqq` = Σ w·q² gives the residual at the solution in closed form.
         let (mut sxx, mut sxy, mut syy, mut rhs_x, mut rhs_y) = (0.0, 0.0, 0.0, 0.0, 0.0);
         let mut sqq = 0.0;
+        let (mut bxx, mut bxy, mut byy, mut sw) = (0.0, 0.0, 0.0, 0.0);
         for wy in 0..span {
             let py = wy as f64 - hw as f64;
             let row = (wy + 1) * side;
@@ -532,6 +784,11 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Optio
                 rhs_y += gxy * px + gyy * py;
                 let q = gx * px + gy * py;
                 sqq += weight * q * q;
+                let w2 = weight * weight;
+                bxx += w2 * gx * gx;
+                bxy += w2 * gx * gy;
+                byy += w2 * gy * gy;
+                sw += weight;
             }
         }
         let det = sxx * syy - sxy * sxy;
@@ -549,6 +806,20 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Optio
             - 2.0 * (step[0] * rhs_x + step[1] * rhs_y)
             + sqq;
         uncertainty = residual.max(0.0) * (sxx + syy) / det;
+        // Sandwich covariance A⁻¹BA⁻¹·σ², with A⁻¹ = [syy −sxy; −sxy sxx]/det.
+        let (ixx, ixy, iyy) = (syy / det, -sxy / det, sxx / det);
+        let (mxx, mxy, myx, myy) = (
+            ixx * bxx + ixy * bxy,
+            ixx * bxy + ixy * byy,
+            ixy * bxx + iyy * bxy,
+            ixy * bxy + iyy * byy,
+        );
+        let sigma2 = residual.max(0.0) / sw.max(f64::EPSILON);
+        cov = [
+            sigma2 * (mxx * ixx + mxy * ixy),
+            sigma2 * (mxx * ixy + mxy * iyy),
+            sigma2 * (myx * ixy + myy * iyy),
+        ];
         if step[0] * step[0] + step[1] * step[1] <= SUBPIX_EPS * SUBPIX_EPS {
             break;
         }
@@ -558,6 +829,7 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Optio
         Some(Subpix {
             corner,
             uncertainty,
+            cov,
         })
     } else {
         None
@@ -573,6 +845,9 @@ pub(crate) struct Subpix {
     /// trace of the inverse normal matrix, i.e. the trace of the corner covariance up to the
     /// window's weight normalisation. Comparable across windows on the same corner.
     pub(crate) uncertainty: f64,
+    /// Corner covariance (px²; `[xx, xy, yy]`): the weighted least-squares sandwich
+    /// `σ²·A⁻¹BA⁻¹` with `A = Σw∇I∇Iᵀ`, `B = Σw²∇I∇Iᵀ` and `σ² = Σw·r²/Σw`.
+    pub(crate) cov: [f64; 3],
 }
 
 #[cfg(test)]
