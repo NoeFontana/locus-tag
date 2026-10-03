@@ -187,6 +187,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     unchanged;
   - ICRA forward recall 73.74 → 73.69 % (checkerboard grid 70.12 → 70.03 %);
   - the main render-tag, board and distortion snapshots are byte-identical.
+- **Cached initial-offset scan (output byte-identical).** The decoder-style ERF fit tries 13
+  edge offsets in ±2.4 px and keeps the one with the strongest projected gradient. Each offset
+  rescanned and re-sampled the gradient of every pixel within one pixel of its shifted line.
+  The scan now samples each pixel within 3.5 px of the line once and sums the cached values
+  per offset, in the same row-major order with the same distance expression. A proptest
+  checks it picks the bit-identical offset. 1 thread: ICRA decode −26 % and pipeline −15 %;
+  decode −21 % on Liu4K and −13 % on render-tag.
 - **Band-restricted ERF scans (output byte-identical).** ERF sample collection and the
   decoder's initial-offset gradient scan used to visit every pixel of the edge's bounding box
   and keep those within the band `|n·p + d| ≤ w`. On a diagonal edge that box is mostly empty.
