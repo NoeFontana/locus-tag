@@ -187,6 +187,23 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     unchanged;
   - ICRA forward recall 73.74 → 73.69 % (checkerboard grid 70.12 → 70.03 %);
   - the main render-tag, board and distortion snapshots are byte-identical.
+- **Contour pre-rejects before vertex selection.** Every traced outline used to pay the
+  O(n log n) dominant-vertex selection before the area and compactness tests. Two tests now run
+  on the raw contour first:
+  - *Decodability floor.* By Pick's theorem the outline encloses `polygon area + L/2 + 1`
+    pixels. A marker needs at least one pixel per cell across its `d + 2` cells, less half a
+    pixel of threshold erosion per side. So outlines enclosing fewer than
+    `(min_outer_dim/decimation − 1)²` pixels are dropped: 49 px² for 36h11, MIP and 6x6, and
+    25 px² for 16h5 and 4x4. The same bound on the bounding box skips the trace altogether.
+    The smallest detections on the scoreboard are ICRA 36h11 markers at 8.0 px, which is
+    exactly 1 px per cell.
+  - *Compactness pre-reject* at half the quad compactness floor (`4π·A/L² < 0.05` on the
+    outline). On Liu4K these outlines cost 3.4 ms per frame and never yielded a passing quad.
+
+  Recall, precision and corner error are identical on all 12 scoreboard datasets for both
+  `standard` and the decode-first front end, and every snapshot is unchanged. 1 thread, medians
+  of interleaved runs: quad extraction −11 to −20 %; pipeline −5 % (Liu4K 98.7 → 93.6 ms),
+  −6 % (render-tag 4K), −11 % (1080p).
 - **Faster candidate generation (output byte-identical).**
   - The quad edge-contrast gate is now a decision with early exit: it stops at the first
     failing edge. On unrefined decode-first seeds it accepts an edge whose chord alone passes
