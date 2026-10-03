@@ -292,3 +292,196 @@ pub(crate) fn apply_detector_gwlf(
 
     Some((gwlf_fallback_count, gwlf_avg_delta))
 }
+
+/// Patch side for the largest window: `2·(MAX + 1) + 1` samples, one ring beyond the window
+/// for the central-difference gradients.
+const SUBPIX_PATCH_MAX: usize = 2 * (crate::config::MAX_CORNER_SUBPIX_HALF_WINDOW as usize + 1) + 1;
+/// Iteration cap and step tolerance (px) of [`corner_subpix`] (the `cv::cornerSubPix` values
+/// aruco_nano uses).
+const SUBPIX_MAX_ITER: u32 = 12;
+const SUBPIX_EPS: f64 = 0.005;
+
+/// Gradient-orthogonality corner refinement, the `cv::cornerSubPix` model.
+///
+/// At a corner `c`, every gradient `∇I(p)` in the neighbourhood is orthogonal to `p − c`: on a
+/// flat patch the gradient vanishes and on an edge through `c` it is normal to the edge. So
+/// `c` solves `(Σ w·∇I ∇Iᵀ) c = Σ w·∇I ∇Iᵀ p` over the `(2·half + 1)²` window, with Gaussian
+/// weights `w = exp(−(dx² + dy²)/half²)`. The window is re-centred and the system re-solved
+/// until the step is under `SUBPIX_EPS` px (at most `SUBPIX_MAX_ITER` times). Gradients are
+/// central differences of a bilinearly resampled patch, as OpenCV computes them.
+///
+/// Returns `seed` when the result leaves the `half`-px box around it, the window leaves the
+/// image, or the normal matrix is singular (a flat or single-edge patch). Locus pixel
+/// convention (+0.5 centres), like the rest of the crate. `half` must be in
+/// `1..=MAX_CORNER_SUBPIX_HALF_WINDOW`.
+pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> [f64; 2] {
+    debug_assert!((1..=crate::config::MAX_CORNER_SUBPIX_HALF_WINDOW).contains(&half));
+    let hw = half as usize;
+    let span = 2 * hw + 1; // window side
+    let side = span + 2; // plus one gradient ring
+    let mut weights = [0.0f64; SUBPIX_PATCH_MAX];
+    let inv_hw2 = 1.0 / f64::from(half * half);
+    for (k, weight) in weights.iter_mut().enumerate().take(span) {
+        let off = k as f64 - hw as f64;
+        *weight = (-off * off * inv_hw2).exp();
+    }
+    let mut patch = [0.0f64; SUBPIX_PATCH_MAX * SUBPIX_PATCH_MAX];
+    let reach = (hw + 1) as f64;
+
+    let mut corner = seed;
+    for _ in 0..SUBPIX_MAX_ITER {
+        // Patch sample (row, col) sits at corner + (col − hw − 1, row − hw − 1); in array
+        // coordinates (pixel centres at integers) its top-left is corner − 0.5 − (hw + 1).
+        let x0 = corner[0] - 0.5 - reach;
+        let y0 = corner[1] - 0.5 - reach;
+        if !(x0 >= 0.0 && y0 >= 0.0)
+            || x0 + (side as f64) >= img.width as f64
+            || y0 + (side as f64) >= img.height as f64
+        {
+            return seed;
+        }
+        // Non-negative and in range: checked just above.
+        #[allow(clippy::cast_sign_loss)]
+        let (ix, iy) = (x0.floor() as usize, y0.floor() as usize);
+        let (fx, fy) = (x0 - ix as f64, y0 - iy as f64);
+        let (w00, w10, w01, w11) = (
+            (1.0 - fx) * (1.0 - fy),
+            fx * (1.0 - fy),
+            (1.0 - fx) * fy,
+            fx * fy,
+        );
+        for row in 0..side {
+            let top = &img.data[(iy + row) * img.stride + ix..];
+            let bottom = &img.data[(iy + row + 1) * img.stride + ix..];
+            for col in 0..side {
+                patch[row * side + col] = w00 * f64::from(top[col])
+                    + w10 * f64::from(top[col + 1])
+                    + w01 * f64::from(bottom[col])
+                    + w11 * f64::from(bottom[col + 1]);
+            }
+        }
+
+        // Normal equations: [sxx sxy; sxy syy] · step = [rhs_x; rhs_y].
+        let (mut sxx, mut sxy, mut syy, mut rhs_x, mut rhs_y) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        for wy in 0..span {
+            let py = wy as f64 - hw as f64;
+            let row = (wy + 1) * side;
+            for wx in 0..span {
+                let px = wx as f64 - hw as f64;
+                let at = row + wx + 1;
+                let gx = patch[at + 1] - patch[at - 1];
+                let gy = patch[at + side] - patch[at - side];
+                let weight = weights[wy] * weights[wx];
+                let (gxx, gxy, gyy) = (gx * gx * weight, gx * gy * weight, gy * gy * weight);
+                sxx += gxx;
+                sxy += gxy;
+                syy += gyy;
+                rhs_x += gxx * px + gxy * py;
+                rhs_y += gxy * px + gyy * py;
+            }
+        }
+        let det = sxx * syy - sxy * sxy;
+        if det.abs() <= f64::EPSILON * f64::EPSILON {
+            return seed;
+        }
+        let step = [
+            (syy * rhs_x - sxy * rhs_y) / det,
+            (sxx * rhs_y - sxy * rhs_x) / det,
+        ];
+        corner = [corner[0] + step[0], corner[1] + step[1]];
+        if step[0] * step[0] + step[1] * step[1] <= SUBPIX_EPS * SUBPIX_EPS {
+            break;
+        }
+    }
+    let limit = f64::from(half);
+    if (corner[0] - seed[0]).abs() <= limit && (corner[1] - seed[1]).abs() <= limit {
+        corner
+    } else {
+        seed
+    }
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::unwrap_used,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    // The fallbacks return `seed` itself, so the comparison is exact by contract.
+    clippy::float_cmp
+)]
+mod subpix_tests {
+    use super::corner_subpix;
+    use crate::image::ImageView;
+
+    const W: usize = 64;
+
+    /// A dark wedge with its apex at `apex` (Locus convention), bounded by the rays at
+    /// `theta` and `theta + 90°`, on a bright background; 8×8 supersampled pixel coverage.
+    fn wedge(apex: [f64; 2], theta: f64) -> Vec<u8> {
+        let (u, v) = ([theta.cos(), theta.sin()], [-theta.sin(), theta.cos()]);
+        let mut img = vec![0u8; W * W];
+        for y in 0..W {
+            for x in 0..W {
+                let mut dark = 0;
+                for sy in 0..8 {
+                    for sx in 0..8 {
+                        let px = x as f64 + (f64::from(sx) + 0.5) / 8.0 - apex[0];
+                        let py = y as f64 + (f64::from(sy) + 0.5) / 8.0 - apex[1];
+                        if px * u[0] + py * u[1] > 0.0 && px * v[0] + py * v[1] > 0.0 {
+                            dark += 1;
+                        }
+                    }
+                }
+                img[y * W + x] = (220.0 - 180.0 * f64::from(dark) / 64.0).round() as u8;
+            }
+        }
+        img
+    }
+
+    /// Parity with `cv2.cornerSubPix(img, seed, (4, 4), (-1, -1), (MAX_ITER | EPS, 12, 0.005))`
+    /// (OpenCV 5.0, run on the same images; its corners shifted to Locus' +0.5 convention).
+    /// Agreement is to OpenCV's float32 rounding, not to the apex: the gradient-orthogonality
+    /// model itself leaves ~0.2 px on an unblurred, box-filtered wedge.
+    #[test]
+    fn matches_opencv_corner_subpix() {
+        let opencv = [
+            [31.246_89, 30.818_348],
+            [31.649_41, 30.665_356],
+            [31.308_928, 30.592_333],
+            [31.444_061, 30.542_173],
+        ];
+        for (k, theta) in [0.0f64, 0.3, 0.9, 1.4].into_iter().enumerate() {
+            let apex = [31.27 + 0.11 * k as f64, 30.64 - 0.07 * k as f64];
+            let data = wedge(apex, theta);
+            let img = ImageView::new(&data, W, W, W).unwrap();
+            let got = corner_subpix(&img, [apex[0] + 1.3, apex[1] - 0.9], 4);
+            let d = (got[0] - opencv[k][0]).hypot(got[1] - opencv[k][1]);
+            assert!(
+                d < 0.01,
+                "theta={theta}: {got:?} vs OpenCV {:?} ({d:.4} px)",
+                opencv[k]
+            );
+        }
+    }
+
+    #[test]
+    fn keeps_the_seed_without_a_corner() {
+        let flat = vec![128u8; W * W];
+        let img = ImageView::new(&flat, W, W, W).unwrap();
+        assert_eq!(corner_subpix(&img, [32.2, 31.7], 4), [32.2, 31.7]);
+
+        // A single straight edge constrains one direction only: the normal matrix is singular.
+        let edge: Vec<u8> = (0..W * W)
+            .map(|i| if i % W < 32 { 40 } else { 220 })
+            .collect();
+        let img = ImageView::new(&edge, W, W, W).unwrap();
+        assert_eq!(corner_subpix(&img, [32.0, 30.5], 4), [32.0, 30.5]);
+    }
+
+    #[test]
+    fn keeps_the_seed_when_the_window_leaves_the_image() {
+        let data = wedge([3.0, 3.0], 0.0);
+        let img = ImageView::new(&data, W, W, W).unwrap();
+        assert_eq!(corner_subpix(&img, [3.4, 2.6], 4), [3.4, 2.6]);
+    }
+}

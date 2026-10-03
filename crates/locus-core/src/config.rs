@@ -191,6 +191,9 @@ pub enum QuadExtractionPolicy {
     AdaptivePpb(AdaptivePpbConfig),
 }
 
+/// Largest accepted [`DetectorConfig::decoder_corner_subpix_half_window`] (a 33×33 window).
+pub const MAX_CORNER_SUBPIX_HALF_WINDOW: u32 = 16;
+
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
@@ -306,6 +309,15 @@ pub struct DetectorConfig {
     /// for small dictionaries (tag16h5) where textured candidates decode by chance. Partial
     /// occlusion of the border consumes the budget.
     pub decoder_max_border_error_rate: f32,
+    /// Half-width of the gradient-orthogonality corner refinement applied to every decoded
+    /// marker (default: 0, off).
+    ///
+    /// Each corner `c` moves to the minimiser of `Σ w·(∇I(p)·(c − p))²` over the
+    /// `(2h + 1)²` window around it, Gaussian-weighted and iterated (the `cv::cornerSubPix`
+    /// model). It runs after the configured [`CornerRefinementMode`] on candidates that
+    /// decoded, and the homography is recomputed from the moved corners. Applies to
+    /// undistorted cameras. `4` (a 9×9 window) is the reference operating point.
+    pub decoder_corner_subpix_half_window: u32,
     /// Strategy for refining corner positions (default: Edge).
     pub refinement_mode: CornerRefinementMode,
     /// Maximum number of Hamming errors allowed for tag decoding.
@@ -509,6 +521,7 @@ impl Default for DetectorConfig {
             nthreads: 0,
             decoder_min_contrast: 20.0,
             decoder_max_border_error_rate: 1.0,
+            decoder_corner_subpix_half_window: 0,
             refinement_mode: CornerRefinementMode::Erf,
             max_hamming_error: None,
             huber_delta_px: 1.5,
@@ -559,6 +572,11 @@ impl DetectorConfig {
         if !(0.0..=1.0).contains(&self.decoder_max_border_error_rate) {
             return Err(ConfigError::InvalidBorderErrorRate(
                 self.decoder_max_border_error_rate,
+            ));
+        }
+        if self.decoder_corner_subpix_half_window > MAX_CORNER_SUBPIX_HALF_WINDOW {
+            return Err(ConfigError::InvalidCornerSubpixHalfWindow(
+                self.decoder_corner_subpix_half_window,
             ));
         }
         if !(self.threshold_noise_k.is_finite() && self.threshold_noise_k >= 0.0) {
@@ -685,6 +703,8 @@ pub struct DetectorConfigBuilder {
     pub decoder_min_contrast: Option<f64>,
     /// Border-ring error budget.
     pub decoder_max_border_error_rate: Option<f32>,
+    /// Corner sub-pixel refinement half-window.
+    pub decoder_corner_subpix_half_window: Option<u32>,
     /// Refinement mode.
     pub refinement_mode: Option<CornerRefinementMode>,
     /// Maximum Hamming errors.
@@ -841,6 +861,9 @@ impl DetectorConfigBuilder {
             decoder_max_border_error_rate: self
                 .decoder_max_border_error_rate
                 .unwrap_or(d.decoder_max_border_error_rate),
+            decoder_corner_subpix_half_window: self
+                .decoder_corner_subpix_half_window
+                .unwrap_or(d.decoder_corner_subpix_half_window),
             refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
             max_hamming_error: self.max_hamming_error.or(d.max_hamming_error),
             huber_delta_px: self.huber_delta_px.unwrap_or(d.huber_delta_px),
@@ -908,6 +931,14 @@ impl DetectorConfigBuilder {
     #[must_use]
     pub fn decoder_max_border_error_rate(mut self, rate: f32) -> Self {
         self.decoder_max_border_error_rate = Some(rate);
+        self
+    }
+
+    /// Set the corner sub-pixel refinement half-window (see
+    /// [`DetectorConfig::decoder_corner_subpix_half_window`]; `0` disables it).
+    #[must_use]
+    pub fn decoder_corner_subpix_half_window(mut self, half_window: u32) -> Self {
+        self.decoder_corner_subpix_half_window = Some(half_window);
         self
     }
 
@@ -1300,6 +1331,8 @@ mod profile_json {
         pub gwlf_transversal_alpha: f64,
         #[serde(default = "default_max_border_error_rate")]
         pub max_border_error_rate: f32,
+        #[serde(default)]
+        pub corner_subpix_half_window: u32,
     }
 
     fn default_max_border_error_rate() -> f32 {
@@ -1314,6 +1347,7 @@ mod profile_json {
                 max_hamming_error: c.max_hamming_error,
                 gwlf_transversal_alpha: c.gwlf_transversal_alpha,
                 max_border_error_rate: c.decoder_max_border_error_rate,
+                corner_subpix_half_window: c.decoder_corner_subpix_half_window,
             }
         }
     }
@@ -1468,6 +1502,7 @@ mod profile_json {
                 nthreads: d.nthreads,
                 decoder_min_contrast: p.decoder.min_contrast,
                 decoder_max_border_error_rate: p.decoder.max_border_error_rate,
+                decoder_corner_subpix_half_window: p.decoder.corner_subpix_half_window,
                 refinement_mode: p.decoder.refinement_mode,
                 max_hamming_error: p.decoder.max_hamming_error,
                 huber_delta_px: p.pose.huber_delta_px,
@@ -1681,6 +1716,20 @@ mod tests {
             ..DetectorConfig::default()
         };
         assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validation_bounds_corner_subpix_half_window() {
+        let at = |h| DetectorConfig {
+            decoder_corner_subpix_half_window: h,
+            ..DetectorConfig::default()
+        };
+        assert!(at(0).validate().is_ok());
+        assert!(at(MAX_CORNER_SUBPIX_HALF_WINDOW).validate().is_ok());
+        assert!(matches!(
+            at(MAX_CORNER_SUBPIX_HALF_WINDOW + 1).validate(),
+            Err(crate::error::ConfigError::InvalidCornerSubpixHalfWindow(17))
+        ));
     }
 
     #[test]

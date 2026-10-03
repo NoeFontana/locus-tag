@@ -2074,6 +2074,24 @@ fn decode_batch_soa_generic(
                     }
                 }
 
+                // Gradient-orthogonality refinement of the accepted corners, after the
+                // configured refinement mode (`decoder.corner_subpix_half_window`).
+                let subpix = state == CandidateState::Valid
+                    && config.decoder_corner_subpix_half_window > 0;
+                if subpix {
+                    for corner in corners_slot.iter_mut() {
+                        let r = crate::refinement::corner_subpix(
+                            img,
+                            [f64::from(corner.x), f64::from(corner.y)],
+                            config.decoder_corner_subpix_half_window,
+                        );
+                        *corner = Point2f {
+                            x: r[0] as f32,
+                            y: r[1] as f32,
+                        };
+                    }
+                }
+
                 // Apply rotation reorder, if any.
                 if state == CandidateState::Valid && rot > 0 {
                     let mut temp_corners = [Point2f::default(); 4];
@@ -2084,15 +2102,15 @@ fn decode_batch_soa_generic(
                     *corners_slot = temp_corners;
                 }
 
-                // Recompute the homography whenever corners changed — ERF
-                // refinement *or* rotation. Without the ERF branch, a
+                // Recompute the homography whenever corners changed — ERF or sub-pixel
+                // refinement, *or* rotation. Without the ERF branch, a
                 // canonical-orientation refined candidate (`rot == 0`,
                 // `refined_corners.is_some()`) would carry the pre-refinement
                 // homography forward into Phase D and `CharucoRefiner`, which
                 // projects saddle predictions through `batch.homographies[i]`.
                 // The stale-`h_slot` failure mode is the same class as
                 // `memory/project_refine_saddle_noop.md`.
-                if state == CandidateState::Valid && (refined || rot > 0) {
+                if state == CandidateState::Valid && (refined || subpix || rot > 0) {
                     let dst = [
                         [f64::from(corners_slot[0].x), f64::from(corners_slot[0].y)],
                         [f64::from(corners_slot[1].x), f64::from(corners_slot[1].y)],

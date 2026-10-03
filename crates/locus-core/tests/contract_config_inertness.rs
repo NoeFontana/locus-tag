@@ -677,6 +677,12 @@ fn cases() -> Vec<FieldCase> {
             inert_reason: None,
         },
         FieldCase {
+            field: "decoder_corner_subpix_half_window",
+            base: noop,
+            mutate: |c| c.decoder_corner_subpix_half_window = 4,
+            inert_reason: None,
+        },
+        FieldCase {
             field: "refinement_mode",
             base: noop,
             mutate: |c| c.refinement_mode = CornerRefinementMode::None,
@@ -826,6 +832,7 @@ fn every_config_field() -> Vec<&'static str> {
         nthreads: _,
         decoder_min_contrast: _,
         decoder_max_border_error_rate: _,
+        decoder_corner_subpix_half_window: _,
         refinement_mode: _,
         max_hamming_error: _,
         huber_delta_px: _,
@@ -867,6 +874,7 @@ fn every_config_field() -> Vec<&'static str> {
         "nthreads",
         "decoder_min_contrast",
         "decoder_max_border_error_rate",
+        "decoder_corner_subpix_half_window",
         "refinement_mode",
         "max_hamming_error",
         "huber_delta_px",

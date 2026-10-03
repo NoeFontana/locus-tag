@@ -30,7 +30,8 @@
     "min_contrast": 10.0,
     "refinement_mode": "Erf",
     "gwlf_transversal_alpha": 0.01,
-    "max_border_error_rate": 1.0
+    "max_border_error_rate": 1.0,
+    "corner_subpix_half_window": 0
   },
   "pose": {
     "huber_delta_px": 1.5,

@@ -7,6 +7,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Opt-in gradient-orthogonality corner refinement (`decoder.corner_subpix_half_window`,
+  default `0` = off).**
+  - **Model:** the `cv::cornerSubPix` model, run on every decoded marker after the configured
+    `refinement_mode`. Each corner moves to the least-squares point that every gradient in a
+    `(2h + 1)²` Gaussian-weighted window is orthogonal to, iterated (12 iterations, 0.005 px).
+  - **Homography:** recomputed from the moved corners, so board refiners and pose see one
+    consistent quad.
+  - **Parity:** matches OpenCV's `cornerSubPix` to 0.007 px on synthetic corners
+    (`refinement::subpix_tests`). The implementation is allocation-free, on a stack patch.
+  - **Scope:** undistorted cameras.
+  - **Why:** with each detector's mean radial bias removed, the 1-DOF ERF corners scatter
+    about 2× more than `cornerSubPix` (render-tag 1080p 0.41 vs 0.21 px; ICRA random 0.30 vs
+    0.12 px). The 1-DOF fit keeps the seed edge direction.
+  - **Results:** see the SOTA scoreboard checkpoint for the measured effect.
 - **Opt-in `threshold.mode = "LocalMean"` foreground thresholder** (supersedes #383; root
   cause RC1 of #409). Segmentation marks a pixel foreground when `pixel < threshold_map[pixel]`,
   and that map was only ever the midpoint of the min/max over a 3×3 tile neighbourhood, with no
