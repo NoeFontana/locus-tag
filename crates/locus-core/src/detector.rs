@@ -310,12 +310,15 @@ fn run_detection_pipeline<'ctx>(
         );
 
         // 2. Segmentation (SIMD Fused RLE + LSL)
-        let label_result = crate::simd_ccl_fusion::label_components_lsl(
+        // Boundary tracing works from each component's runs; only EdLines needs the
+        // full-frame label image.
+        let label_result = crate::simd_ccl_fusion::label_components_lsl_opts(
             &state.arena,
             &sharpened_img,
             threshold_map,
             config.segmentation_connectivity == crate::config::SegmentationConnectivity::Eight,
             config.quad_min_area,
+            config.may_use_edlines(),
         );
 
         // 3. Quad Extraction (SoA). Distorted cameras run RDP in straight

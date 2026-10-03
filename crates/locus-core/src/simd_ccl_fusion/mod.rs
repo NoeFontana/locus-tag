@@ -335,14 +335,38 @@ fn write_runs_rows(
 
 /// Performs Light-Speed Labeling (LSL) / Run-based Union-Find on the extracted RLE segments.
 /// Fully resolves equivalences and outputs the 2D label map expected by the rest of the pipeline.
-#[allow(clippy::too_many_lines)]
-#[tracing::instrument(skip_all, name = "pipeline::segmentation")]
 pub fn label_components_lsl<'a>(
     arena: &'a Bump,
     img: &ImageView,
     threshold_map: &[u8],
     use_8_connectivity: bool,
     min_area: u32,
+) -> LabelResult<'a> {
+    label_components_lsl_opts(
+        arena,
+        img,
+        threshold_map,
+        use_8_connectivity,
+        min_area,
+        true,
+    )
+}
+
+/// [`label_components_lsl`], optionally without the full-frame label image.
+///
+/// The result always carries every surviving component's runs
+/// ([`LabelResult::component_runs`]). With `build_label_image = false` the `w·h` label image
+/// is left empty: boundary tracing then works from a component's runs, and only consumers
+/// that need random access to labels (`EdLines`) require it.
+#[allow(clippy::too_many_lines)]
+#[tracing::instrument(skip_all, name = "pipeline::segmentation")]
+pub fn label_components_lsl_opts<'a>(
+    arena: &'a Bump,
+    img: &ImageView,
+    threshold_map: &[u8],
+    use_8_connectivity: bool,
+    min_area: u32,
+    build_label_image: bool,
 ) -> LabelResult<'a> {
     // Runs come out in scan order with `label` already set to the global index
     // the Union-Find uses as its id. Both extractors produce byte-identical
@@ -358,9 +382,15 @@ pub fn label_components_lsl<'a>(
     let runs: &[RleSegment] = arena_runs.as_deref().unwrap_or(&owned_runs);
 
     if runs.is_empty() {
+        let n = if build_label_image {
+            img.width * img.height
+        } else {
+            0
+        };
         return LabelResult {
-            labels: arena.alloc_slice_fill_copy(img.width * img.height, 0u32),
+            labels: arena.alloc_slice_fill_copy(n, 0u32),
             component_stats: Vec::new(),
+            component_runs: crate::segmentation::ComponentRuns::default(),
         };
     }
 
@@ -482,6 +512,41 @@ pub fn label_components_lsl<'a>(
     }
     let slot_to_final_label: &[u32] = slot_to_final_label;
 
+    // Group the surviving components' runs by final label, keeping scan order (a counting
+    // sort): `trace_component` paints a component from its runs alone.
+    let kept = (next_label - 1) as usize;
+    let offsets = arena.alloc_slice_fill_copy(kept + 1, 0u32);
+    for &c in comp {
+        let label = slot_to_final_label[c as usize] as usize;
+        if label > 0 {
+            offsets[label] += 1;
+        }
+    }
+    for l in 1..=kept {
+        offsets[l] += offsets[l - 1];
+    }
+    let cursor = arena.alloc_slice_copy(&offsets[..kept]);
+    let grouped = arena.alloc_slice_fill_copy(offsets[kept] as usize, RleSegment::new(0, 0, 0));
+    for (run, &c) in runs.iter().zip(comp) {
+        let label = slot_to_final_label[c as usize] as usize;
+        if label > 0 {
+            grouped[cursor[label - 1] as usize] = *run;
+            cursor[label - 1] += 1;
+        }
+    }
+    let component_runs = crate::segmentation::ComponentRuns {
+        runs: grouped,
+        offsets,
+    };
+
+    if !build_label_image {
+        return LabelResult {
+            labels: &[],
+            component_stats,
+            component_runs,
+        };
+    }
+
     let labels = arena.alloc_slice_fill_copy(img.width * img.height, 0u32);
 
     fill_label_rows(
@@ -499,6 +564,7 @@ pub fn label_components_lsl<'a>(
     LabelResult {
         labels,
         component_stats,
+        component_runs,
     }
 }
 
@@ -683,6 +749,7 @@ mod differential_tests {
             return LabelResult {
                 labels: arena.alloc_slice_fill_copy(img.width * img.height, 0u32),
                 component_stats: Vec::new(),
+                component_runs: crate::segmentation::ComponentRuns::default(),
             };
         }
 
@@ -787,6 +854,7 @@ mod differential_tests {
         LabelResult {
             labels,
             component_stats,
+            component_runs: crate::segmentation::ComponentRuns::default(),
         }
     }
 

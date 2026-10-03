@@ -168,6 +168,7 @@ pub fn extract_quads_soa(
                     label_result.labels,
                     label_idx + 1,
                     stat,
+                    label_result.component_runs.of(label_idx + 1),
                     config,
                     decimation,
                     refinement_img,
@@ -242,6 +243,7 @@ fn extract_single_quad(
     labels: &[u32],
     label: u32,
     stat: &crate::segmentation::ComponentStats,
+    comp_runs: Option<&[crate::simd_ccl_fusion::RleSegment]>,
     config: &DetectorConfig,
     decimation: usize,
     refinement_img: &ImageView,
@@ -310,16 +312,11 @@ fn extract_single_quad(
             let sx = stat.first_pixel_x as usize;
             let sy = stat.first_pixel_y as usize;
 
-            let contour = trace_boundary(
-                arena,
-                labels,
-                img.width,
-                img.height,
-                sx,
-                sy,
-                label,
-                2 * (bbox_w + bbox_h) as usize,
-            );
+            let cap = 2 * (bbox_w + bbox_h) as usize;
+            let contour = match comp_runs {
+                Some(runs) => trace_component(arena, runs, stat, cap),
+                None => trace_boundary(arena, labels, img.width, img.height, sx, sy, label, cap),
+            };
 
             if contour.len() < 12 {
                 return None;
@@ -569,6 +566,7 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
                     label_result.labels,
                     label_idx + 1,
                     stat,
+                    label_result.component_runs.of(label_idx + 1),
                     config,
                     decimation,
                     refinement_img,
@@ -645,6 +643,7 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     labels: &[u32],
     label: u32,
     stat: &crate::segmentation::ComponentStats,
+    comp_runs: Option<&[crate::simd_ccl_fusion::RleSegment]>,
     config: &DetectorConfig,
     decimation: usize,
     refinement_img: &ImageView,
@@ -708,16 +707,11 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
 
     let sx = stat.first_pixel_x as usize;
     let sy = stat.first_pixel_y as usize;
-    let contour = trace_boundary(
-        arena,
-        labels,
-        img.width,
-        img.height,
-        sx,
-        sy,
-        label,
-        2 * (bbox_w + bbox_h) as usize,
-    );
+    let cap = 2 * (bbox_w + bbox_h) as usize;
+    let contour = match comp_runs {
+        Some(runs) => trace_component(arena, runs, stat, cap),
+        None => trace_boundary(arena, labels, img.width, img.height, sx, sy, label, cap),
+    };
 
     if contour.len() < 12 || contour_fill(&contour) < min_fill {
         return None;
@@ -948,6 +942,7 @@ pub fn extract_quads_with_config(
                     label_result.labels,
                     label,
                     stat,
+                    label_result.component_runs.of(label),
                     config,
                     decimation,
                     refinement_img,
@@ -2114,6 +2109,44 @@ mod tests {
     }
 
     proptest! {
+        /// Tracing a component from its runs walks exactly the contour that tracing the
+        /// full-frame label image walks.
+        #[test]
+        fn prop_trace_component_matches_label_image(
+            bits in prop::collection::vec(any::<u64>(), 24),
+            density in 1u32..7,
+            eight in any::<bool>(),
+        ) {
+            let (w, h) = (48usize, 32usize);
+            // Foreground where `pixel < threshold`: density/8 of pixels, in blobs from ANDed words.
+            let img_px: Vec<u8> = (0..w * h)
+                .map(|i| {
+                    let word = bits[i % 24].rotate_left((i / 24) as u32);
+                    let fg = (word.count_ones() * 8 / 64) < density;
+                    if fg { 0 } else { 255 }
+                })
+                .collect();
+            let thr = vec![128u8; w * h];
+            let img = ImageView::new(&img_px, w, h, w).unwrap();
+            let arena = Bump::new();
+            let lr = crate::simd_ccl_fusion::label_components_lsl(&arena, &img, &thr, eight, 1);
+            for (i, stat) in lr.component_stats.iter().enumerate() {
+                let label = (i + 1) as u32;
+                let a = trace_boundary(
+                    &arena, lr.labels, w, h,
+                    stat.first_pixel_x as usize, stat.first_pixel_y as usize, label, 0,
+                );
+                let runs = lr.component_runs.of(label).unwrap();
+                let b = trace_component(&arena, runs, stat, 0);
+                prop_assert_eq!(a.len(), b.len());
+                for (p, q) in a.iter().zip(b.iter()) {
+                    prop_assert_eq!((p.x.to_bits(), p.y.to_bits()), (q.x.to_bits(), q.y.to_bits()));
+                }
+            }
+        }
+    }
+
+    proptest! {
         /// The early-exit gate makes exactly the decision of thresholding the full score,
         /// on the chord and on the ±1 px band.
         #[test]
@@ -2753,24 +2786,20 @@ mod tests {
 /// Boundary tracing gives up after this many steps.
 const MAX_TRACE_STEPS: usize = 10_000;
 
-#[multiversion(targets(
-    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
-    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
-    "aarch64+neon"
-))]
-/// Boundary Tracing using robust border following.
-///
-/// This implementation uses a state-machine based approach to follow the border
-/// of a connected component. Uses precomputed offsets for speed.
+/// Moore-neighbourhood border following over `cells` (row-major, `width` x `height`): walks the
+/// outer boundary of the region of cells equal to `target` from `(start_x, start_y)`, the
+/// region's first cell in scan order. Points are pixel centres offset by `(origin_x, origin_y)`.
+#[inline]
 #[allow(clippy::too_many_arguments)]
-fn trace_boundary<'a>(
+fn trace_cells<'a, T: Copy + PartialEq>(
     arena: &'a Bump,
-    labels: &[u32],
+    cells: &[T],
     width: usize,
     height: usize,
     start_x: usize,
     start_y: usize,
-    target_label: u32,
+    target: T,
+    (origin_x, origin_y): (isize, isize),
     capacity_hint: usize,
 ) -> BumpVec<'a, Point> {
     // An outer boundary visits about the bounding-box perimeter; reserving it up front
@@ -2802,8 +2831,8 @@ fn trace_boundary<'a>(
 
     for _ in 0..MAX_TRACE_STEPS {
         points.push(Point {
-            x: curr_x as f64 + 0.5,
-            y: curr_y as f64 + 0.5,
+            x: (curr_x + origin_x) as f64 + 0.5,
+            y: (curr_y + origin_y) as f64 + 0.5,
         });
 
         let mut found = false;
@@ -2817,7 +2846,7 @@ fn trace_boundary<'a>(
             // Branchless bounds check using unsigned comparison
             if (nx as usize) < width && (ny as usize) < height {
                 let nidx = (curr_idx as isize + offsets[dir]) as usize;
-                if labels[nidx] == target_label {
+                if cells[nidx] == target {
                     curr_x = nx;
                     curr_y = ny;
                     curr_idx = nidx;
@@ -2834,6 +2863,76 @@ fn trace_boundary<'a>(
     }
 
     points
+}
+
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+/// Boundary Tracing using robust border following on the full label image.
+#[allow(clippy::too_many_arguments)]
+fn trace_boundary<'a>(
+    arena: &'a Bump,
+    labels: &[u32],
+    width: usize,
+    height: usize,
+    start_x: usize,
+    start_y: usize,
+    target_label: u32,
+    capacity_hint: usize,
+) -> BumpVec<'a, Point> {
+    trace_cells(
+        arena,
+        labels,
+        width,
+        height,
+        start_x,
+        start_y,
+        target_label,
+        (0, 0),
+        capacity_hint,
+    )
+}
+
+#[multiversion(targets(
+    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
+    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
+    "aarch64+neon"
+))]
+/// [`trace_boundary`] for one component given by its runs, without a full-frame label image.
+///
+/// The runs are painted into a mask of the component's bounding box padded by one pixel. Every
+/// cell `trace_boundary` tests is a neighbour of a component pixel, so it lies in the padded
+/// box, and it holds the target exactly when the label image holds this component's label: the
+/// walk, and the contour, are identical. The mask is small enough to stay in L1/L2, where the
+/// 4-byte full-frame label image made every vertical step a cache miss.
+fn trace_component<'a>(
+    arena: &'a Bump,
+    runs: &[crate::simd_ccl_fusion::RleSegment],
+    stat: &crate::segmentation::ComponentStats,
+    capacity_hint: usize,
+) -> BumpVec<'a, Point> {
+    let (x0, y0) = (usize::from(stat.min_x), usize::from(stat.min_y));
+    let pw = usize::from(stat.max_x - stat.min_x) + 3;
+    let ph = usize::from(stat.max_y - stat.min_y) + 3;
+    let mask = arena.alloc_slice_fill_copy(pw * ph, 0u8);
+    for r in runs {
+        // Run `[start_x, end_x)` lands at mask columns `start_x - x0 + 1 ..= end_x - x0`.
+        let row = (usize::from(r.y) - y0 + 1) * pw;
+        mask[row + usize::from(r.start_x) - x0 + 1..=row + usize::from(r.end_x) - x0].fill(1);
+    }
+    trace_cells(
+        arena,
+        mask,
+        pw,
+        ph,
+        usize::from(stat.first_pixel_x) - x0 + 1,
+        usize::from(stat.first_pixel_y) - y0 + 1,
+        1u8,
+        (x0 as isize - 1, y0 as isize - 1),
+        capacity_hint,
+    )
 }
 
 /// Simplified version of CHAIN_APPROX_SIMPLE:
