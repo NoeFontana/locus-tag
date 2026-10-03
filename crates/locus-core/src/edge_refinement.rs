@@ -202,9 +202,33 @@ impl<'a> ErfEdgeFitter<'a> {
     ///
     /// Tests 13 offsets in `[-2.4, +2.4]` pixels and picks the one where the
     /// projected gradient magnitude along the normal is highest.
-    pub fn scan_initial_d(&mut self) {
+    ///
+    /// Every offset keeps the pixels with `|n·p + d + offset| < 1`, so all of them lie within
+    /// 3.4 px of the line: their projected gradients are sampled once into `arena` and each
+    /// offset sums the cached values in the same row-major order, with the same distance
+    /// expression, as a per-offset scan would (`project_gradients_optimized`).
+    pub fn scan_initial_d(&mut self, arena: &'a Bump) {
+        // Any pixel an offset keeps satisfies |n·p + d| < 1 + 2.4; the margin covers rounding.
+        const REACH: f64 = 3.5;
         let window = 2.5;
         let (x0, x1, y0, y1) = self.get_scan_bounds(window);
+        let (nx, ny) = (self.nx, self.ny);
+
+        let mut cache = BumpVec::new_in(arena);
+        for py in y0..=y1 {
+            let y = py as f64 + 0.5;
+            let Some((start, end)) = band_columns(nx, ny * y + self.d, REACH, x0, x1) else {
+                continue;
+            };
+            for px in start..=end {
+                let x = px as f64 + 0.5;
+                let base = nx * x + ny * y;
+                if (base + self.d).abs() < REACH {
+                    let g = self.img.sample_gradient_bilinear(x, y);
+                    cache.push((base, (g[0] * nx + g[1] * ny).abs()));
+                }
+            }
+        }
 
         let mut best_offset = 0.0;
         let mut best_grad = 0.0;
@@ -213,8 +237,13 @@ impl<'a> ErfEdgeFitter<'a> {
             let offset = f64::from(k) * 0.4;
             let scan_d = self.d + offset;
 
-            let (sum_g, count) =
-                project_gradients_optimized(self.img, self.nx, self.ny, x0, x1, y0, y1, scan_d);
+            let (mut sum_g, mut count) = (0.0, 0usize);
+            for &(base, projected) in &cache {
+                if (base + scan_d).abs() < 1.0 {
+                    sum_g += projected;
+                    count += 1;
+                }
+            }
 
             if count > 0 && sum_g > best_grad {
                 best_grad = sum_g;
@@ -344,7 +373,7 @@ impl<'a> ErfEdgeFitter<'a> {
         refine_cfg: &RefineConfig,
     ) -> bool {
         if refine_cfg.scan_initial {
-            self.scan_initial_d();
+            self.scan_initial_d(arena);
         }
         let samples = self.collect_samples(arena, sample_cfg);
         if samples.len() < 10 {
@@ -606,10 +635,10 @@ fn refine_accumulate_optimized(
 
 // ── SIMD-Accelerated Sample Collection ───────────────────────────────────────
 
-/// Gradient projection for d-scan initialization.
-///
-/// Computes the sum of `|gradient . normal|` for pixels near the line,
-/// used to find the offset that maximizes edge evidence.
+/// Gradient projection for one trial offset of the d-scan: the sum of `|gradient · normal|`
+/// over the pixels within one pixel of the line. `ErfEdgeFitter::scan_initial_d` computes all
+/// offsets from one cached pass; this per-offset scan is its test reference.
+#[cfg(test)]
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -862,6 +891,48 @@ fn collect_samples_strided<'a>(
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    proptest::proptest! {
+        /// The cached d-scan picks exactly the offset that 13 per-offset scans pick.
+        #[test]
+        fn cached_scan_matches_per_offset_scans(
+            seed in proptest::prelude::any::<u64>(),
+            p1 in (6.0..58.0f64, 6.0..58.0f64),
+            p2 in (6.0..58.0f64, 6.0..58.0f64),
+        ) {
+            let (w, h) = (64usize, 64usize);
+            let mut state = seed | 1;
+            let data: Vec<u8> = (0..w * h)
+                .map(|i| {
+                    state ^= state << 13;
+                    state ^= state >> 7;
+                    state ^= state << 17;
+                    let (x, y) = (i % w, i / w);
+                    let block = if (x / 11 + y / 9) % 2 == 0 { 50 } else { 200 };
+                    (block + (state % 31) as i32 - 15).clamp(0, 255) as u8
+                })
+                .collect();
+            let img = ImageView::new(&data, w, h, w).unwrap();
+            let Some(mut fitter) = ErfEdgeFitter::new(&img, [p1.0, p1.1], [p2.0, p2.1], false) else {
+                return Ok(());
+            };
+            let (nx, ny, d) = (fitter.nx, fitter.ny, fitter.d);
+            let (x0, x1, y0, y1) = fitter.get_scan_bounds(2.5);
+            let (mut best_offset, mut best_grad) = (0.0, 0.0);
+            for k in -6..=6 {
+                let offset = f64::from(k) * 0.4;
+                let (sum_g, count) =
+                    project_gradients_optimized(&img, nx, ny, x0, x1, y0, y1, d + offset);
+                if count > 0 && sum_g > best_grad {
+                    best_grad = sum_g;
+                    best_offset = offset;
+                }
+            }
+            let arena = Bump::new();
+            fitter.scan_initial_d(&arena);
+            proptest::prop_assert_eq!(fitter.d.to_bits(), (d + best_offset).to_bits());
+        }
+    }
 
     proptest::proptest! {
         /// `band_columns` keeps every column the exact per-pixel band test accepts.
