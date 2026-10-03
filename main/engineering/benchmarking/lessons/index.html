@@ -1605,6 +1605,8 @@
       
         
       
+        
+      
     
     
     
@@ -2174,6 +2176,34 @@
     
   
     Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sota_scoreboard_20261003/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SOTA scoreboard checkpoint (2026-10-03)
   
 
     
@@ -3095,6 +3125,32 @@ not <code>high_accuracy</code>.</strong></p>
   fixes for the 2160p recall gap. None moved the needle on detector
   recall — the gap was the SoA truncation bug, not segmentation.
   Documented in <code>render_tag_2160p_20260425.md</code> §2.</li>
+<li><strong>Latency negatives on the decode-first front end (2026-10-03,
+  <a href="../sota_scoreboard_20261003/">scoreboard checkpoint</a>).</strong></li>
+<li><strong>Area-averaged decimation 2</strong> keeps decode and refinement at full
+    resolution. It still loses recall to aruco_nano (Liu4K 66.6 →
+    61.6 %, ICRA forward 73.4 → 44.5 %) and makes corners 30–100 %
+    worse. Decode-first seeds from a decimated contour are too coarse.</li>
+<li><strong>Crack-tracing every border of a byte mask</strong> instead of run-based
+    CCL is no faster (Liu4K 35 vs 33 ms):<ul>
+<li>it is memory-latency bound, at about 13 ns per vertex;</li>
+<li>two thirds of the vertices belong to discarded specks.</li>
+</ul>
+</li>
+<li>
+<p><strong>Exact micro-optimisations that measured slower or under 1 %:</strong></p>
+<ul>
+<li>fusing threshold and RLE;</li>
+<li>carrying the run's root across union-find links (+3 %);</li>
+<li>an unchecked trace;</li>
+<li>hoisting the square root out of the farthest-point search;</li>
+<li>a lane-accumulated ERF Gauss–Newton with a polynomial <code>exp</code>
+  (+21 % AoS, +50 % SoA, because it evaluates samples the scalar
+  loop skips).</li>
+</ul>
+<p>The ERF cost lies outside Gauss–Newton: band-limited scans (#423)
+and the cached d-scan (#424) were the wins.</p>
+</li>
 </ul>
 <h3 id="46-adaptiveppb-gracefully-falls-back-on-distortion">§4.6 AdaptivePpb gracefully falls back on distortion</h3>
 <p>EdLines assumes Euclidean pixel geometry (Huber IRLS line fit + GN),
