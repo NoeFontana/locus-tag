@@ -12,7 +12,7 @@
     missing_docs
 )]
 use locus_core::bench_api::DetectionBatch;
-use locus_core::bench_api::LabelResult;
+use locus_core::bench_api::{ComponentRuns, LabelResult};
 use locus_core::{DetectorConfig, ImageView};
 
 #[test]
@@ -26,6 +26,7 @@ fn test_quad_extraction_soa_empty() {
     let label_result = LabelResult {
         labels: &labels,
         component_stats: Vec::new(),
+        component_runs: ComponentRuns::default(),
     };
 
     let (n, _) = locus_core::bench_api::extract_quads_soa(

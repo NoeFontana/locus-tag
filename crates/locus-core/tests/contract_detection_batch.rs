@@ -235,6 +235,7 @@ fn contract_phase_a_empty_label_result() {
     let label_result = LabelResult {
         labels: &labels,
         component_stats: Vec::new(),
+        component_runs: ComponentRuns::default(),
     };
 
     let (n, _) = extract_quads_soa(&mut batch, &img, &label_result, &config, 1, &img, 6, false);

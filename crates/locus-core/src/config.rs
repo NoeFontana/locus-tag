@@ -641,6 +641,21 @@ impl DetectorConfig {
         matches!(self.quad_extraction_policy, QuadExtractionPolicy::Static)
             && self.quad_extraction_mode == QuadExtractionMode::EdLines
     }
+
+    /// Whether any candidate can be routed to `EdLines` extraction, the one consumer of the
+    /// full-frame label image.
+    #[must_use]
+    pub fn may_use_edlines(&self) -> bool {
+        match self.quad_extraction_policy {
+            QuadExtractionPolicy::Static => {
+                self.quad_extraction_mode == QuadExtractionMode::EdLines
+            },
+            QuadExtractionPolicy::AdaptivePpb(cfg) => {
+                cfg.low_extraction == QuadExtractionMode::EdLines
+                    || cfg.high_extraction == QuadExtractionMode::EdLines
+            },
+        }
+    }
 }
 
 /// Builder for [`DetectorConfig`].

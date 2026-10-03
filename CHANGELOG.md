@@ -187,6 +187,16 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     unchanged;
   - ICRA forward recall 73.74 → 73.69 % (checkerboard grid 70.12 → 70.03 %);
   - the main render-tag, board and distortion snapshots are byte-identical.
+- **Tracing without the full-frame label image (output byte-identical).**
+  - Segmentation returns each surviving component's runs (`LabelResult::component_runs`).
+  - Boundary tracing paints a component's runs into a one-pixel-padded mask of its bounding
+    box and runs the same Moore walk, so it is property-tested point-for-point equal to tracing
+    the label image.
+  - The detector builds the 33 MB (at 4K) `u32` label image only when an EdLines route is
+    possible (`DetectorConfig::may_use_edlines`).
+
+  1 thread: segmentation −11 to −20 %, quad extraction up to −19 %; pipeline −11 % on Liu4K
+  and −10 % on render-tag 4K.
 - **Contour pre-rejects before vertex selection.** Every traced outline used to pay the
   O(n log n) dominant-vertex selection before the area and compactness tests. Two tests now run
   on the raw contour first:

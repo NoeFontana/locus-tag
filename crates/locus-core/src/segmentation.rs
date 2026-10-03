@@ -167,10 +167,33 @@ pub fn compute_moment_shape(stats: &ComponentStats) -> Option<(f64, f64)> {
 
 /// Result of connected component labeling.
 pub struct LabelResult<'a> {
-    /// Flat array of pixel labels (row-major).
+    /// Flat array of pixel labels (row-major). Empty when the labeller was asked not to build
+    /// it; [`Self::component_runs`] then describes the components.
     pub labels: &'a [u32],
     /// Statistics for each component (indexed by label - 1).
     pub component_stats: Vec<ComponentStats>,
+    /// Each component's runs, when the labeller provides them.
+    pub component_runs: ComponentRuns<'a>,
+}
+
+/// The runs of every labelled component, grouped by label in scan order: component `l` owns
+/// `runs[offsets[l - 1]..offsets[l]]`.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ComponentRuns<'a> {
+    /// Runs grouped by component label.
+    pub runs: &'a [crate::simd_ccl_fusion::RleSegment],
+    /// Prefix offsets into `runs`; `len() == components + 1`, or empty when not built.
+    pub offsets: &'a [u32],
+}
+
+impl<'a> ComponentRuns<'a> {
+    /// The runs of component `label` (1-based), or `None` when not built or out of range.
+    #[must_use]
+    pub fn of(&self, label: u32) -> Option<&'a [crate::simd_ccl_fusion::RleSegment]> {
+        let l = label as usize;
+        (l >= 1 && l < self.offsets.len())
+            .then(|| &self.runs[self.offsets[l - 1] as usize..self.offsets[l] as usize])
+    }
 }
 
 /// A detected run of background pixels in a row.
@@ -240,6 +263,7 @@ pub fn label_components_with_stats<'a>(
         return LabelResult {
             labels: arena.alloc_slice_fill_copy(width * height, 0u32),
             component_stats: Vec::new(),
+            component_runs: ComponentRuns::default(),
         };
     }
 
@@ -344,6 +368,7 @@ pub fn label_components_with_stats<'a>(
     LabelResult {
         labels,
         component_stats,
+        component_runs: ComponentRuns::default(),
     }
 }
 #[cfg(test)]
