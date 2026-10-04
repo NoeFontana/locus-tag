@@ -1387,8 +1387,8 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
 /// This phase executes SIMD bilinear interpolation and Hamming error correction.
 /// If a candidate fails decoding, its `status_mask` is flipped to `FailedDecode`.
 ///
-/// Assumes a rectified camera. The detector calls [`decode_batch_soa_generic`] directly so it can
-/// say otherwise; this entry point serves the distortion dispatch and the bench API.
+/// Assumes a rectified camera. The detector calls the crate-internal generic decoder directly so
+/// it can say otherwise; this entry point serves the distortion dispatch and the bench API.
 #[cfg_attr(
     not(any(feature = "non_rectified", feature = "bench-internals")),
     allow(dead_code)
