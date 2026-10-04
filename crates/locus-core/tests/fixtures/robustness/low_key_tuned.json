@@ -20,12 +20,14 @@
     "upscale_factor": 1,
     "max_elongation": 20.0,
     "min_density": 0.15,
-    "extraction_mode": "ContourRdp"
+    "extraction_mode": "ContourRdp",
+    "refine_before_decode": false
   },
   "decoder": {
     "min_contrast": 20.0,
     "refinement_mode": "Erf",
-    "gwlf_transversal_alpha": 0.01
+    "gwlf_transversal_alpha": 0.01,
+    "corner_subpix": true
   },
   "pose": {
     "huber_delta_px": 1.5,

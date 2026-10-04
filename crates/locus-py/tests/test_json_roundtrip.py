@@ -71,4 +71,7 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     # ``edlines_imbalance_gate`` defaults to ``"Disabled"`` and may be
     # omitted by profiles that don't override it.
     on_disk.get("quad", {}).setdefault("edlines_imbalance_gate", "Disabled")
+    # ``max_border_error_rate`` is absent on disk for profiles that use each family's
+    # default ring budget; the model always emits its ``None`` default.
+    on_disk.get("decoder", {}).setdefault("max_border_error_rate", None)
     assert on_disk == loaded

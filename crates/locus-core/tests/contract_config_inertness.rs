@@ -352,8 +352,9 @@ const FUNNEL_PROBE: SceneSpec = SceneSpec {
 
 /// A frame built for the decoder's border-ring evidence
 /// (`decoder_max_border_error_rate`): a valid payload whose one-cell black border has three
-/// non-adjacent cells painted white (3 of 28 ring cells). Clean frames have a fully dark
-/// ring, so the budget is unobservable on them however it is set.
+/// non-adjacent cells painted white (3 of 28 ring cells, over the family default of one).
+/// Clean frames have a fully dark ring, so the budget is unobservable on them however it is
+/// set.
 const BORDER_PROBE: SceneSpec = SceneSpec {
     family: TagFamily::AprilTag36h11,
     id: 29,
@@ -673,7 +674,7 @@ fn cases() -> Vec<FieldCase> {
             field: "decoder_max_border_error_rate",
             base: noop,
             // Observable only on `BORDER_PROBE`, whose ring has 3 bright cells.
-            mutate: |c| c.decoder_max_border_error_rate = 1.0,
+            mutate: |c| c.decoder_max_border_error_rate = Some(1.0),
             inert_reason: None,
         },
         FieldCase {

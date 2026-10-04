@@ -64,11 +64,18 @@
           "type": "number"
         },
         "max_border_error_rate": {
-          "default": 0.0,
-          "maximum": 1.0,
-          "minimum": 0.0,
-          "title": "Max Border Error Rate",
-          "type": "number"
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Border Error Rate"
         },
         "max_hamming_error": {
           "anyOf": [

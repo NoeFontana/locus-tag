@@ -5,7 +5,7 @@ expression: report
 summary:
   dataset_size: 100
   mean_recall: 1
-  mean_precision: 0.99
+  mean_precision: 0.995
   mean_rmse: 0.0551
   mean_reprojection_rmse: 0.0497
   p50_translation_error: 0.0001
@@ -17,10 +17,6 @@ summary:
   mean_hamming: 0
   mean_total_ms: "[DURATION]"
   worst_offenders:
-    - filename: scene_0074_cam_0000.png
-      missed: 0
-      extra: 1
-      rmse: 0.0532
     - filename: scene_0029_cam_0000.png
       missed: 0
       extra: 1

@@ -116,8 +116,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `LocalMean` thresholds each pixel against the mean of a `(2·local_mean_radius + 1)²` window
   minus an offset, from a sliding column-sum accumulator (≈ 0.4 MB scratch at 4K, independent
   of strip size and worker count).
-- **Decode-first ordering (`quad.refine_before_decode = false`, opt-in; L1–L3 of #409).**
-  Refine-first ordering (the default) sub-pixel refines every candidate quad before decoding.
+- **Decode-first ordering (`quad.refine_before_decode = false`; the default since the profile
+  switch under Changed; L1–L3 of #409).** Refine-first ordering (the historical order, kept by
+  `high_accuracy`) sub-pixel refines every candidate quad before decoding.
   Real images produce hundreds of candidates per marker, so most of the quad stage refines
   texture that is then rejected. Decode-first decodes from the contour corners and refines
   only the candidates that decode, or are near misses within the recovery window (see Changed):
@@ -151,12 +152,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Bit-bimodality evidence is the planned fix. The `standard` latency figures come from an
   earlier serial run in the same session.
 
-- **Border-ring marker evidence (`decoder.max_border_error_rate`, opt-in).** A decoded
+- **Border-ring marker evidence (`decoder.max_border_error_rate`; on by default since the
+  profile switch under Changed).** A decoded
   candidate can be required to show the one-cell black border around its payload: the
   `4·(d + 1)` ring cells are sampled through the candidate homography, and a cell is an error
   when it reaches 90 % of the way from the payload's dark to its bright class mean (a midpoint
   cut is fooled by blur on small markers). The rate is the error budget (`0` = every ring cell
-  dark; default `1.0` = off). Evidence is checked on the *reported* quad, so an outer
+  dark; `1.0` = off). Evidence is checked on the *reported* quad, so an outer
   quiet-zone contour that decodes only through the 0.9 scale retry is rejected; it applies to
   the pinhole and the distortion-aware decode paths, and evidence that cannot be evaluated
   (samples outside the image, a single-class payload) never rejects. Measured with
@@ -246,6 +248,22 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **Decode-first accepted matches that failed verification.** A seed match was recorded before
+  its refined quad was verified, and the fallback after the scale loop accepted it with its
+  contour corners when verification failed. Such matches are now rejected, as refine-first
+  rejects them.
+  - raw_pipeline rotation p99 2.57° → 0.47°; its corner mean RMSE 0.30 → 0.18 px.
+  - tag16h5 precision 99.0 → 99.5 % (snapshot); 99.0 → 100 % on the full scoreboard, which now
+    wins 54 of 73 cells (was 52).
+  - Cost: ICRA forward recall 73.8 → 72.1 %, checkerboard 71.9 → 68.9 %. Those were true markers,
+    but with unverified, unrefined corners.
+- **Decode-first with upscaling** refined the corners on the upscaled grid in the quad stage and
+  again on the input image in the decoder. Decode-first now applies only when the refinement
+  grid is the input image (`upscale_factor = 1`), through one predicate shared by both stages.
+- **Robustness tuned fixtures** did not set `decoder.corner_subpix` or `quad.refine_before_decode`.
+  They therefore ran without the sub-pixel corner stage that every `standard` run has. Both are
+  now pinned.
+
 - **Multi-family decoding picked the last matching family, not the best.** Within a scale, a
   later decoder matching within its budget replaced an earlier one with a lower Hamming
   distance (`best_code.is_none() || …` was always true). The distortion-aware path accepted on
@@ -270,14 +288,26 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Breaking (config): `decoder.max_border_error_rate` is optional, with a per-family default.**
+  - `None` (the default) gives each family the codeword's own error density,
+    `max_hamming_error / bit_count`: one ring cell of 28 for tag36h11 at h = 2, none for tag16h5
+    at h = 0. Previously every family had a budget of 0, so one glare- or occlusion-hit ring cell
+    rejected a perfect strong-code decode.
+  - `high_accuracy` keeps `1.0` (check off).
+  - Decode-first seeds (unrefined contour corners) pass the ring with the recovery gate's 20 %
+    tolerance; the configured budget applies on the refined quad that verifies the match.
+  - Board tag coverage: AprilGrid 96.8 → 97.2 %, ChArUco 99.5 → 99.7 %.
+
 - **Breaking (default output): `standard`, `grid` and `DetectorConfig::default()` decode first
-  and require a dark border ring** (`quad.refine_before_decode = false`,
-  `decoder.max_border_error_rate = 0.0`). `high_accuracy` keeps both historical settings.
+  and require a dark border ring** (`quad.refine_before_decode = false`; the ring budget is now
+  per family, see below). `high_accuracy` keeps both historical settings.
   - **Decode-first:** decoded markers get the same corners as before, and only candidates that
     decode are refined.
   - **Ring check:** the marker evidence that offsets decode-first's extra decode attempts on
     small dictionaries.
-  - **1-thread latency of `standard`** (ms):
+  - **1-thread latency of `standard`** (ms; `cargo xtask sota`, `--release`, serial
+    `--jobs 1 --threads 1`, Liu4K stride 8, others stride 2; AMD EPYC-Milan KVM, 8 vCPU, AVX2,
+    Linux 6.8.0, rustc 1.92.0):
 
     | Benchmark | Before | After |
     | :-- | --: | --: |
@@ -292,7 +322,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     - board rotation p99: AprilGrid 0.20° → 0.15°, ChArUco 0.26° → 0.23°.
   - **Minor regressions:**
     - distortion-board recall −0.4 pp (Brown–Conrady) and −0.1 pp (Kannala–Brandt);
-    - one extra marginal raw_pipeline detection whose pose sets that set's rotation tail.
+    - one extra raw_pipeline detection with a 5.5 px corner, whose pose set that set's rotation
+      tail. It was a decode-first match that failed verification and was accepted anyway; fixed
+      (see Fixed).
 - **Board pose models the marker-corner photometric inset.**
   - **Why:** gradient corner detectors place blurred marker edges where the tone curve puts
     them. On sRGB-encoded images every marker corner of a frame reads about 0.6–0.8 px inside.

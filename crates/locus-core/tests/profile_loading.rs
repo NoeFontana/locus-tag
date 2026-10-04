@@ -62,7 +62,7 @@ fn standard_profile_matches_former_builder() {
     // Standard-specific overrides.
     assert_eq!(cfg.decoder_corner_subpix, true);
     assert_eq!(cfg.quad_refine_before_decode, false);
-    assert_eq!(cfg.decoder_max_border_error_rate, 0.0);
+    assert_eq!(cfg.decoder_max_border_error_rate, None);
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, true);
     assert_eq!(cfg.quad_min_area, 36);
@@ -89,7 +89,7 @@ fn grid_profile_matches_former_builder() {
     let cfg = DetectorConfig::from_profile("grid");
     assert_eq!(cfg.decoder_corner_subpix, true);
     assert_eq!(cfg.quad_refine_before_decode, false);
-    assert_eq!(cfg.decoder_max_border_error_rate, 0.0);
+    assert_eq!(cfg.decoder_max_border_error_rate, None);
 
     // Grid-specific overrides.
     assert_eq!(cfg.threshold_tile_size, 8);
@@ -121,7 +121,7 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     // corner estimator replaces them.
     assert_eq!(cfg.decoder_corner_subpix, false);
     assert_eq!(cfg.quad_refine_before_decode, true);
-    assert_eq!(cfg.decoder_max_border_error_rate, 1.0);
+    assert_eq!(cfg.decoder_max_border_error_rate, Some(1.0));
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
     assert_eq!(cfg.quad_min_area, 400);
@@ -213,7 +213,7 @@ fn to_profile_json_round_trips_every_field() {
         edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Enabled,
         // Decoder
         decoder_min_contrast: 12.5,
-        decoder_max_border_error_rate: 0.25,
+        decoder_max_border_error_rate: Some(0.25),
         decoder_corner_subpix: true,
         refinement_mode: CornerRefinementMode::Erf,
         max_hamming_error: Some(2),

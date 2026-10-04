@@ -302,15 +302,16 @@ pub struct DetectorConfig {
     /// can improve recall on small/blurry tags.
     pub decoder_min_contrast: f64,
     /// Largest fraction of the one-cell black border ring that may read bright for a decoded
-    /// candidate to be accepted (default: 0.0, every ring cell must read dark; `high_accuracy`
-    /// disables the check with 1.0).
+    /// candidate to be accepted. `None` (the default) gives each family the codeword's own
+    /// error density, `max_hamming_error / bit_count`: one ring cell of 28 for tag36h11 at
+    /// h = 2, none for tag16h5 at h = 0. `Some(1.0)` disables the check (`high_accuracy`).
     ///
     /// The ring (`4·(d + 1)` cells around a `d×d` payload) is sampled through the candidate
-    /// homography; a cell is an error when brighter than the midpoint of the payload's dark
-    /// and bright class means. It is marker evidence the codeword does not carry, which matters
-    /// for small dictionaries (tag16h5) where textured candidates decode by chance. Partial
-    /// occlusion of the border consumes the budget.
-    pub decoder_max_border_error_rate: f32,
+    /// homography; a cell is an error when it reads nearly as bright as the payload's bright
+    /// class. It is marker evidence the codeword does not carry, which matters for small
+    /// dictionaries (tag16h5) where textured candidates decode by chance; for a strong code a
+    /// zero budget would only reject real markers with one glare- or occlusion-hit ring cell.
+    pub decoder_max_border_error_rate: Option<f32>,
     /// Sub-pixel corner stage of every decoded marker (default: on).
     ///
     /// Runs after the configured [`CornerRefinementMode`] on candidates that decoded, and the
@@ -486,9 +487,9 @@ pub struct DetectorConfig {
     /// pass, and keeps the match only if the refined quad decodes the same id within budget
     /// (and passes `decoder.max_border_error_rate`). A marker that decodes under both orders
     /// gets the same corners. Real images produce hundreds of candidates per marker, so this
-    /// removes most of the quad stage's refinement work. Applies to the ERF route on
-    /// undistorted cameras; other refinement modes and the distortion-aware path always refine
-    /// first.
+    /// removes most of the quad stage's refinement work. A match that fails that verification
+    /// is rejected. Applies to the ERF route on undistorted cameras without upscaling; other
+    /// refinement modes, upscaled grids and the distortion-aware path always refine first.
     pub quad_refine_before_decode: bool,
 }
 
@@ -527,7 +528,7 @@ impl Default for DetectorConfig {
             decimation: 1,
             nthreads: 0,
             decoder_min_contrast: 20.0,
-            decoder_max_border_error_rate: 0.0,
+            decoder_max_border_error_rate: None,
             decoder_corner_subpix: true,
             refinement_mode: CornerRefinementMode::Erf,
             max_hamming_error: None,
@@ -576,10 +577,10 @@ impl DetectorConfig {
                 self.threshold_local_mean_radius,
             ));
         }
-        if !(0.0..=1.0).contains(&self.decoder_max_border_error_rate) {
-            return Err(ConfigError::InvalidBorderErrorRate(
-                self.decoder_max_border_error_rate,
-            ));
+        if let Some(rate) = self.decoder_max_border_error_rate
+            && !(0.0..=1.0).contains(&rate)
+        {
+            return Err(ConfigError::InvalidBorderErrorRate(rate));
         }
         if !(self.threshold_noise_k.is_finite() && self.threshold_noise_k >= 0.0) {
             return Err(ConfigError::InvalidNoiseK(self.threshold_noise_k));
@@ -646,6 +647,17 @@ impl DetectorConfig {
             }
         }
         Ok(())
+    }
+
+    /// Whether decode-first ordering applies: candidates reach the decoder with their contour
+    /// corners and only those that decode (or nearly do) are refined. It needs the decoder's
+    /// ERF refinement, and the refinement grid must be the input image: an upscaled grid would
+    /// be refined at one resolution by the quad stage and another by the decoder.
+    #[must_use]
+    pub(crate) fn decode_first(&self) -> bool {
+        !self.quad_refine_before_decode
+            && self.refinement_mode == CornerRefinementMode::Erf
+            && self.upscale_factor <= 1
     }
 
     /// Returns `true` if the **static** extraction mode selects `EdLines`.
@@ -862,7 +874,7 @@ impl DetectorConfigBuilder {
             decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
             decoder_max_border_error_rate: self
                 .decoder_max_border_error_rate
-                .unwrap_or(d.decoder_max_border_error_rate),
+                .or(d.decoder_max_border_error_rate),
             decoder_corner_subpix: self
                 .decoder_corner_subpix
                 .unwrap_or(d.decoder_corner_subpix),
@@ -1331,14 +1343,10 @@ mod profile_json {
         #[serde(default)]
         pub max_hamming_error: Option<u32>,
         pub gwlf_transversal_alpha: f64,
-        #[serde(default = "default_max_border_error_rate")]
-        pub max_border_error_rate: f32,
+        #[serde(default)]
+        pub max_border_error_rate: Option<f32>,
         #[serde(default)]
         pub corner_subpix: bool,
-    }
-
-    fn default_max_border_error_rate() -> f32 {
-        DetectorConfig::default().decoder_max_border_error_rate
     }
 
     impl DecoderJson {
