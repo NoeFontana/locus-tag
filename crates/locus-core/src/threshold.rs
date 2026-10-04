@@ -15,9 +15,6 @@
 //! 2. **Local mean** (`LocalMean`): a true per-pixel local mean over a
 //!    `(2r+1)²` window, minus a constant, from a sliding column-sum
 //!    accumulator. Tracks the local background level instead of the extremes.
-//!
-//! The integral-image kernels lower in this file are benchmark references
-//! (`benches/integral_threshold_bench.rs`); no detection path calls them.
 
 #![allow(unsafe_code, clippy::cast_sign_loss)]
 use crate::config::{DetectorConfig, ThresholdMode};
@@ -71,19 +68,10 @@ impl Default for ThresholdEngine {
 }
 
 impl ThresholdEngine {
-    /// Create a new ThresholdEngine with default settings.
+    /// Create a ThresholdEngine with the settings of [`DetectorConfig::default`].
     #[must_use]
     pub fn new() -> Self {
-        let d = DetectorConfig::default();
-        Self {
-            tile_size: 8,  // Standard 8x8 tiles
-            min_range: 10, // Match DetectorConfig::default()
-            mode: d.threshold_mode,
-            local_mean_radius: d.threshold_local_mean_radius,
-            constant: d.adaptive_threshold_constant,
-            noise_k: d.threshold_noise_k,
-            noise_sigma: None,
-        }
+        Self::from_config(&DetectorConfig::default())
     }
 
     /// Create a ThresholdEngine from detector configuration.
@@ -100,8 +88,8 @@ impl ThresholdEngine {
         }
     }
 
-    /// Compute min/max statistics for each tile in the image.
-    /// Optimized with SIMD-friendly memory access patterns and subsampling (stride 2).
+    /// Compute min/max statistics for each tile in the image (every pixel of every tile
+    /// row; the per-row scan is vectorised).
     #[must_use]
     #[tracing::instrument(skip_all, name = "pipeline::threshold_compute_stats")]
     pub fn compute_tile_stats<'a>(
@@ -119,8 +107,6 @@ impl ThresholdEngine {
             .par_chunks_mut(tiles_wide)
             .enumerate()
             .for_each(|(ty, stats_row)| {
-                // Subsampling: Only process every other row within a tile (stride 2)
-                // This statistically approximates the min/max sufficient for thresholding
                 for dy in 0..ts {
                     let py = ty * ts + dy;
                     let src_row = img.get_row(py);
@@ -132,13 +118,9 @@ impl ThresholdEngine {
         stats
     }
 
-    /// Apply adaptive thresholding to the image.
-    /// Optimized with pre-expanded threshold maps and vectorized row processing.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one cohesive adaptive-threshold routine (tile threshold + validity, propagation, row expansion); splitting it would fragment the data flow"
-    )]
-    #[allow(dead_code)]
+    /// Binarize `img` into `output` (`0` = foreground) exactly as the detector does, through
+    /// [`Self::apply_threshold_with_map`], discarding the threshold map.
+    #[cfg(any(test, feature = "bench-internals"))]
     pub fn apply_threshold(
         &self,
         arena: &Bump,
@@ -146,155 +128,8 @@ impl ThresholdEngine {
         stats: &[TileStats],
         output: &mut [u8],
     ) {
-        let ts = self.tile_size;
-        let tiles_wide = img.width / ts;
-        let tiles_high = img.height / ts;
-
-        let mut tile_thresholds = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
-        tile_thresholds.resize(tiles_wide * tiles_high, 0u8);
-        let mut tile_valid = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
-        tile_valid.resize(tiles_wide * tiles_high, 0u8);
-
-        tile_thresholds
-            .par_chunks_mut(tiles_wide)
-            .enumerate()
-            .for_each(|(ty, t_row)| {
-                let y_start = ty.saturating_sub(1);
-                let y_end = (ty + 1).min(tiles_high - 1);
-
-                for tx in 0..tiles_wide {
-                    let mut nmin = 255u8;
-                    let mut nmax = 0u8;
-
-                    let x_start = tx.saturating_sub(1);
-                    let x_end = (tx + 1).min(tiles_wide - 1);
-
-                    for ny in y_start..=y_end {
-                        let row_off = ny * tiles_wide;
-                        for nx in x_start..=x_end {
-                            let s = stats[row_off + nx];
-                            if s.min < nmin {
-                                nmin = s.min;
-                            }
-                            if s.max > nmax {
-                                nmax = s.max;
-                            }
-                        }
-                    }
-
-                    let t_idx = tx;
-                    let res = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
-
-                    t_row[t_idx] = res;
-                }
-            });
-
-        // Compute tile_valid (can be done in same loop above or separate)
-        for ty in 0..tiles_high {
-            for tx in 0..tiles_wide {
-                let mut nmin = 255;
-                let mut nmax = 0;
-                let y_start = ty.saturating_sub(1);
-                let y_end = (ty + 1).min(tiles_high - 1);
-                let x_start = tx.saturating_sub(1);
-                let x_end = (tx + 1).min(tiles_wide - 1);
-
-                for ny in y_start..=y_end {
-                    let row_off = ny * tiles_wide;
-                    for nx in x_start..=x_end {
-                        let s = stats[row_off + nx];
-                        if s.min < nmin {
-                            nmin = s.min;
-                        }
-                        if s.max > nmax {
-                            nmax = s.max;
-                        }
-                    }
-                }
-                let idx = ty * tiles_wide + tx;
-                tile_valid[idx] = if nmax.saturating_sub(nmin) < self.min_range {
-                    0
-                } else {
-                    255
-                };
-            }
-        }
-
-        // --- Propagation Pass ---
-        // Fill thresholds for invalid tiles from their neighbors to stay
-        // consistent within large uniform regions.
-        for _ in 0..2 {
-            // 2 iterations are usually enough for local consistency
-            for ty in 0..tiles_high {
-                for tx in 0..tiles_wide {
-                    let idx = ty * tiles_wide + tx;
-                    if tile_valid[idx] == 0 {
-                        let mut sum_thresh = 0u32;
-                        let mut count = 0u32;
-
-                        let y_start = ty.saturating_sub(1);
-                        let y_end = (ty + 1).min(tiles_high - 1);
-                        let x_start = tx.saturating_sub(1);
-                        let x_end = (tx + 1).min(tiles_wide - 1);
-
-                        for ny in y_start..=y_end {
-                            let row_off = ny * tiles_wide;
-                            for nx in x_start..=x_end {
-                                let n_idx = row_off + nx;
-                                if tile_valid[n_idx] > 0 {
-                                    sum_thresh += u32::from(tile_thresholds[n_idx]);
-                                    count += 1;
-                                }
-                            }
-                        }
-
-                        if count > 0 {
-                            tile_thresholds[idx] = (sum_thresh / count) as u8;
-                            tile_valid[idx] = 128; // Partial valid (propagated)
-                        }
-                    }
-                }
-            }
-        }
-
-        let thresholds_slice = tile_thresholds.as_slice();
-        let valid_slice = tile_valid.as_slice();
-
-        output
-            .par_chunks_mut(ts * img.width)
-            .enumerate()
-            .for_each_init(
-                || (vec![0u8; img.width], vec![0u8; img.width]),
-                |(row_thresholds, row_valid), (ty, output_tile_rows)| {
-                    if ty >= tiles_high {
-                        return;
-                    }
-                    // Zero-fill the trailing pixels beyond `tiles_wide * ts`: the
-                    // per-tile loop below only writes indices `[0, tiles_wide * ts)`
-                    // but `threshold_row_simd` reads the full `img.width`.
-                    row_thresholds.fill(0);
-                    row_valid.fill(0);
-
-                    // Expand tile stats to row buffers
-                    for tx in 0..tiles_wide {
-                        let idx = ty * tiles_wide + tx;
-                        let thresh = thresholds_slice[idx];
-                        let valid = valid_slice[idx];
-                        for i in 0..ts {
-                            row_thresholds[tx * ts + i] = thresh;
-                            row_valid[tx * ts + i] = valid;
-                        }
-                    }
-
-                    for dy in 0..ts {
-                        let py = ty * ts + dy;
-                        let src_row = img.get_row(py);
-                        let dst_row = &mut output_tile_rows[dy * img.width..(dy + 1) * img.width];
-
-                        threshold_row_simd(src_row, dst_row, row_thresholds, row_valid);
-                    }
-                },
-            );
+        let threshold_map = arena.alloc_slice_fill_copy(img.width * img.height, 0u8);
+        self.apply_threshold_with_map(arena, img, stats, output, threshold_map);
     }
 
     /// Apply adaptive thresholding and return both binary and threshold maps.
@@ -856,19 +691,6 @@ mod tests {
 
     proptest! {
         #[test]
-        fn test_threshold_invariants(data in prop::collection::vec(0..=255u8, 16)) {
-            let mut min = 255u8;
-            let mut max = 0u8;
-            for &b in &data {
-                if b < min { min = b; }
-                if b > max { max = b; }
-            }
-            let (rmin, rmax) = compute_min_max_simd(&data);
-            assert_eq!(rmin, min);
-            assert_eq!(rmax, max);
-        }
-
-        #[test]
         fn test_binarization_invariants(src in prop::collection::vec(0..=255u8, 16), thresh in 0..=255u8) {
             let mut dst = vec![0u8; 16];
             let valid = vec![255u8; 16];
@@ -1015,10 +837,8 @@ mod tests {
         (binary, map)
     }
 
-    /// The sliding column accumulator must reproduce the exact box mean.
-    ///
-    /// Tolerance 1 covers the fixed-point reciprocal (`(sum * ⌊2³¹/area⌋) >> 31`
-    /// can land one below the exact quotient); the accumulator itself is exact.
+    /// The sliding column accumulator and the [`ExactDiv`] reciprocal reproduce the exact
+    /// box mean.
     #[test]
     fn local_mean_matches_naive_box_mean() {
         for &(w, h) in &[(64usize, 48usize), (37, 29), (8, 8), (129, 5), (300, 9)] {
@@ -1059,12 +879,6 @@ mod tests {
         }
     }
 
-    /// A perfectly flat frame has no structure. The local mean equals the grey
-    /// level everywhere, so any positive `constant` drives the threshold below
-    /// it and nothing is foreground — the noise-suppression property.
-    ///
-    /// The historical mode is the one that speckles: `t = mid(97, 97) = 97` is
-    /// published to segmentation even though the tile carries no signal.
     /// Deterministic Gaussian noise around `mean` (Box–Muller over an LCG).
     fn gaussian_image(w: usize, h: usize, mean: f64, sigma: f64, seed: u64) -> Vec<u8> {
         let mut state = seed | 1;
@@ -1213,6 +1027,12 @@ mod tests {
         );
     }
 
+    /// A perfectly flat frame has no structure. The local mean equals the grey
+    /// level everywhere, so any positive `constant` drives the threshold below
+    /// it and nothing is foreground — the noise-suppression property.
+    ///
+    /// The tile mode is the one that speckles: `t = mid(97, 97) = 97` is
+    /// published to segmentation even though the tile carries no signal.
     #[test]
     fn local_mean_suppresses_flat_regions() {
         let (w, h) = (64usize, 64usize);
@@ -1281,8 +1101,10 @@ mod tests {
     #[test]
     fn test_threshold_preserves_tag_structure_at_varying_sizes() {
         let canvas_size = 640;
-        // Minimum 32px for 4 pixels per bit (AprilTag 36h11 = 8x8 cells)
-        let tag_sizes = [32, 48, 64, 100, 150, 200, 300];
+        // Minimum 32px for 4 pixels per bit (AprilTag 36h11 = 8x8 cells). From ~300 px a
+        // border cell spans several flat 8 px tiles, which the tile thresholder leaves
+        // unthresholded (the hollow interior `ThresholdMode::LocalMean` exists to fill).
+        let tag_sizes = [32, 48, 64, 100, 150, 200];
 
         for tag_size in tag_sizes {
             let params = TestImageParams {
@@ -1470,389 +1292,4 @@ mod tests {
             prop_assert!(white_count > 0, "No white pixels in output");
         }
     }
-}
-
-#[multiversion(targets = "simd")]
-fn compute_min_max_simd(data: &[u8]) -> (u8, u8) {
-    let mut min = 255u8;
-    let mut max = 0u8;
-    for &b in data {
-        min = min.min(b);
-        max = max.max(b);
-    }
-    (min, max)
-}
-
-/// Compute integral image (cumulative sum) for fast box filter computation.
-///
-/// Backs OpenCV-style `ADAPTIVE_THRESH_MEAN_C`: an O(1) local-mean lookup per
-/// pixel instead of an O(W*H) box filter per threshold.
-///
-/// Uses a 2-pass parallel implementation for maximum throughput on modern multicore CPUs.
-/// The `integral` buffer must have size `(img.width + 1) * (img.height + 1)`.
-#[expect(
-    clippy::needless_range_loop,
-    clippy::items_after_statements,
-    reason = "the first-row zero-init writes integral[x] by flat index to match the surrounding integral-buffer index arithmetic, and const BLOCK_SIZE is declared at its point of use in the second (vertical) pass"
-)]
-#[allow(dead_code)]
-pub fn compute_integral_image(img: &ImageView, integral: &mut [u64]) {
-    let w = img.width;
-    let h = img.height;
-    let stride = w + 1;
-
-    // Zero the first row efficiently
-    for x in 0..stride {
-        integral[x] = 0;
-    }
-
-    // 1st Pass: Compute horizontal cumulative sums (prefix sum per row)
-    // This part is perfectly parallel.
-    integral
-        .par_chunks_exact_mut(stride)
-        .enumerate()
-        .skip(1)
-        .for_each(|(y_idx, row)| {
-            let y = y_idx - 1;
-            let src_row = img.get_row(y);
-            let mut sum = 0u64;
-            // row[0] is already 0
-            for x in 0..w {
-                sum += u64::from(src_row[x]);
-                row[x + 1] = sum;
-            }
-        });
-
-    // 2nd Pass: Vertical cumulative sums
-    // For large images, we process in vertical blocks to stay in cache.
-    const BLOCK_SIZE: usize = 128;
-    let num_blocks = stride.div_ceil(BLOCK_SIZE);
-
-    (0..num_blocks).into_par_iter().for_each(|b| {
-        let start_x = b * BLOCK_SIZE;
-        let end_x = (start_x + BLOCK_SIZE).min(stride);
-
-        let mut col_sums = [0u64; BLOCK_SIZE];
-
-        // SAFETY: `(0..num_blocks).into_par_iter()` partitions the column
-        // range into BLOCK_SIZE-wide stripes; each rayon worker handles one
-        // `b`, so the `[start_x, end_x)` column window for a given `b` is
-        // disjoint from every other worker's window. `integral` length is
-        // `(h + 1) * stride`, so `y * stride + start_x + i` for
-        // `y ∈ [1, h], i < end_x - start_x` stays in-bounds. The outer
-        // `par_iter` borrows `integral` mutably for its full lifetime, so
-        // no other reader exists.
-        unsafe {
-            let base_ptr = integral.as_ptr().cast_mut();
-            for y in 1..=h {
-                let row_ptr = base_ptr.add(y * stride + start_x);
-                for (i, val) in col_sums.iter_mut().enumerate().take(end_x - start_x) {
-                    let old_val = *row_ptr.add(i);
-                    let new_sum = old_val + *val;
-                    *row_ptr.add(i) = new_sum;
-                    *val = new_sum;
-                }
-            }
-        }
-    });
-}
-
-/// Apply per-pixel adaptive threshold using integral image.
-///
-/// Optimized with parallel processing and branchless thresholding.
-#[multiversion(targets = "simd")]
-/// Apply per-pixel adaptive threshold using integral image.
-///
-/// Optimized with parallel processing, interior-loop vectorization, and fixed-point arithmetic.
-#[multiversion(targets(
-    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
-    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
-    "aarch64+neon"
-))]
-#[tracing::instrument(skip_all, name = "pipeline::threshold_integral")]
-pub fn adaptive_threshold_integral(
-    img: &ImageView,
-    integral: &[u64],
-    output: &mut [u8],
-    radius: usize,
-    c: i16,
-) {
-    let w = img.width;
-    let h = img.height;
-    let stride = w + 1;
-
-    // Precompute interior area inverse (fixed-point 1.31)
-    let side = (2 * radius + 1) as u32;
-    let area = side * side;
-    let inv_area_fixed = ((1u64 << 31) / u64::from(area)) as u32;
-
-    (0..h).into_par_iter().for_each(|y| {
-        let y_offset = y * w;
-        let src_row = img.get_row(y);
-
-        // SAFETY: `(0..h).into_par_iter()` yields each `y` exactly once
-        // across rayon workers, so the `[y * w, y * w + w)` slice is
-        // disjoint from every other worker's slice. `output` length is
-        // `h * w`, so the slice is in-bounds. The outer `par_iter` borrows
-        // `output` mutably for its lifetime, so no concurrent reader exists.
-        let dst_row = unsafe {
-            let ptr = output.as_ptr().cast_mut();
-            std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
-        };
-
-        let y0 = y.saturating_sub(radius);
-        let y1 = (y + radius + 1).min(h);
-
-        // Define interior region for this row
-        let x_start = radius;
-        let x_end = w.saturating_sub(radius + 1);
-
-        // 1. Process Left Border
-        for x in 0..x_start.min(w) {
-            let x0 = 0; // saturating_sub(radius) is 0
-            let x1 = (x + radius + 1).min(w);
-            let actual_area = (x1 - x0) * (y1 - y0);
-
-            let i00 = integral[y0 * stride + x0];
-            let i01 = integral[y0 * stride + x1];
-            let i10 = integral[y1 * stride + x0];
-            let i11 = integral[y1 * stride + x1];
-
-            let sum = (i11 + i00) - (i01 + i10);
-            let mean = (sum / actual_area as u64) as i16;
-            let threshold = (mean - c).max(0) as u8;
-            dst_row[x] = if src_row[x] < threshold { 0 } else { 255 };
-        }
-
-        // 2. Process Interior (Vectorizable)
-        if x_end > x_start && y >= radius && y + radius < h {
-            let row00 = &integral[y0 * stride + (x_start - radius)..];
-            let row01 = &integral[y0 * stride + (x_start + radius + 1)..];
-            let row10 = &integral[y1 * stride + (x_start - radius)..];
-            let row11 = &integral[y1 * stride + (x_start + radius + 1)..];
-
-            let interior_src = &src_row[x_start..x_end];
-            let interior_dst = &mut dst_row[x_start..x_end];
-
-            for i in 0..(x_end - x_start) {
-                let sum = (row11[i] + row00[i]) - (row01[i] + row10[i]);
-                // Fixed-point division: (sum * inv_area) >> 31
-                let mean = ((sum * u64::from(inv_area_fixed)) >> 31) as i16;
-                let threshold = (mean - c).max(0) as u8;
-                interior_dst[i] = if interior_src[i] < threshold { 0 } else { 255 };
-            }
-        } else if x_end > x_start {
-            // Interior X but border Y
-            for x in x_start..x_end {
-                let x0 = x - radius;
-                let x1 = x + radius + 1;
-                let actual_area = (x1 - x0) * (y1 - y0);
-
-                let i00 = integral[y0 * stride + x0];
-                let i01 = integral[y0 * stride + x1];
-                let i10 = integral[y1 * stride + x0];
-                let i11 = integral[y1 * stride + x1];
-
-                let sum = (i11 + i00) - (i01 + i10);
-                let mean = (sum / actual_area as u64) as i16;
-                let threshold = (mean - c).max(0) as u8;
-                dst_row[x] = if src_row[x] < threshold { 0 } else { 255 };
-            }
-        }
-
-        // 3. Process Right Border
-        for x in x_end.max(x_start)..w {
-            let x0 = x.saturating_sub(radius);
-            let x1 = w; // (x + radius + 1).min(w)
-            let actual_area = (x1 - x0) * (y1 - y0);
-
-            let i00 = integral[y0 * stride + x0];
-            let i01 = integral[y0 * stride + x1];
-            let i10 = integral[y1 * stride + x0];
-            let i11 = integral[y1 * stride + x1];
-
-            let sum = (i11 + i00) - (i01 + i10);
-            let mean = (sum / actual_area as u64) as i16;
-            let threshold = (mean - c).max(0) as u8;
-            dst_row[x] = if src_row[x] < threshold { 0 } else { 255 };
-        }
-    });
-}
-
-/// Apply per-pixel adaptive threshold with gradient-based window sizing.
-///
-/// Highly optimized using Parallel processing, precomputed LUTs, and branchless logic.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "per-pixel thresholding kernel; the image/gradient/integral buffers plus the radius, gradient-threshold and offset knobs mirror the OpenCV adaptiveThreshold parameter list, and grouping them adds indirection on this hot path"
-)]
-#[multiversion(targets(
-    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
-    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
-    "aarch64+neon"
-))]
-#[tracing::instrument(skip_all, name = "pipeline::threshold_gradient_window")]
-pub fn adaptive_threshold_gradient_window(
-    img: &ImageView,
-    gradient_map: &[u8],
-    integral: &[u64],
-    output: &mut [u8],
-    min_radius: usize,
-    max_radius: usize,
-    gradient_threshold: u8,
-    c: i16,
-) {
-    let w = img.width;
-    let h = img.height;
-    let stride = w + 1;
-
-    // Precompute radius and area reciprocal LUTs (fixed-point 1.31)
-    let mut radius_lut = [0usize; 256];
-    let mut inv_area_lut = [0u32; 256];
-    let grad_thresh_f32 = f32::from(gradient_threshold);
-
-    for g in 0..256 {
-        let r = if g as u8 >= gradient_threshold {
-            min_radius
-        } else {
-            let t = g as f32 / grad_thresh_f32;
-            let r = max_radius as f32 * (1.0 - t) + min_radius as f32 * t;
-            r as usize
-        };
-        radius_lut[g] = r;
-        let side = (2 * r + 1) as u32;
-        let area = side * side;
-        inv_area_lut[g] = ((1u64 << 31) / u64::from(area)) as u32;
-    }
-
-    (0..h).into_par_iter().for_each(|y| {
-        let y_offset = y * w;
-        let src_row = img.get_row(y);
-
-        // SAFETY: `(0..h).into_par_iter()` yields each `y` exactly once
-        // across rayon workers, so the `[y * w, y * w + w)` slice is
-        // disjoint from every other worker's slice. `output` length is
-        // `h * w`, so the slice is in-bounds. The outer `par_iter` borrows
-        // `output` mutably for its lifetime, so no concurrent reader exists.
-        let dst_row = unsafe {
-            let ptr = output.as_ptr().cast_mut();
-            std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
-        };
-
-        for x in 0..w {
-            let grad = gradient_map[y_offset + x];
-            let radius = radius_lut[grad as usize];
-
-            let y0 = y.saturating_sub(radius);
-            let y1 = (y + radius + 1).min(h);
-            let x0 = x.saturating_sub(radius);
-            let x1 = (x + radius + 1).min(w);
-
-            let i00 = integral[y0 * stride + x0];
-            let i01 = integral[y0 * stride + x1];
-            let i10 = integral[y1 * stride + x0];
-            let i11 = integral[y1 * stride + x1];
-
-            let sum = (i11 + i00) - (i01 + i10);
-
-            // Fixed-point mean computation
-            let mean = if x >= radius && x + radius < w && y >= radius && y + radius < h {
-                ((sum * u64::from(inv_area_lut[grad as usize])) >> 31) as i16
-            } else {
-                let actual_area = (x1 - x0) * (y1 - y0);
-                (sum / actual_area as u64) as i16
-            };
-
-            let threshold = (mean - c).max(0) as u8;
-            dst_row[x] = if src_row[x] < threshold { 0 } else { 255 };
-        }
-    });
-}
-
-/// Compute a map of local mean values.
-///
-/// Optimized with parallelism and vectorization.
-#[multiversion(targets(
-    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
-    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
-    "aarch64+neon"
-))]
-#[expect(
-    clippy::cast_sign_loss,
-    clippy::needless_range_loop,
-    reason = "mean values are clamped to 0..=255 (and areas are usize products) before the unsigned casts, so no sign is lost; the interior loop index i addresses five parallel integral-row slices (row00/01/10/11 and interior_dst), not a single iterated slice"
-)]
-pub(crate) fn compute_threshold_map(
-    img: &ImageView,
-    integral: &[u64],
-    output: &mut [u8],
-    radius: usize,
-    c: i16,
-) {
-    let w = img.width;
-    let h = img.height;
-    let stride = w + 1;
-
-    // Precompute interior area inverse
-    let side = (2 * radius + 1) as u32;
-    let area = side * side;
-    let inv_area_fixed = ((1u64 << 31) / u64::from(area)) as u32;
-
-    (0..h).into_par_iter().for_each(|y| {
-        let y_offset = y * w;
-
-        // SAFETY: `(0..h).into_par_iter()` yields each `y` exactly once
-        // across rayon workers, so the `[y * w, y * w + w)` slice is
-        // disjoint from every other worker's slice. `output` length is
-        // `h * w`, so the slice is in-bounds. The outer `par_iter` borrows
-        // `output` mutably for its lifetime, so no concurrent reader exists.
-        let dst_row = unsafe {
-            let ptr = output.as_ptr().cast_mut();
-            std::slice::from_raw_parts_mut(ptr.add(y_offset), w)
-        };
-
-        let y0 = y.saturating_sub(radius);
-        let y1 = (y + radius + 1).min(h);
-
-        let x_start = radius;
-        let x_end = w.saturating_sub(radius + 1);
-
-        // 1. Process Left Border
-        for x in 0..x_start.min(w) {
-            let x0 = 0;
-            let x1 = (x + radius + 1).min(w);
-            let actual_area = (x1 - x0) * (y1 - y0);
-            let sum = (integral[y1 * stride + x1] + integral[y0 * stride + x0])
-                - (integral[y0 * stride + x1] + integral[y1 * stride + x0]);
-            let mean = (sum / actual_area as u64) as i16;
-            dst_row[x] = (mean - c).clamp(0, 255) as u8;
-        }
-
-        // 2. Process Interior (Vectorizable)
-        if x_end > x_start && y >= radius && y + radius < h {
-            let row00 = &integral[y0 * stride + (x_start - radius)..];
-            let row01 = &integral[y0 * stride + (x_start + radius + 1)..];
-            let row10 = &integral[y1 * stride + (x_start - radius)..];
-            let row11 = &integral[y1 * stride + (x_start + radius + 1)..];
-
-            let interior_dst = &mut dst_row[x_start..x_end];
-
-            for i in 0..(x_end - x_start) {
-                let sum = (row11[i] + row00[i]) - (row01[i] + row10[i]);
-                let mean = ((sum * u64::from(inv_area_fixed)) >> 31) as i16;
-                interior_dst[i] = (mean - c).clamp(0, 255) as u8;
-            }
-        }
-
-        // 3. Process Right Border
-        for x in x_end.max(x_start)..w {
-            let x0 = x.saturating_sub(radius);
-            let x1 = w;
-            let actual_area = (x1 - x0) * (y1 - y0);
-            let sum = (integral[y1 * stride + x1] + integral[y0 * stride + x0])
-                - (integral[y0 * stride + x1] + integral[y1 * stride + x0]);
-            let mean = (sum / actual_area as u64) as i16;
-            dst_row[x] = (mean - c).clamp(0, 255) as u8;
-        }
-    });
 }

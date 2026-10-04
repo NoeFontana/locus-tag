@@ -55,11 +55,6 @@ harness = false
 required-features = ["bench-internals"]
 
 [[bench]]
-name = "integral_threshold_bench"
-harness = false
-required-features = ["bench-internals"]
-
-[[bench]]
 name = "dictionary_bench"
 harness = false
 required-features = ["bench-internals"]
