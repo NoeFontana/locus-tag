@@ -19,12 +19,13 @@
     unused_imports
 )]
 //! ICRA 2020 Dataset Regression Tests.
-use locus_core::{DetectOptions, DetectorConfig, TagFamily};
+use locus_core::{DetectorConfig, TagFamily};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::PathBuf;
 
 mod common;
+use common::DetectOptions;
 
 /// Packed checkerboards need a relaxed `quad.min_edge_score` and
 /// `decoder.min_contrast` on top of the `grid` profile.

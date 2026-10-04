@@ -1,14 +1,11 @@
 {
   "name": "high_accuracy",
-  "extends": null,
   "threshold": {
     "tile_size": 8,
-    "min_range": 10,
     "enable_sharpening": false,
     "mode": "TileMidExtreme",
-    "local_mean_radius": 24,
-    "constant": 15,
-    "noise_k": 0.0
+    "local_mean_radius": 7,
+    "noise_k": 4.0
   },
   "quad": {
     "min_area": 400,
@@ -31,14 +28,12 @@
         "low_refinement": "Erf",
         "high_refinement": "None"
       }
-    },
-    "refine_before_decode": true
+    }
   },
   "decoder": {
     "min_contrast": 20.0,
     "max_hamming_error": 1,
     "refinement_mode": "None",
-    "gwlf_transversal_alpha": 0.01,
     "max_border_error_rate": 1.0,
     "corner_subpix": false
   },

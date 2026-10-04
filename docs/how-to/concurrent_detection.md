@@ -2,8 +2,7 @@
 
 `Detector` supports two modes controlled by `max_concurrent_frames` at construction.
 
-!!! note "API Constraint"
-    Currently, `max_concurrent_frames` is only exposed through the `DetectorBuilder` API. Using the standard `locus.Detector()` constructor will default to a single-frame pool.
+Set it either as a constructor keyword, `locus.Detector(max_concurrent_frames=n)`, or with `locus.DetectorBuilder().with_max_concurrent_frames(n)`. Omitting it gives a single-frame pool.
 
 | `max_concurrent_frames` | Behaviour |
 | :--- | :--- |
@@ -17,12 +16,18 @@
 ```python
 import locus
 
-# DetectorBuilder is required to set max_concurrent_frames
+detector = locus.Detector(
+    families=[locus.TagFamily.AprilTag36h11],
+    threads=4,  # Rayon threads per frame
+    max_concurrent_frames=8,  # up to 8 frames in parallel
+)
+
+# Equivalent, with the builder (build() returns a locus.Detector)
 detector = (
     locus.DetectorBuilder()
     .with_family(locus.TagFamily.AprilTag36h11)
-    .with_threads(4)  # Rayon threads per frame
-    .with_max_concurrent_frames(8)  # up to 8 frames in parallel
+    .with_threads(4)
+    .with_max_concurrent_frames(8)
     .build()
 )
 ```

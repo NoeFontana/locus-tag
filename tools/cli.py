@@ -359,7 +359,7 @@ def bench_real(
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
     refinement: str | None = typer.Option(
         None,
-        help="Override decoder.refinement_mode (None, Erf, Gwlf); "
+        help="Override decoder.refinement_mode (None, Erf); "
         "default: keep the standard profile's value.",
     ),
     tile_size: int | None = typer.Option(
@@ -370,16 +370,13 @@ def bench_real(
         help="Override threshold.mode ('TileMidExtreme' | 'LocalMean'); "
         "default: keep the standard profile's value.",
     ),
-    constant: int | None = typer.Option(
+    noise_k: float | None = typer.Option(
         None,
-        help="Override threshold.constant, the local-mean offset "
+        help="Override threshold.noise_k, the noise-calibrated local-mean offset "
         "(only read when threshold.mode is LocalMean).",
     ),
     min_fill: float | None = typer.Option(
         None, help="Override quad.min_fill_ratio (default: keep the standard profile's value)."
-    ),
-    min_range: int | None = typer.Option(
-        None, help="Override threshold.min_range (default: keep the standard profile's value)."
     ),
     max_hamming: int | None = typer.Option(
         None,
@@ -452,7 +449,6 @@ def bench_real(
     refinement_mapping = {
         "None": getattr(locus.CornerRefinementMode, "None"),
         "Erf": locus.CornerRefinementMode.Erf,
-        "Gwlf": locus.CornerRefinementMode.Gwlf,
     }
     if refinement is not None and refinement not in refinement_mapping:
         typer.echo(f"Error: unknown refinement mode '{refinement}'", err=True)
@@ -472,10 +468,8 @@ def bench_real(
         base["threshold"]["tile_size"] = tile_size
     if threshold_mode is not None:
         base["threshold"]["mode"] = threshold_mode
-    if constant is not None:
-        base["threshold"]["constant"] = constant
-    if min_range is not None:
-        base["threshold"]["min_range"] = min_range
+    if noise_k is not None:
+        base["threshold"]["noise_k"] = noise_k
     if min_fill is not None:
         base["quad"]["min_fill_ratio"] = min_fill
     if min_edge_score is not None:
@@ -1151,7 +1145,7 @@ def debug_report(
     configs: list[str] = typer.Option(..., help="HF Hub dataset configurations"),
     limit: int | None = typer.Option(5, help="Limit number of images per config"),
     output: Path = typer.Option(Path("debug_report"), help="Output directory"),
-    refinement_mode: str = typer.Option("Erf", help="Sub-pixel refinement mode (None, Edge, Erf)"),
+    refinement_mode: str = typer.Option("Erf", help="Sub-pixel refinement mode (None, Erf)"),
 ):
     """
     Generate a high-fidelity HTML debug report for dataset subsets.
@@ -1166,7 +1160,7 @@ def debug_report(
     images_dir.mkdir(exist_ok=True)
 
     loader = LocalHubLoader()
-    if refinement_mode not in {"None", "Erf", "Gwlf"}:
+    if refinement_mode not in {"None", "Erf"}:
         refinement_mode = "Erf"
 
     _cfg_dict = locus.DetectorConfig.from_profile("standard").model_dump()

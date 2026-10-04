@@ -269,12 +269,10 @@ fn run_detection_pipeline<'ctx>(
         *img
     };
 
-    // The binarized image is telemetry only (segmentation reads `threshold_map`). The
-    // local-mean thresholder skips it when handed an empty slice; the tile thresholder
-    // writes it as a by-product of its SIMD kernel.
-    let binarized_len = if debug_telemetry
-        || config.threshold_mode == crate::config::ThresholdMode::TileMidExtreme
-    {
+    // The binarized image is telemetry only (segmentation reads `threshold_map`), so it is
+    // allocated only when telemetry is requested. Handed an empty slice, the local-mean
+    // thresholder skips it and the tile thresholder backs its SIMD by-product with scratch.
+    let binarized_len = if debug_telemetry {
         img.width * img.height
     } else {
         0
@@ -287,9 +285,7 @@ fn run_detection_pipeline<'ctx>(
     // 1. Thresholding & 2. Segmentation & 3. Quad Extraction
     let (n, unrefined) = {
         let mut engine = crate::threshold::ThresholdEngine::from_config(config);
-        if config.threshold_mode == crate::config::ThresholdMode::LocalMean
-            && config.threshold_noise_k > 0.0
-        {
+        if config.threshold_mode == crate::config::ThresholdMode::LocalMean {
             // Estimate on the raw sensor image (where the white-noise model holds) and carry
             // it through the resampling / sharpening gain, rather than estimating on the
             // filtered, spatially correlated image the thresholder sees.
@@ -404,7 +400,7 @@ fn run_detection_pipeline<'ctx>(
     // Quad extraction (and the funnel gate above, which samples the upscaled
     // image with `sampling_scale = 1`) ran on the upscaled grid, so `corners`
     // are still in upscaled pixels. Map them back to original-image
-    // coordinates before anything downstream (GWLF, homography, decode, pose)
+    // coordinates before anything downstream (homography, decode, pose)
     // consumes them, with the inverse of `ImageView::upscale_to`
     // (`image::upscaled_to_full`). No-op (skipped) for `U = 1`.
     let inv_upscale = 1.0 / upscale as f64;
@@ -423,7 +419,7 @@ fn run_detection_pipeline<'ctx>(
             }
         }
     }
-    // Decode, GWLF refinement and pose all sample the original image.
+    // Decode and pose sample the original image.
     let refinement_img = full_img;
 
     // Compute subpixel jitter if requested
@@ -457,25 +453,6 @@ fn run_detection_pipeline<'ctx>(
         &state.batch.status_mask[0..n],
         &mut state.batch.homographies[0..n],
     );
-
-    // Optional: GWLF Refinement
-    let (gwlf_fallback_count, gwlf_avg_delta) = match crate::refinement::apply_detector_gwlf(
-        &mut state.batch,
-        n,
-        &refinement_img,
-        config,
-    ) {
-        Some(telemetry) => {
-            // Recompute homographies after the GWLF pass moved corners.
-            crate::decoder::compute_homographies_soa(
-                &state.batch.corners[0..n],
-                &state.batch.status_mask[0..n],
-                &mut state.batch.homographies[0..n],
-            );
-            telemetry
-        },
-        None => (0, 0.0f32),
-    };
 
     // 5. Decoding Pass (SoA) — dispatch on distortion model
     // For rectified cameras (PinholeModel or no intrinsics), the compiler eliminates
@@ -574,8 +551,6 @@ fn run_detection_pipeline<'ctx>(
             num_jitter,
             reprojection_errors_ptr: repro_errors_ptr,
             num_reprojection: num_repro,
-            gwlf_fallback_count,
-            gwlf_avg_delta,
             routed_to_ptr: state.batch.routed_to.as_ptr(),
             ppb_estimate_ptr: state.batch.ppb_estimate.as_ptr(),
             num_routed: n,
@@ -669,6 +644,13 @@ fn run_pose_refinement(
 }
 
 /// A builder for configuring and instantiating a [`Detector`].
+///
+/// The builder carries orchestration only: the pipeline configuration
+/// ([`DetectorBuilder::with_config`]), the tag families, decimation, the
+/// intra-frame thread count and the concurrent-frame pool size. Detection
+/// settings live in [`DetectorConfig`]; build one with struct-update syntax
+/// (`DetectorConfig { quad_min_area: 400, ..DetectorConfig::default() }`) or load
+/// a profile, and hand it to [`DetectorBuilder::with_config`].
 pub struct DetectorBuilder {
     config: DetectorConfig,
     families: Vec<crate::config::TagFamily>,
@@ -709,151 +691,11 @@ impl DetectorBuilder {
         self
     }
 
-    /// Set the thread count for parallel processing.
+    /// Set the intra-frame Rayon thread count (see [`DetectorConfig::nthreads`];
+    /// `0` uses the global pool).
     #[must_use]
     pub fn with_threads(mut self, threads: usize) -> Self {
         self.config.nthreads = threads;
-        self
-    }
-
-    /// Set the upscale factor for detecting small tags.
-    #[must_use]
-    pub fn with_upscale_factor(mut self, factor: usize) -> Self {
-        self.config.upscale_factor = factor;
-        self
-    }
-
-    /// Set the corner refinement mode.
-    #[must_use]
-    pub fn with_corner_refinement(mut self, mode: crate::config::CornerRefinementMode) -> Self {
-        self.config.refinement_mode = mode;
-        self
-    }
-
-    /// Set the segmentation connectivity (4-way or 8-way).
-    #[must_use]
-    pub fn with_connectivity(
-        mut self,
-        connectivity: crate::config::SegmentationConnectivity,
-    ) -> Self {
-        self.config.segmentation_connectivity = connectivity;
-        self
-    }
-
-    /// Set the tile size for adaptive thresholding.
-    #[must_use]
-    pub fn with_threshold_tile_size(mut self, size: usize) -> Self {
-        self.config.threshold_tile_size = size;
-        self
-    }
-
-    /// Set the minimum intensity range for valid tiles.
-    #[must_use]
-    pub fn with_threshold_min_range(mut self, range: u8) -> Self {
-        self.config.threshold_min_range = range;
-        self
-    }
-
-    /// Set the constant subtracted from local mean in adaptive thresholding.
-    #[must_use]
-    pub fn with_adaptive_threshold_constant(mut self, c: i16) -> Self {
-        self.config.adaptive_threshold_constant = c;
-        self
-    }
-
-    /// Set the minimum quad area.
-    #[must_use]
-    pub fn with_quad_min_area(mut self, area: u32) -> Self {
-        self.config.quad_min_area = area;
-        self
-    }
-
-    /// Set the minimum fill ratio.
-    #[must_use]
-    pub fn with_quad_min_fill_ratio(mut self, ratio: f32) -> Self {
-        self.config.quad_min_fill_ratio = ratio;
-        self
-    }
-
-    /// Set the minimum edge alignment score.
-    #[must_use]
-    pub fn with_quad_min_edge_score(mut self, score: f64) -> Self {
-        self.config.quad_min_edge_score = score;
-        self
-    }
-
-    /// Set the maximum number of Hamming errors allowed.
-    ///
-    /// Setting this with the `Detector` builder always installs an
-    /// explicit override applied uniformly to every family. To restore
-    /// per-family defaults (`TagDecoder::default_max_hamming`), construct
-    /// the `DetectorConfig` directly and leave the field as `None`.
-    #[must_use]
-    pub fn with_max_hamming_error(mut self, errors: u32) -> Self {
-        self.config.max_hamming_error = Some(errors);
-        self
-    }
-
-    /// Set the minimum contrast for decoder bit classification.
-    #[must_use]
-    pub fn with_decoder_min_contrast(mut self, contrast: f64) -> Self {
-        self.config.decoder_min_contrast = contrast;
-        self
-    }
-
-    /// Set the GWLF transversal alpha.
-    #[must_use]
-    pub fn with_gwlf_transversal_alpha(mut self, alpha: f64) -> Self {
-        self.config.gwlf_transversal_alpha = alpha;
-        self
-    }
-
-    /// Set the maximum elongation allowed for a component.
-    #[must_use]
-    pub fn with_quad_max_elongation(mut self, elongation: f64) -> Self {
-        self.config.quad_max_elongation = elongation;
-        self
-    }
-
-    /// Set the minimum pixel density required to pass the moments gate.
-    #[must_use]
-    pub fn with_quad_min_density(mut self, density: f64) -> Self {
-        self.config.quad_min_density = density;
-        self
-    }
-
-    /// Set the quad extraction mode.
-    #[must_use]
-    pub fn with_quad_extraction_mode(mut self, mode: crate::config::QuadExtractionMode) -> Self {
-        self.config.quad_extraction_mode = mode;
-        self
-    }
-
-    /// Set the quad extraction policy (per-candidate dispatch).
-    ///
-    /// Under [`QuadExtractionPolicy::Static`] (the default) the detector honours
-    /// `with_quad_extraction_mode` and `with_corner_refinement` for every
-    /// candidate. Under [`QuadExtractionPolicy::AdaptivePpb`], those settings
-    /// are overridden per-candidate by the nested low/high route configuration.
-    ///
-    /// Validation runs when the final [`DetectorConfig`] is consumed by the
-    /// pipeline, so invalid combinations (e.g. EdLines paired with Erf on a
-    /// route, degenerate routes) surface as `DetectorError::Config(...)` at
-    /// `detect()` time.
-    ///
-    /// [`QuadExtractionPolicy`]: crate::config::QuadExtractionPolicy
-    /// [`QuadExtractionPolicy::Static`]: crate::config::QuadExtractionPolicy::Static
-    /// [`QuadExtractionPolicy::AdaptivePpb`]: crate::config::QuadExtractionPolicy::AdaptivePpb
-    #[must_use]
-    pub fn with_extraction_policy(mut self, policy: crate::config::QuadExtractionPolicy) -> Self {
-        self.config.quad_extraction_policy = policy;
-        self
-    }
-
-    /// Enable or disable Laplacian sharpening.
-    #[must_use]
-    pub fn with_sharpening(mut self, enable: bool) -> Self {
-        self.config.enable_sharpening = enable;
         self
     }
 
@@ -1207,10 +1049,11 @@ mod tests {
 
     #[test]
     fn edlines_with_distortion_is_rejected_at_detect_time() {
-        let config = DetectorConfig::builder()
-            .quad_extraction_mode(QuadExtractionMode::EdLines)
-            .refinement_mode(CornerRefinementMode::None)
-            .build();
+        let config = DetectorConfig {
+            quad_extraction_mode: QuadExtractionMode::EdLines,
+            refinement_mode: CornerRefinementMode::None,
+            ..DetectorConfig::default()
+        };
 
         let mut detector = Detector::with_config(config);
         let pixels = vec![0u8; 64 * 64];
@@ -1234,10 +1077,11 @@ mod tests {
 
     #[test]
     fn edlines_with_pinhole_is_accepted() {
-        let config = DetectorConfig::builder()
-            .quad_extraction_mode(QuadExtractionMode::EdLines)
-            .refinement_mode(CornerRefinementMode::None)
-            .build();
+        let config = DetectorConfig {
+            quad_extraction_mode: QuadExtractionMode::EdLines,
+            refinement_mode: CornerRefinementMode::None,
+            ..DetectorConfig::default()
+        };
 
         let mut detector = Detector::with_config(config);
         let pixels = vec![0u8; 64 * 64];

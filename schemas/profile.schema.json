@@ -15,7 +15,6 @@
         "high_refinement": {
           "enum": [
             "Erf",
-            "Gwlf",
             "None"
           ],
           "title": "High Refinement",
@@ -32,7 +31,6 @@
         "low_refinement": {
           "enum": [
             "Erf",
-            "Gwlf",
             "None"
           ],
           "title": "Low Refinement",
@@ -56,12 +54,6 @@
           "default": true,
           "title": "Corner Subpix",
           "type": "boolean"
-        },
-        "gwlf_transversal_alpha": {
-          "default": 0.01,
-          "minimum": 0.0,
-          "title": "Gwlf Transversal Alpha",
-          "type": "number"
         },
         "max_border_error_rate": {
           "anyOf": [
@@ -99,7 +91,6 @@
         "refinement_mode": {
           "enum": [
             "Erf",
-            "Gwlf",
             "None"
           ],
           "title": "Refinement Mode",
@@ -135,12 +126,6 @@
           "default": 1.0,
           "exclusiveMinimum": 0.0,
           "title": "Pose Consistency Gate Sigma Px",
-          "type": "number"
-        },
-        "pose_consistency_min_decisive_ratio": {
-          "default": 5.0,
-          "minimum": 1.0,
-          "title": "Pose Consistency Min Decisive Ratio",
           "type": "number"
         },
         "pose_edge_refinement_enabled": {
@@ -254,11 +239,6 @@
           "title": "Min Fill Ratio",
           "type": "number"
         },
-        "refine_before_decode": {
-          "default": false,
-          "title": "Refine Before Decode",
-          "type": "boolean"
-        },
         "subpixel_refinement_sigma": {
           "default": 0.6,
           "minimum": 0.0,
@@ -293,28 +273,16 @@
     "ThresholdConfig": {
       "additionalProperties": false,
       "properties": {
-        "constant": {
-          "default": 15,
-          "title": "Constant",
-          "type": "integer"
-        },
         "enable_sharpening": {
           "default": true,
           "title": "Enable Sharpening",
           "type": "boolean"
         },
         "local_mean_radius": {
-          "default": 24,
+          "default": 7,
           "maximum": 127,
           "minimum": 1,
           "title": "Local Mean Radius",
-          "type": "integer"
-        },
-        "min_range": {
-          "default": 10,
-          "maximum": 255,
-          "minimum": 0,
-          "title": "Min Range",
           "type": "integer"
         },
         "mode": {
@@ -326,8 +294,8 @@
           "type": "string"
         },
         "noise_k": {
-          "default": 0.0,
-          "minimum": 0.0,
+          "default": 4.0,
+          "exclusiveMinimum": 0.0,
           "title": "Noise K",
           "type": "number"
         },
@@ -359,22 +327,10 @@
   },
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
-  "description": "Nested detector configuration \u2014 Python source of truth.\n\nThe three shipped profiles live in ``crates/locus-core/profiles/*.json``\nand are embedded into the Rust crate at compile time; the wheel reads\nthe exact same bytes through the FFI. Load via :meth:`from_profile`\nfor a shipped profile or :meth:`from_profile_json` for a user-supplied\nJSON string.",
+  "description": "Nested detector configuration.\n\nThe three shipped profiles live in ``crates/locus-core/profiles/*.json``\nand are embedded into the Rust crate at compile time; the wheel reads\nthe exact same bytes through the FFI. Those JSON profiles are\nauthoritative. Load via :meth:`from_profile` for a shipped profile or\n:meth:`from_profile_json` for a user-supplied JSON string.",
   "properties": {
     "decoder": {
       "$ref": "#/$defs/DecoderConfig"
-    },
-    "extends": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "title": "Extends"
     },
     "name": {
       "anyOf": [

@@ -8,7 +8,7 @@
     "quad.subpixel_refinement_sigma": {"kind": "float", "low": 0.4, "high": 0.8, "grid_values": [0.4, 0.6, 0.8]},
     "quad.extraction_mode": {"kind": "categorical", "choices": ["ContourRdp", "EdLines"]},
     "decoder.min_contrast": {"kind": "float", "low": 5.0, "high": 30.0, "step": 5.0},
-    "decoder.refinement_mode": {"kind": "categorical", "choices": ["None", "Erf", "Gwlf"]},
+    "decoder.refinement_mode": {"kind": "categorical", "choices": ["None", "Erf"]},
     "decoder.max_hamming_error": {"kind": "categorical", "choices": [null, 0, 1, 2]},
     "pose.huber_delta_px": {"kind": "float", "low": 1.0, "high": 2.5, "step": 0.5},
     "pose.tikhonov_alpha_max": {"kind": "float", "low": 0.1, "high": 0.5, "grid_values": [0.1, 0.25, 0.5]}

@@ -85,7 +85,8 @@ Rust tests and Python loaders read the same `tests/data/` paths. `LOCUS_ICRA_DAT
 2. **Run Hub Tests**:
    ```bash
    # Tag-level regression (regression_render_tag)
-   # Covers 4 resolutions × the shipped extraction/refinement routes and Fast/Accurate pose modes.
+   # Covers the 4-resolution `high_accuracy` baseline plus quad-extraction variants
+   # (EdLines with None refinement, moments culling) at 720p/1080p.
    # Requires LOCUS_HUB_DATASET_DIR to locate the cache.
    LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
      cargo test --release --test regression_render_tag --features bench-internals -- --nocapture

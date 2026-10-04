@@ -77,9 +77,12 @@ format is therefore the single contract on both sides — Rust and Python are
 independent *reader and writer* of one format, and the round-trip is total over
 every field (no hand-maintained field-by-field FFI struct to drift).
 
-One consequence: `f64::INFINITY` (the documented value that disables the
-pose-consistency escape clause) has no JSON number form, so it round-trips as
-`null` — the serde shim maps `∞ ↔ null` and Pydantic maps `math.inf ↔ null`.
+Every key of a profile is optional. The serde shim marks each nested group
+`#[serde(default)]` with its `Default` projected from
+`DetectorConfig::default()`, and the Pydantic field defaults equal those same
+values (`standard`), so a key omitted from a custom profile takes the same
+value in Rust and Python. `test_profiles.py` parses sparse documents on both
+sides and compares them.
 
 The Python type stub (`locus.pyi`) is **generated** from the annotated pyo3
 surface by the `stub_gen` binary; do not hand-edit it.

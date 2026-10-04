@@ -125,11 +125,6 @@ path = "tests/regression_board_hub.rs"
 required-features = ["bench-internals"]
 
 [[test]]
-name = "gwlf_tests"
-path = "tests/gwlf_tests.rs"
-required-features = ["bench-internals"]
-
-[[test]]
 name = "integration_aruco"
 path = "tests/integration_aruco.rs"
 required-features = ["bench-internals"]

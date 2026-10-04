@@ -27,9 +27,10 @@ fn bench_decoding_only_real(bencher: divan::Bencher) {
     .unwrap();
 
     // Use a real detector to get real quads from the image
-    let config = locus_core::DetectorConfig::builder()
-        .refinement_mode(locus_core::config::CornerRefinementMode::None)
-        .build();
+    let config = locus_core::DetectorConfig {
+        refinement_mode: locus_core::config::CornerRefinementMode::None,
+        ..locus_core::DetectorConfig::default()
+    };
     let mut detector = locus_core::Detector::with_config(config);
 
     // Warm up to get the batch populated with candidates

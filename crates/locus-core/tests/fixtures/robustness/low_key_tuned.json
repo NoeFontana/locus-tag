@@ -1,13 +1,10 @@
 {
   "name": "low_key_tuned",
-  "extends": null,
   "threshold": {
     "tile_size": 2,
-    "min_range": 0,
     "enable_sharpening": true,
     "mode": "TileMidExtreme",
-    "local_mean_radius": 24,
-    "constant": -20
+    "local_mean_radius": 24
   },
   "quad": {
     "min_area": 16,
@@ -20,13 +17,11 @@
     "upscale_factor": 1,
     "max_elongation": 20.0,
     "min_density": 0.15,
-    "extraction_mode": "ContourRdp",
-    "refine_before_decode": false
+    "extraction_mode": "ContourRdp"
   },
   "decoder": {
     "min_contrast": 20.0,
     "refinement_mode": "Erf",
-    "gwlf_transversal_alpha": 0.01,
     "corner_subpix": true
   },
   "pose": {

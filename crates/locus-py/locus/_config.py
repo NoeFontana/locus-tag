@@ -1,19 +1,17 @@
 """Nested DetectorConfig schema and JSON profile loader.
 
-Single source of truth for the Python side of Locus detector configuration.
-The schema mirrors the grouping in the canonical JSON profiles shipped
-inside ``locus-core`` (``crates/locus-core/profiles/*.json``); Rust
-deserializes those same files (via ``include_str!``) into its flat
-``DetectorConfig``, and Python reads the exact embedded bytes through
-the ``_shipped_profile_json`` FFI hook. If the two ever disagree, the
-JSON is authoritative.
+The JSON profiles shipped inside ``locus-core``
+(``crates/locus-core/profiles/*.json``) are the authoritative detector
+configuration; this module is the Python reader and writer of that format.
+The schema mirrors the profiles' grouping; Rust deserializes the same files
+(via ``include_str!``) into its flat ``DetectorConfig``, and Python reads the
+exact embedded bytes through the ``_shipped_profile_json`` FFI hook. The field
+defaults equal Rust's ``DetectorConfig::default()`` (the ``standard`` profile),
+so a key omitted from a custom profile takes the same value on both sides.
 """
 
 from __future__ import annotations
 
-import math
-import warnings
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Annotated, Any, Literal, TypeAlias, TypeVar, cast
 
 from pydantic import (
@@ -27,12 +25,10 @@ from pydantic import (
 )
 
 from .locus import (
-    CameraIntrinsics,
     CornerRefinementMode,
     EdLinesImbalanceGatePolicy,
     QuadExtractionMode,
     SegmentationConnectivity,
-    TagFamily,
     ThresholdMode,
     _shipped_profile_json,
 )
@@ -78,6 +74,12 @@ def _coerce(enum_cls: type[_E]):
     def _inner(value: Any) -> _E:
         if isinstance(value, enum_cls):
             return value
+        # `bool` is an `int` subclass; a boolean is never a valid variant.
+        if isinstance(value, bool):
+            raise ValueError(
+                f"{enum_cls.__name__}: boolean {value!r} is not a valid variant "
+                f"(allowed names: {sorted(by_name)})"
+            )
         if isinstance(value, str):
             try:
                 return by_name[value]
@@ -109,30 +111,15 @@ def _serialize_name(enum_cls: type[_E]):
     return _inner
 
 
-def _enum_field(enum_cls: type[_E], coercer: Callable[[Any], _E] | None = None) -> Any:
-    # String-in JSON, enum-instance in Python. Pass `coercer` to extend the
-    # default int/name/instance coercion (e.g. legacy-shape acceptance).
+def _enum_field(enum_cls: type[_E]) -> Any:
+    # String-in JSON, enum-instance in Python.
     _, by_name, _ = _enum_registry(enum_cls)
     return Annotated[
         enum_cls,
-        BeforeValidator(coercer if coercer is not None else _coerce(enum_cls)),
+        BeforeValidator(_coerce(enum_cls)),
         PlainSerializer(_serialize_name(enum_cls), when_used="json", return_type=str),
         WithJsonSchema({"type": "string", "enum": sorted(by_name)}),
     ]
-
-
-def _coerce_imbalance_gate(value: Any) -> EdLinesImbalanceGatePolicy:
-    # `bool` is a subclass of `int`, so catch it *before* the int path.
-    if isinstance(value, bool):
-        warnings.warn(
-            "edlines_imbalance_gate: boolean values are deprecated; use "
-            'EdLinesImbalanceGatePolicy.Enabled / .Disabled (or "Enabled" / '
-            '"Disabled") instead.',
-            DeprecationWarning,
-            stacklevel=3,
-        )
-        return EdLinesImbalanceGatePolicy.Enabled if value else EdLinesImbalanceGatePolicy.Disabled
-    return _coerce(EdLinesImbalanceGatePolicy)(value)
 
 
 if TYPE_CHECKING:
@@ -149,7 +136,7 @@ else:
     _CornerRefinementField = _enum_field(CornerRefinementMode)
     _QuadExtractionField = _enum_field(QuadExtractionMode)
     _SegConnField = _enum_field(SegmentationConnectivity)
-    _ImbalanceGateField = _enum_field(EdLinesImbalanceGatePolicy, _coerce_imbalance_gate)
+    _ImbalanceGateField = _enum_field(EdLinesImbalanceGatePolicy)
     _ThresholdModeField = _enum_field(ThresholdMode)
 
 
@@ -157,28 +144,18 @@ class ThresholdConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
     tile_size: int = Field(default=8, ge=2, le=64)
-    min_range: int = Field(default=10, ge=0, le=255)
-    """Minimum 3x3-tile intensity range for the centre tile to count as valid.
-
-    **Telemetry-scoped.** The validity mask is applied only when writing the
-    binarized debug map (``DetectionResult.telemetry.binarized``); the
-    per-pixel threshold map that segmentation consumes is written
-    unconditionally. Changing this value changes ``telemetry.binarized`` and
-    nothing else -- detections are bit-identical.
-    """
     enable_sharpening: bool = True
     #: How the per-pixel foreground threshold that feeds segmentation is built.
     #: ``TileMidExtreme`` is the shipped behaviour of every profile; ``LocalMean``
     #: is opt-in and changes detector output on every frame.
     mode: _ThresholdModeField = Field(default_factory=lambda: ThresholdMode.TileMidExtreme)
     #: Window radius (px) of the local-mean thresholder; ``LocalMean`` mode only.
-    local_mean_radius: int = Field(default=24, ge=1, le=127)
-    #: Constant subtracted from the local mean; ``LocalMean`` mode only.
-    constant: int = 15
-    #: Noise-calibrated offset ``k``: when > 0, ``LocalMean`` subtracts
-    #: ``clamp(round(k * sigma_n), 2, 20)`` grey levels, with ``sigma_n`` the frame's
-    #: estimated sensor noise, instead of ``constant``. ``0`` disables it.
-    noise_k: float = Field(default=0.0, ge=0.0, allow_inf_nan=False)
+    local_mean_radius: int = Field(default=7, ge=1, le=127)
+    #: Noise-calibrated offset ``k`` of the local-mean thresholder: ``LocalMean``
+    #: subtracts ``clamp(round(k * sigma_n), 2, 20)`` grey levels from the local mean,
+    #: with ``sigma_n`` the frame's estimated sensor noise, so a flat background pixel
+    #: turns foreground with probability ~ Phi(-k). ``LocalMean`` mode only.
+    noise_k: float = Field(default=4.0, gt=0.0, allow_inf_nan=False)
 
 
 class AdaptivePpbConfig(BaseModel):
@@ -241,12 +218,9 @@ class QuadConfig(BaseModel):
         default_factory=lambda: EdLinesImbalanceGatePolicy.Disabled
     )
     extraction_policy: QuadExtractionPolicy = "Static"
-    refine_before_decode: bool = False
-    """Refine every candidate's corners before decoding (the historical order, kept by
-    ``high_accuracy``). ``False`` (decode-first, the default) decodes from contour corners and
-    refines only candidates that decode or nearly do, keeping a match only if the refined quad
-    still decodes it. Decode-first needs ERF refinement, an undistorted camera and no
-    upscaling; other configurations always refine first."""
+    """``"Static"`` runs ``extraction_mode`` + ``decoder.refinement_mode`` on every candidate;
+    ``{"AdaptivePpb": {...}}`` routes each candidate by its pixels-per-bit estimate and
+    requires ``decoder.refinement_mode="None"`` (the routes carry their own refinement)."""
 
     @model_validator(mode="after")
     def _check_fill_ratio_ordering(self) -> QuadConfig:
@@ -272,7 +246,6 @@ class DecoderConfig(BaseModel):
     safe budget (16h5 = 0, 4x4_* = 1, 36h11 = 2, 6x6_250 = 2). An
     explicit integer overrides every family uniformly.
     """
-    gwlf_transversal_alpha: float = Field(default=0.01, ge=0.0)
     max_border_error_rate: float | None = Field(default=None, ge=0.0, le=1.0)
     """Largest fraction of the black border ring that may read bright for a decoded
     candidate to be accepted. ``None`` (the default) gives each family the codeword's own
@@ -285,7 +258,8 @@ class DecoderConfig(BaseModel):
     junction at all is first re-placed from its two edges. The corners are then calibrated
     against the marker's own bit edges, which removes the tone-curve inset that every
     gradient corner estimator has on gamma-encoded images. Windows and weights come from
-    the image; nothing is configured. Undistorted cameras only."""
+    the image; nothing is configured. Applies to undistorted cameras, and skips markers whose
+    cells are under ~3.3 px (their seed corners are kept)."""
 
 
 class PoseConfig(BaseModel):
@@ -308,26 +282,9 @@ class PoseConfig(BaseModel):
 
     Independent of ``sigma_n_sq`` so the gate's calibration stays valid
     even when the LM weights residuals with anisotropic structure-tensor
-    or GWLF info matrices. Default ``1.0 px`` — tighter than ``sigma_n_sq``
+    info matrices. Default ``1.0 px`` — tighter than ``sigma_n_sq``
     (``≈ 4 px²``) so the gate catches sub-2-px false-positive residuals
     that the looser LM noise model would let through.
-    """
-    pose_consistency_min_decisive_ratio: Annotated[
-        float, BeforeValidator(lambda v: math.inf if v is None else v)
-    ] = Field(default=5.0, ge=1.0)
-    """Branch-ratio escape clause for the χ² consistency gate.
-
-    ``alternate_d2 / primary_d2`` from the IPPE branch selector. When this
-    ratio meets or exceeds the configured value, the chosen branch is
-    considered decisive and the χ² gate is bypassed even when post-LM
-    aggregate / per-corner d² exceeds the threshold. The gate's purpose is
-    catching IPPE branch *ambiguity* (both candidates with similar d²); a
-    decisive winner with high absolute residual is more likely scene-
-    specific noise than a wrong branch, and nulling its pose is lossy.
-
-    Default ``5.0``: alternate IPPE d² must be at least 5× the primary's
-    for the escape to fire. Set to ``math.inf`` (Rust-side ``f64::INFINITY``)
-    to disable the escape and use only the χ² test.
     """
     outlier_drop_d2_threshold: float = Field(default=0.0, ge=0.0)
     """Outlier-aware corner-drop trigger threshold (squared Mahalanobis).
@@ -364,34 +321,23 @@ class SegmentationConfig(BaseModel):
 
 
 class DetectorConfig(BaseModel):
-    """Nested detector configuration — Python source of truth.
+    """Nested detector configuration.
 
     The three shipped profiles live in ``crates/locus-core/profiles/*.json``
     and are embedded into the Rust crate at compile time; the wheel reads
-    the exact same bytes through the FFI. Load via :meth:`from_profile`
-    for a shipped profile or :meth:`from_profile_json` for a user-supplied
-    JSON string.
+    the exact same bytes through the FFI. Those JSON profiles are
+    authoritative. Load via :meth:`from_profile` for a shipped profile or
+    :meth:`from_profile_json` for a user-supplied JSON string.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=False, arbitrary_types_allowed=True)
 
     name: str | None = None
-    extends: str | None = None
     threshold: ThresholdConfig = Field(default_factory=ThresholdConfig)
     quad: QuadConfig = Field(default_factory=QuadConfig)
     decoder: DecoderConfig = Field(default_factory=DecoderConfig)
     pose: PoseConfig = Field(default_factory=PoseConfig)
     segmentation: SegmentationConfig = Field(default_factory=SegmentationConfig)
-
-    @model_validator(mode="after")
-    def _check_extends_unresolved(self) -> DetectorConfig:
-        if self.extends is not None:
-            raise NotImplementedError(
-                f"Profile inheritance (extends={self.extends!r}) is declared in the schema "
-                "but not yet resolved by the loader. Inline the parent profile's values for "
-                "now; resolution will land in a follow-up."
-            )
-        return self
 
     @model_validator(mode="after")
     def _check_cross_group_compat(self) -> DetectorConfig:
@@ -404,6 +350,11 @@ class DetectorConfig(BaseModel):
             )
         # Mirrors `DetectorConfig::validate` in `crates/locus-core/src/config.rs`.
         if isinstance(self.quad.extraction_policy, _AdaptivePpbPolicy):
+            if self.decoder.refinement_mode != getattr(CornerRefinementMode, "None"):
+                raise ValueError(
+                    "quad.extraction_policy=AdaptivePpb requires decoder.refinement_mode=None; "
+                    "the AdaptivePpb routes carry their own refinement modes"
+                )
             p = self.quad.extraction_policy.AdaptivePpb
             if p.low_extraction == p.high_extraction:
                 raise ValueError(
@@ -450,32 +401,10 @@ class DetectorConfig(BaseModel):
         return cls.model_validate_json(json_str)
 
 
-class DetectOptions(BaseModel):
-    """Per-call options for tag detection."""
-
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
-    families: list[TagFamily] = Field(default_factory=list)
-    decimation: int = Field(default=1, ge=1)
-    intrinsics: tuple[float, float, float, float] | CameraIntrinsics | None = Field(default=None)
-    tag_size: float | None = Field(default=None, ge=0.0)
-
-    @classmethod
-    def all(cls) -> DetectOptions:
-        return cls(
-            families=[
-                TagFamily.AprilTag36h11,
-                TagFamily.ArUco4x4_50,
-                TagFamily.ArUco4x4_100,
-            ]
-        )
-
-
 __all__ = [
     "SHIPPED_PROFILES",
     "AdaptivePpbConfig",
     "DecoderConfig",
-    "DetectOptions",
     "DetectorConfig",
     "PoseConfig",
     "ProfileName",

@@ -13,7 +13,7 @@
 //!    pixel — but the threshold follows the local *extremes*, which speckles
 //!    flat regions and lets a dark background fuse with a marker.
 //! 2. **Local mean** (`LocalMean`): a true per-pixel local mean over a
-//!    `(2r+1)²` window, minus a constant, from a sliding column-sum
+//!    `(2r+1)²` window, minus a noise-calibrated offset, from a sliding column-sum
 //!    accumulator. Tracks the local background level instead of the extremes.
 
 #![allow(unsafe_code, clippy::cast_sign_loss)]
@@ -32,6 +32,12 @@ pub const NOISE_OFFSET_MIN: i32 = 2;
 /// frame is better served by speckle the quad stage rejects than by missing markers.
 pub const NOISE_OFFSET_MAX: i32 = 20;
 
+/// Minimum intensity range over a 3×3-tile neighbourhood for the centre tile to count as
+/// valid in [`ThresholdMode::TileMidExtreme`]. Telemetry-scoped: flat (invalid) tiles are
+/// forced to background in the binarized debug image only; the threshold map segmentation
+/// reads is written for every tile, so this value never changes detections.
+const TILE_MIN_RANGE: u8 = 10;
+
 /// Statistics for a single threshold tile.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct TileStats {
@@ -45,16 +51,12 @@ pub struct TileStats {
 pub struct ThresholdEngine {
     /// Size of the tiles used for local thresholding statistics.
     pub tile_size: usize,
-    /// Minimum intensity range for a tile to be considered valid.
-    pub min_range: u8,
     /// How the per-pixel foreground threshold is built.
     pub mode: ThresholdMode,
     /// Window radius (pixels) for [`ThresholdMode::LocalMean`].
     pub local_mean_radius: usize,
-    /// Constant subtracted from the local mean by [`ThresholdMode::LocalMean`].
-    pub constant: i16,
-    /// Noise-calibrated offset `k` ([`DetectorConfig::threshold_noise_k`]); `0.0` = use
-    /// [`Self::constant`].
+    /// Noise-calibrated offset `k` of [`ThresholdMode::LocalMean`]
+    /// ([`DetectorConfig::threshold_noise_k`]).
     pub noise_k: f32,
     /// Noise σ of the image being thresholded, when the caller knows it better than an
     /// estimate on that image can (see [`Self::with_noise_sigma`]).
@@ -79,10 +81,8 @@ impl ThresholdEngine {
     pub fn from_config(config: &DetectorConfig) -> Self {
         Self {
             tile_size: config.threshold_tile_size,
-            min_range: config.threshold_min_range,
             mode: config.threshold_mode,
             local_mean_radius: config.threshold_local_mean_radius,
-            constant: config.adaptive_threshold_constant,
             noise_k: config.threshold_noise_k,
             noise_sigma: None,
         }
@@ -234,7 +234,7 @@ impl ThresholdEngine {
                     }
                 }
                 let idx = ty * tiles_wide + tx;
-                tile_valid[idx] = if nmax.saturating_sub(nmin) < self.min_range {
+                tile_valid[idx] = if nmax.saturating_sub(nmin) < TILE_MIN_RANGE {
                     0
                 } else {
                     255
@@ -308,14 +308,11 @@ impl ThresholdEngine {
         self
     }
 
-    /// Offset subtracted from the local mean: [`Self::constant`], or, when
-    /// [`Self::noise_k`] is set, `clamp(round(k · σ), NOISE_OFFSET_MIN, NOISE_OFFSET_MAX)`
-    /// with σ from [`Self::with_noise_sigma`], else estimated on `img`.
+    /// Offset subtracted from the local mean:
+    /// `clamp(round(k · σ), NOISE_OFFSET_MIN, NOISE_OFFSET_MAX)` with `k` = [`Self::noise_k`]
+    /// and σ from [`Self::with_noise_sigma`], else estimated on `img`.
     #[must_use]
     pub fn local_mean_offset(&self, img: &ImageView) -> i32 {
-        if self.noise_k <= 0.0 {
-            return i32::from(self.constant);
-        }
         let sigma = self.noise_sigma.unwrap_or_else(|| {
             let stride = crate::gradient::noise_stride(img.width, img.height);
             crate::gradient::estimate_noise_sigma(img, stride)
@@ -811,23 +808,24 @@ mod tests {
         sum / ((y1 - y0) * (x1 - x0)) as u32
     }
 
+    /// Threshold `data` with `mode`; the local-mean offset is exactly `offset` grey levels
+    /// (`k = offset` at a supplied σ of 1, inside the `[2, 20]` clamp).
     fn run_mode(
         mode: ThresholdMode,
         radius: usize,
-        constant: i16,
+        offset: i32,
         data: &[u8],
         w: usize,
         h: usize,
     ) -> (Vec<u8>, Vec<u8>) {
+        assert!((NOISE_OFFSET_MIN..=NOISE_OFFSET_MAX).contains(&offset));
         let img = ImageView::new(data, w, h, w).unwrap();
         let engine = ThresholdEngine {
             tile_size: 8,
-            min_range: 10,
             mode,
             local_mean_radius: radius,
-            constant,
-            noise_k: 0.0,
-            noise_sigma: None,
+            noise_k: offset as f32,
+            noise_sigma: Some(1.0),
         };
         let arena = Bump::new();
         let stats = engine.compute_tile_stats(&arena, &img);
@@ -838,16 +836,16 @@ mod tests {
     }
 
     /// The sliding column accumulator and the [`ExactDiv`] reciprocal reproduce the exact
-    /// box mean.
+    /// box mean (minus the offset).
     #[test]
     fn local_mean_matches_naive_box_mean() {
         for &(w, h) in &[(64usize, 48usize), (37, 29), (8, 8), (129, 5), (300, 9)] {
             let data = lcg_image(w, h, 7);
             for &r in &[1usize, 3, 7, 12, 40, 127] {
-                let (binary, map) = run_mode(ThresholdMode::LocalMean, r, 0, &data, w, h);
+                let (binary, map) = run_mode(ThresholdMode::LocalMean, r, 2, &data, w, h);
                 for y in 0..h {
                     for x in 0..w {
-                        let expect = naive_box_mean(&data, w, h, x, y, r).min(255);
+                        let expect = naive_box_mean(&data, w, h, x, y, r).saturating_sub(2);
                         let got = u32::from(map[y * w + x]);
                         assert_eq!(
                             got, expect,
@@ -866,17 +864,35 @@ mod tests {
         }
     }
 
-    /// `constant` shifts the threshold down, so raising it can only ever turn
+    /// The offset shifts the threshold down, so raising it can only ever turn
     /// foreground pixels into background — the noise-suppression knob.
     #[test]
-    fn local_mean_constant_is_monotone() {
+    fn local_mean_offset_is_monotone() {
         let (w, h) = (96usize, 64usize);
         let data = lcg_image(w, h, 11);
-        let (_, no_offset) = run_mode(ThresholdMode::LocalMean, 8, 0, &data, w, h);
-        let (_, with_offset) = run_mode(ThresholdMode::LocalMean, 8, 10, &data, w, h);
+        let (_, small_offset) = run_mode(ThresholdMode::LocalMean, 8, 2, &data, w, h);
+        let (_, large_offset) = run_mode(ThresholdMode::LocalMean, 8, 12, &data, w, h);
         for i in 0..w * h {
-            assert!(with_offset[i] <= no_offset[i]);
+            assert!(large_offset[i] <= small_offset[i]);
         }
+    }
+
+    /// The offset is `k · σ` rounded and clamped to `[NOISE_OFFSET_MIN, NOISE_OFFSET_MAX]`.
+    #[test]
+    fn local_mean_offset_is_clamped() {
+        let data = vec![0u8; 16 * 16];
+        let img = ImageView::new(&data, 16, 16, 16).unwrap();
+        let offset = |k: f32, sigma: f64| {
+            ThresholdEngine {
+                noise_k: k,
+                ..ThresholdEngine::new()
+            }
+            .with_noise_sigma(sigma)
+            .local_mean_offset(&img)
+        };
+        assert_eq!(offset(4.0, 2.0), 8);
+        assert_eq!(offset(4.0, 0.1), NOISE_OFFSET_MIN);
+        assert_eq!(offset(4.0, 50.0), NOISE_OFFSET_MAX);
     }
 
     /// Deterministic Gaussian noise around `mean` (Box–Muller over an LCG).
@@ -935,10 +951,10 @@ mod tests {
         let config = DetectorConfig {
             threshold_mode: ThresholdMode::LocalMean,
             threshold_local_mean_radius: 7,
-            adaptive_threshold_constant: 3,
+            threshold_noise_k: 3.0,
             ..DetectorConfig::default()
         };
-        let engine = ThresholdEngine::from_config(&config);
+        let engine = ThresholdEngine::from_config(&config).with_noise_sigma(1.0);
         let arena = Bump::new();
         let stats = engine.compute_tile_stats(&arena, &img);
         let mut map = vec![0u8; w * h];
@@ -950,7 +966,7 @@ mod tests {
     fn tile_threshold_map_does_not_depend_on_binary_output() {
         let (w, h) = (96usize, 64usize);
         let data = lcg_image(w, h, 5);
-        let (_, with_binary) = run_mode(ThresholdMode::TileMidExtreme, 7, 0, &data, w, h);
+        let (_, with_binary) = run_mode(ThresholdMode::TileMidExtreme, 7, 2, &data, w, h);
         let img = ImageView::new(&data, w, h, w).unwrap();
         let engine = ThresholdEngine::from_config(&DetectorConfig::default());
         let arena = Bump::new();
@@ -1028,7 +1044,7 @@ mod tests {
     }
 
     /// A perfectly flat frame has no structure. The local mean equals the grey
-    /// level everywhere, so any positive `constant` drives the threshold below
+    /// level everywhere, so any positive offset drives the threshold below
     /// it and nothing is foreground — the noise-suppression property.
     ///
     /// The tile mode is the one that speckles: `t = mid(97, 97) = 97` is
@@ -1079,7 +1095,7 @@ mod tests {
             data[y * w + 16..y * w + 48].fill(0);
         }
         let centre = 32 * w + 32;
-        let (_, tile) = run_mode(ThresholdMode::TileMidExtreme, 8, 0, &data, w, h);
+        let (_, tile) = run_mode(ThresholdMode::TileMidExtreme, 8, 2, &data, w, h);
         let (_, local) = run_mode(ThresholdMode::LocalMean, 24, 15, &data, w, h);
         assert_eq!(
             tile[centre], 0,

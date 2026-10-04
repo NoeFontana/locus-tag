@@ -16,6 +16,18 @@ use std::collections::{HashMap, HashSet};
 use std::env;
 use std::path::{Path, PathBuf};
 
+/// Per-run detection inputs of the regression harnesses: which families to decode, and the
+/// camera intrinsics and tag size for pose estimation (`None` skips pose).
+#[derive(Clone, Debug, Default)]
+pub struct DetectOptions {
+    /// Tag families to decode. Empty keeps the detector's default family.
+    pub families: Vec<locus_core::TagFamily>,
+    /// Camera intrinsics for pose estimation.
+    pub intrinsics: Option<locus_core::CameraIntrinsics>,
+    /// Physical tag size (metres) for pose estimation.
+    pub tag_size: Option<f64>,
+}
+
 #[derive(Debug, Clone)]
 pub struct ImageGroundTruth {
     pub tag_ids: HashSet<u32>,

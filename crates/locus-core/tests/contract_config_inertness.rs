@@ -316,6 +316,8 @@ fn render_frames() -> Vec<Vec<u8>> {
         FUNNEL_PROBE,
         // 5: the border-ring probe. See `BORDER_PROBE` below.
         BORDER_PROBE,
+        // 6: the pose-ambiguity probe. See `POSE_AMBIGUITY_PROBE` below.
+        POSE_AMBIGUITY_PROBE,
     ];
     specs
         .iter()
@@ -364,6 +366,25 @@ const BORDER_PROBE: SceneSpec = SceneSpec {
     texture: 20,
     noise: 2,
     corrupt: &[(3, 0), (7, 4), (2, 7)],
+    center_dot: false,
+};
+
+/// A frame built for the pose-consistency gate (`pose_consistency_fpr`,
+/// `pose_consistency_gate_sigma_px`): a small, near-frontal, centred tag (weak
+/// perspective) with sensor noise. Its two IPPE branches fit almost equally well
+/// (d² ratio ≈ 1), so the branch-ratio escape clause (alternate d² ≥ 5× primary)
+/// does not fire and the χ² gate decides; the noise keeps the residual above zero.
+/// On the other frames the branch choice is decisive and the escape lets every pose
+/// through, which hides both knobs.
+const POSE_AMBIGUITY_PROBE: SceneSpec = SceneSpec {
+    family: TagFamily::AprilTag36h11,
+    id: 53,
+    quad: [[88.0, 88.0], [121.0, 89.0], [120.0, 121.0], [87.0, 120.0]],
+    white: 230,
+    black: 20,
+    texture: 20,
+    noise: 3,
+    corrupt: &[],
     center_dot: false,
 };
 
@@ -487,20 +508,12 @@ struct FieldCase {
 
 fn noop(_: &mut DetectorConfig) {}
 
-/// Prerequisite: a χ² pose-consistency gate that is *tight enough to bite* on
-/// a clean synthetic tag. The default σ (1.0 px) and the default branch-ratio
-/// escape (5.0) both let a well-fitted pose through no matter what the FPR is,
-/// so a case that only raises `pose_consistency_fpr` would measure nothing.
-fn base_gate_armed(c: &mut DetectorConfig) {
-    c.pose_consistency_fpr = 0.5;
-    c.pose_consistency_gate_sigma_px = 0.02;
-}
-
 /// Prerequisite for `pose_consistency_fpr`: everything the gate needs *except*
-/// the FPR that arms it.
+/// the FPR that arms it. The default σ (1.0 px) lets a well-fitted pose through
+/// no matter what the FPR is, so a case that only raises `pose_consistency_fpr`
+/// would measure nothing.
 fn base_gate_tuned_but_disarmed(c: &mut DetectorConfig) {
     c.pose_consistency_gate_sigma_px = 0.02;
-    c.pose_consistency_min_decisive_ratio = f64::INFINITY;
 }
 
 /// Prerequisite: EdLines extraction (incompatible with Erf refinement).
@@ -509,24 +522,7 @@ fn base_edlines(c: &mut DetectorConfig) {
     c.quad_extraction_mode = QuadExtractionMode::EdLines;
 }
 
-/// Prerequisite: GWLF refinement.
-fn base_gwlf(c: &mut DetectorConfig) {
-    c.refinement_mode = CornerRefinementMode::Gwlf;
-}
-
-/// Prerequisite for `threshold_min_range`: sharpening (on by default since
-/// `DetectorConfig::default()` was synced to `standard.json`, see
-/// `config::schema_parity_tests::default_matches_standard_profile`) raises
-/// per-tile local contrast enough that no tile on this synthetic canvas falls
-/// under either `min_range = 10` or `min_range = 0`, making the mutation
-/// coincidentally inert on this specific scene. Disabling it isolates the
-/// field's real effect (an unconditional per-tile write to the debug
-/// `binarized` map, see `threshold.rs`) from that scene-specific interaction.
-fn base_sharpening_off(c: &mut DetectorConfig) {
-    c.enable_sharpening = false;
-}
-
-/// Prerequisite: the local-mean thresholder, the only reader of its radius and constant.
+/// Prerequisite: the local-mean thresholder, the only reader of its radius and noise `k`.
 fn base_local_mean(c: &mut DetectorConfig) {
     c.threshold_mode = ThresholdMode::LocalMean;
 }
@@ -560,12 +556,6 @@ fn cases() -> Vec<FieldCase> {
             inert_reason: None,
         },
         FieldCase {
-            field: "threshold_min_range",
-            base: base_sharpening_off,
-            mutate: |c| c.threshold_min_range = 0,
-            inert_reason: None,
-        },
-        FieldCase {
             field: "enable_sharpening",
             base: noop,
             mutate: |c| c.enable_sharpening = false,
@@ -581,12 +571,6 @@ fn cases() -> Vec<FieldCase> {
             field: "threshold_local_mean_radius",
             base: base_local_mean,
             mutate: |c| c.threshold_local_mean_radius = 4,
-            inert_reason: None,
-        },
-        FieldCase {
-            field: "adaptive_threshold_constant",
-            base: base_local_mean,
-            mutate: |c| c.adaptive_threshold_constant = 60,
             inert_reason: None,
         },
         FieldCase {
@@ -729,21 +713,8 @@ fn cases() -> Vec<FieldCase> {
         },
         FieldCase {
             field: "pose_consistency_gate_sigma_px",
-            base: |c| {
-                c.pose_consistency_fpr = 0.5;
-                c.pose_consistency_min_decisive_ratio = f64::INFINITY;
-            },
+            base: |c| c.pose_consistency_fpr = 0.5,
             mutate: |c| c.pose_consistency_gate_sigma_px = 0.02,
-            inert_reason: None,
-        },
-        FieldCase {
-            field: "pose_consistency_min_decisive_ratio",
-            base: base_gate_armed,
-            // The default 5.0 lets the escape clause fire on every clean
-            // synthetic tag (the IPPE branch choice is decisive), so the armed
-            // gate never rejects. INFINITY disables the escape and the gate
-            // bites.
-            mutate: |c| c.pose_consistency_min_decisive_ratio = f64::INFINITY,
             inert_reason: None,
         },
         FieldCase {
@@ -756,12 +727,6 @@ fn cases() -> Vec<FieldCase> {
             field: "pose_edge_refinement_enabled",
             base: noop,
             mutate: |c| c.pose_edge_refinement_enabled = true,
-            inert_reason: None,
-        },
-        FieldCase {
-            field: "gwlf_transversal_alpha",
-            base: base_gwlf,
-            mutate: |c| c.gwlf_transversal_alpha = 0.6,
             inert_reason: None,
         },
         FieldCase {
@@ -790,7 +755,8 @@ fn cases() -> Vec<FieldCase> {
         },
         FieldCase {
             field: "quad_extraction_policy",
-            base: noop,
+            // `AdaptivePpb` requires the static refinement mode to be `None`.
+            base: |c| c.refinement_mode = CornerRefinementMode::None,
             mutate: |c| {
                 c.quad_extraction_policy = QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
                     threshold: 3.0,
@@ -802,14 +768,6 @@ fn cases() -> Vec<FieldCase> {
             },
             inert_reason: None,
         },
-        FieldCase {
-            field: "quad_refine_before_decode",
-            // With `decoder_corner_subpix` on, both orders converge to the same corners on these
-            // frames, so the ordering is observed with the corner pass off.
-            base: |c| c.decoder_corner_subpix = false,
-            mutate: |c| c.quad_refine_before_decode = true,
-            inert_reason: None,
-        },
     ]
 }
 
@@ -818,11 +776,9 @@ fn cases() -> Vec<FieldCase> {
 fn every_config_field() -> Vec<&'static str> {
     let DetectorConfig {
         threshold_tile_size: _,
-        threshold_min_range: _,
         enable_sharpening: _,
         threshold_mode: _,
         threshold_local_mean_radius: _,
-        adaptive_threshold_constant: _,
         threshold_noise_k: _,
         quad_min_area: _,
         quad_max_aspect_ratio: _,
@@ -846,25 +802,20 @@ fn every_config_field() -> Vec<&'static str> {
         structure_tensor_radius: _,
         pose_consistency_fpr: _,
         pose_consistency_gate_sigma_px: _,
-        pose_consistency_min_decisive_ratio: _,
         outlier_drop_d2_threshold: _,
         pose_edge_refinement_enabled: _,
-        gwlf_transversal_alpha: _,
         quad_max_elongation: _,
         quad_min_density: _,
         quad_extraction_mode: _,
         edlines_imbalance_gate: _,
         quad_extraction_policy: _,
-        quad_refine_before_decode: _,
     } = DetectorConfig::default();
 
     vec![
         "threshold_tile_size",
-        "threshold_min_range",
         "enable_sharpening",
         "threshold_mode",
         "threshold_local_mean_radius",
-        "adaptive_threshold_constant",
         "threshold_noise_k",
         "quad_min_area",
         "quad_max_aspect_ratio",
@@ -888,16 +839,13 @@ fn every_config_field() -> Vec<&'static str> {
         "structure_tensor_radius",
         "pose_consistency_fpr",
         "pose_consistency_gate_sigma_px",
-        "pose_consistency_min_decisive_ratio",
         "outlier_drop_d2_threshold",
         "pose_edge_refinement_enabled",
-        "gwlf_transversal_alpha",
         "quad_max_elongation",
         "quad_min_density",
         "quad_extraction_mode",
         "edlines_imbalance_gate",
         "quad_extraction_policy",
-        "quad_refine_before_decode",
     ]
 }
 

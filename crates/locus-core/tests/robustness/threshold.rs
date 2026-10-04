@@ -1,7 +1,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Robustness tests for adaptive thresholding logic.
 
-use locus_core::{DetectorBuilder, DetectorConfig, ImageView};
+use locus_core::{DetectorBuilder, DetectorConfig, ImageView, ThresholdMode};
 use proptest::prelude::*;
 
 proptest! {
@@ -16,7 +16,7 @@ proptest! {
             (Just(w), Just(h), proptest::collection::vec(any::<u8>(), w * h))
         }),
         window_size in 5..=31usize, // Test different window sizes
-        min_contrast in 0..=50u8 // Test different min contrast
+        local_mean in any::<bool>() // Exercise both thresholding modes
     ) {
         // Enforce odd window size
         let window_size = if window_size % 2 == 0 { window_size + 1 } else { window_size };
@@ -24,7 +24,11 @@ proptest! {
 
         let config = DetectorConfig {
             threshold_tile_size: window_size,
-            threshold_min_range: min_contrast,
+            threshold_mode: if local_mean {
+                ThresholdMode::LocalMean
+            } else {
+                ThresholdMode::TileMidExtreme
+            },
             ..DetectorConfig::default()
         };
 

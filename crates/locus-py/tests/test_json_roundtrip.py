@@ -43,8 +43,6 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     loaded = json.loads(DetectorConfig.from_profile(profile).model_dump_json())
     # Drop the ``$schema`` pragma which is metadata-only.
     on_disk.pop("$schema", None)
-    # ``extends`` is optional null at rest but required-field in the model.
-    on_disk.setdefault("extends", None)
     # ``max_hamming_error`` is absent on disk (per-family default applies)
     # but always emitted by the model — even as ``null``.
     on_disk.get("decoder", {}).setdefault("max_hamming_error", None)
@@ -54,9 +52,6 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     # ``pose_consistency_gate_sigma_px`` is absent on disk for profiles that
     # don't override it; the model always emits its 1.0 default.
     on_disk.get("pose", {}).setdefault("pose_consistency_gate_sigma_px", 1.0)
-    # ``pose_consistency_min_decisive_ratio`` is absent on disk for profiles
-    # that don't override it; the model always emits its 5.0 default.
-    on_disk.get("pose", {}).setdefault("pose_consistency_min_decisive_ratio", 5.0)
     # ``outlier_drop_d2_threshold`` is absent on disk for profiles that
     # don't opt into outlier-aware corner-drop; the model always emits its
     # 0.0 default.

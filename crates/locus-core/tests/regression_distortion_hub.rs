@@ -21,10 +21,11 @@
 //! Distortion coefficients and intrinsics are read from `rich_truth.json`
 //! (`distortion_model` + `dist_coeffs` fields) stored alongside the dataset.
 
-use locus_core::{DetectOptions, TagFamily};
+use locus_core::TagFamily;
 
 mod common;
 
+use common::DetectOptions;
 use common::hub::{
     DatasetProvider, HubProvider, RegressionHarness, build_intrinsics, load_rich_truth_entries,
 };
@@ -222,6 +223,8 @@ fn test_adaptive_ppb_falls_back_under_distortion() {
             low_refinement: CornerRefinementMode::Erf,
             high_refinement: CornerRefinementMode::None,
         }),
+        // `AdaptivePpb` requires the static refinement mode to be `None`.
+        refinement_mode: CornerRefinementMode::None,
         ..Default::default()
     };
     let mut detector = Detector::builder()
@@ -319,12 +322,12 @@ fn test_static_edlines_errors_under_distortion() {
 
     // Static EdLines: matches `DetectorConfig::static_uses_edlines() == true`.
     // Pair with `Refinement::None` to satisfy the EdLines+Erf compatibility
-    // check at config validation time (otherwise the builder would panic
-    // before we reach the distortion gate we're trying to cover).
-    let config = DetectorConfig::builder()
-        .quad_extraction_mode(QuadExtractionMode::EdLines)
-        .refinement_mode(CornerRefinementMode::None)
-        .build();
+    // check at config validation time.
+    let config = DetectorConfig {
+        quad_extraction_mode: QuadExtractionMode::EdLines,
+        refinement_mode: CornerRefinementMode::None,
+        ..DetectorConfig::default()
+    };
     assert!(
         config.static_uses_edlines(),
         "test precondition: config must trip the static-EdLines gate"

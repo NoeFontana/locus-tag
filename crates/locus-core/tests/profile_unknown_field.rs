@@ -43,16 +43,41 @@ fn malformed_json_rejected() {
 }
 
 #[test]
-fn extends_non_null_rejected() {
-    // Inheritance is declared in the schema but not yet resolved by Rust;
-    // the loader must refuse rather than silently treat it as a flat profile.
-    let json = r#"{ "name": "x", "extends": "standard" }"#;
-    match DetectorConfig::from_profile_json(json) {
-        Err(ConfigError::ProfileParse(msg)) => assert!(
-            msg.contains("extends"),
-            "error message must mention extends, got: {msg}"
-        ),
-        other => panic!("expected ProfileParse error, got: {other:?}"),
+fn removed_v0_9_keys_rejected() {
+    // Keys removed in v0.9 are unknown fields now: a stale profile fails loudly
+    // instead of silently losing its setting.
+    for json in [
+        r#"{ "extends": null }"#,
+        r#"{ "threshold": { "min_range": 10 } }"#,
+        r#"{ "threshold": { "constant": 15 } }"#,
+        r#"{ "quad": { "refine_before_decode": false } }"#,
+        r#"{ "decoder": { "gwlf_transversal_alpha": 0.01 } }"#,
+        r#"{ "pose": { "pose_consistency_min_decisive_ratio": 5.0 } }"#,
+    ] {
+        assert!(
+            matches!(
+                DetectorConfig::from_profile_json(json),
+                Err(ConfigError::ProfileParse(_))
+            ),
+            "{json} must be rejected"
+        );
+    }
+}
+
+#[test]
+fn removed_enum_forms_rejected() {
+    // The `Gwlf` refinement mode and the boolean imbalance-gate form are gone.
+    for json in [
+        r#"{ "decoder": { "refinement_mode": "Gwlf" } }"#,
+        r#"{ "quad": { "edlines_imbalance_gate": true } }"#,
+    ] {
+        assert!(
+            matches!(
+                DetectorConfig::from_profile_json(json),
+                Err(ConfigError::ProfileParse(_))
+            ),
+            "{json} must be rejected"
+        );
     }
 }
 
@@ -71,8 +96,7 @@ fn edlines_with_erf_rejected_by_validate() {
         },
         "decoder": {
             "min_contrast": 20.0, "refinement_mode": "Erf",
-            "max_hamming_error": 2,
-            "gwlf_transversal_alpha": 0.01
+            "max_hamming_error": 2
         }
     }"#;
     assert!(matches!(

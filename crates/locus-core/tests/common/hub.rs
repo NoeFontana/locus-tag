@@ -1,8 +1,9 @@
 #![allow(clippy::collapsible_if, clippy::needless_pass_by_value)]
 //! Shared hub dataset infrastructure reused by multiple regression test files.
 
+use super::DetectOptions;
 use locus_core::{
-    CameraIntrinsics, DetectOptions, Detector, DetectorConfig, ImageView, Pose, TagFamily,
+    CameraIntrinsics, Detector, DetectorConfig, ImageView, Pose, TagFamily,
     config::{CornerRefinementMode, QuadExtractionMode},
     pose::quat_from_so3,
 };

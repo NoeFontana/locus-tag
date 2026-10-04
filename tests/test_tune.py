@@ -80,15 +80,13 @@ def test_exclusions_skip_incompatible_combos_in_grid_and_random():
             "quad.extraction_mode": ParamSpec(
                 kind="categorical", choices=["ContourRdp", "EdLines"]
             ),
-            "decoder.refinement_mode": ParamSpec(
-                kind="categorical", choices=["None", "Erf", "Gwlf"]
-            ),
+            "decoder.refinement_mode": ParamSpec(kind="categorical", choices=["None", "Erf"]),
         },
         exclusions=[{"quad.extraction_mode": "EdLines", "decoder.refinement_mode": "Erf"}],
     )
     grid = list(space.grid())
-    assert len(grid) == 2 * 3 - 1  # the one excluded combo is dropped
-    assert space.grid_size() == 5
+    assert len(grid) == 2 * 2 - 1  # the one excluded combo is dropped
+    assert space.grid_size() == 3
     assert not any(
         d["quad.extraction_mode"] == "EdLines" and d["decoder.refinement_mode"] == "Erf"
         for d in grid

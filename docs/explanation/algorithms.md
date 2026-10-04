@@ -132,72 +132,11 @@ On a board the pose is shared, so the inset is estimated jointly instead: the bo
 
 ---
 
-## 3. Gradient-Weighted Line Fitting (GWLF)
-
-**Module:** `gwlf.rs`
-
-!!! note "Not used by any shipped profile"
-    GWLF is a legacy corner-refinement mode; none of `standard`, `grid` or `high_accuracy` selects it. The moment accumulator (§3.1) is still used by EdLines. The section documents the method for reference.
-
-### 3.1 Moment Accumulation
-
-For each of the 4 quad edges, image gradient magnitudes serve as weights in a spatial moment accumulation:
-
-$$\bar{x} = \frac{\sum w_i x_i}{\sum w_i}, \quad \bar{y} = \frac{\sum w_i y_i}{\sum w_i}$$
-
-The $2 \times 2$ gradient-weighted covariance matrix is:
-
-$$\mathbf{C} = \begin{bmatrix} \sum w_i (x_i - \bar{x})^2 & \sum w_i (x_i - \bar{x})(y_i - \bar{y}) \\ \sum w_i (x_i - \bar{x})(y_i - \bar{y}) & \sum w_i (y_i - \bar{y})^2 \end{bmatrix} \cdot \frac{1}{\sum w_i}$$
-
-### 3.2 Line Fitting via PCA
-
-The edge direction is the eigenvector of $\mathbf{C}$ corresponding to $\lambda_{\max}$ (the tangent direction). The eigenvector corresponding to $\lambda_{\min}$ gives the edge normal $\mathbf{n}$.
-
-The line is represented in homogeneous form $\mathbf{l} = [n_x, n_y, d]^T$ where $d = -(n_x \bar{x} + n_y \bar{y})$.
-
-The eigendecomposition of the $2 \times 2$ symmetric matrix is solved analytically:
-
-$$\lambda_{\max/\min} = \frac{\text{tr}(\mathbf{C}) \pm \sqrt{\text{tr}(\mathbf{C})^2 - 4 \det(\mathbf{C})}}{2}$$
-
-### 3.3 Line Covariance Propagation
-
-The $3 \times 3$ covariance $\boldsymbol{\Sigma}_{\mathbf{l}}$ of the homogeneous line parameters is propagated through the PCA fitting procedure, encoding the uncertainty in the edge direction and offset.
-
-### 3.4 Corner as Line Intersection
-
-The refined corner is the intersection of two adjacent homogeneous lines:
-
-$$\tilde{\mathbf{c}} = \mathbf{l}_1 \times \mathbf{l}_2$$
-
-The covariance of the homogeneous intersection point is propagated via the cross-product Jacobians:
-
-$$\boldsymbol{\Sigma}_{\tilde{\mathbf{c}}} = [\mathbf{l}_2]_\times \, \boldsymbol{\Sigma}_{\mathbf{l}_1} \, [\mathbf{l}_2]_\times^T + [\mathbf{l}_1]_\times \, \boldsymbol{\Sigma}_{\mathbf{l}_2} \, [\mathbf{l}_1]_\times^T$$
-
-where $[\mathbf{l}]_\times$ is the skew-symmetric cross-product matrix.
-
-### 3.5 Perspective Division to Affine Coordinates
-
-The Cartesian corner $\mathbf{c} = (\tilde{c}_x / \tilde{c}_w, \; \tilde{c}_y / \tilde{c}_w)$ and its $2 \times 2$ covariance are obtained via the Jacobian of perspective division:
-
-$$\mathbf{J}_\pi = \frac{1}{w} \begin{bmatrix} 1 & 0 & -x/w \\ 0 & 1 & -y/w \end{bmatrix}, \qquad \boldsymbol{\Sigma}_{\mathbf{c}} = \mathbf{J}_\pi \, \boldsymbol{\Sigma}_{\tilde{\mathbf{c}}} \, \mathbf{J}_\pi^T$$
-
-This $2 \times 2$ corner covariance feeds directly into the Accurate mode pose estimator as per-corner uncertainty.
-
-### 3.6 Adaptive Transversal Windowing
-
-The perpendicular search band for gradient sampling scales with edge length $L$:
-
-$$\text{half-width} = \max(2, \; 0.01 \cdot L) \text{ pixels}$$
-
-This prevents over-smoothing on short edges while capturing sufficient gradient evidence on long edges.
-
----
-
-## 4. IPPE-Square Pose Estimation
+## 3. IPPE-Square Pose Estimation
 
 **Module:** `pose.rs`
 
-### 4.1 Homography Normalization
+### 3.1 Homography Normalization
 
 The pixel-space homography $\mathbf{H}_\text{pixel}$ from `square_to_quad` is normalized by the inverse intrinsics:
 
@@ -207,7 +146,7 @@ The metric homography accounting for tag size $s$ and the modern OpenCV top-left
 
 $$\mathbf{H}_\text{metric} = \left[\frac{2}{s}\mathbf{h}_1, \; \frac{2}{s}\mathbf{h}_2, \; \mathbf{h}_3 - \mathbf{h}_1 - \mathbf{h}_2\right]$$
 
-### 4.2 Jacobian SVD Decomposition
+### 3.2 Jacobian SVD Decomposition
 
 The Jacobian $\mathbf{J} = [\mathbf{h}_1, \mathbf{h}_2]$ encodes the image-plane stretch. Its $2 \times 2$ Gram matrix:
 
@@ -217,13 +156,13 @@ has eigenvalues $\sigma_1^2, \sigma_2^2$ (singular values squared) computed anal
 
 $$\sigma_{1,2}^2 = \frac{\text{tr}(\mathbf{B}) \pm \sqrt{\text{tr}(\mathbf{B})^2 - 4 \det(\mathbf{B})}}{2}$$
 
-### 4.3 Dual Pose Solutions
+### 3.3 Dual Pose Solutions
 
 IPPE-Square produces **two** candidate poses from the SVD, corresponding to the two minima of the planar PnP error surface (the "Necker reversal" ambiguity). The candidate with the lower reprojection error is selected.
 
 **Frontal degeneracy:** When $|\sigma_1 - \sigma_2| < 10^{-4} \sigma_1$, the two solutions collapse. In this case, Gram-Schmidt orthonormalization of $[\mathbf{h}_1, \mathbf{h}_2, \mathbf{h}_1 \times \mathbf{h}_2]$ produces the rotation, and the translation scale $\gamma = (\sigma_1 + \sigma_2)/2$.
 
-### 4.4 Orthogonalization
+### 3.4 Orthogonalization
 
 The raw rotation estimate from the SVD is projected onto $SO(3)$ via polar decomposition:
 
@@ -233,18 +172,19 @@ ensuring $\det(\mathbf{R}) = +1$.
 
 ---
 
-## 5. Levenberg-Marquardt Pose Refinement
+## 4. Levenberg-Marquardt Pose Refinement
 
 The LM stage selects its cost surface from the availability of per-corner
-covariances — *not* a user mode flag. When covariances are present (the
-image view is supplied, as on every `detect()` call),
-the weighted-Mahalanobis path (§5.2) runs and returns a 6×6 pose
-covariance. When no image is available (e.g. a pure pose-only refit from
+covariances — *not* a user mode flag. When covariances are present (image
+view supplied to the detector, or external covariances passed by a direct
+caller of `pose::estimate_tag_pose_with_config`),
+the weighted-Mahalanobis path (§4.2) runs and returns a 6×6 pose
+covariance. When the caller skips both (e.g. a pure pose-only refit from
 pre-extracted corners), the LM falls back to the unweighted Huber path
-(§5.1) and reports no covariance. Both paths share the same IPPE-Square
+(§4.1) and reports no covariance. Both paths share the same IPPE-Square
 seed and the same Marquardt / Nielsen trust-region machinery.
 
-### 5.1 Unweighted Huber LM (fallback when covariances unavailable)
+### 4.1 Unweighted Huber LM (fallback when covariances unavailable)
 
 **Module:** `pose.rs` | **Function:** `refine_pose_lm`
 
@@ -304,7 +244,7 @@ The rotation update uses `UnitQuaternion::from_scaled_axis` for numerically stab
 
 ---
 
-### 5.2 Weighted LM (Mahalanobis Distance)
+### 4.2 Weighted LM (Mahalanobis Distance)
 
 **Module:** `pose_weighted.rs` | **Function:** `refine_pose_lm_weighted`
 
@@ -318,7 +258,7 @@ where:
 
 $$s_i = \sqrt{\mathbf{r}_i^T \mathbf{W}_i \mathbf{r}_i}$$
 
-is the Mahalanobis distance and $\mathbf{W}_i = \boldsymbol{\Sigma}_i^{-1}$ is the information matrix (inverse of the $2 \times 2$ corner covariance, from the Structure Tensor on the shipped profiles).
+is the Mahalanobis distance and $\mathbf{W}_i = \boldsymbol{\Sigma}_i^{-1}$ is the information matrix (inverse of the $2 \times 2$ corner covariance from the image Structure Tensor, or the caller-supplied external covariances).
 
 #### Huber-on-Mahalanobis IRLS
 
@@ -341,7 +281,7 @@ The Jacobian $\mathbf{J}_i$ has the same structure as in Fast mode.
 | Source | Method | Module |
 | :--- | :--- | :--- |
 | **Structure Tensor** | $\boldsymbol{\Sigma}_c \approx \sigma_n^2 \mathbf{S}^{-1}$ where $\mathbf{S}$ is the Sobel-based structure tensor | `pose_weighted.rs` |
-| **GWLF Propagation** (legacy mode, unused by the shipped profiles) | Formal covariance propagation through PCA line fitting and homogeneous intersection | `gwlf.rs` |
+| **External** | Caller-supplied $2 \times 2$ covariances (direct `pose::estimate_tag_pose_with_config` callers only; the detector pipeline always uses the Structure Tensor) | `pose.rs` |
 
 #### Gain-Scheduled Tikhonov Regularization
 
@@ -365,7 +305,7 @@ This encodes the full translational and rotational uncertainty and is returned a
 
 ---
 
-## 6. Decoding Strategies
+## 5. Decoding Strategies
 
 **Module:** `decoder.rs`, `strategy.rs`, `dictionaries.rs`
 
@@ -377,7 +317,7 @@ Each bit cell is sampled at its grid center via the homography DDA. The sampled 
 
 ---
 
-## 7. Board-Level Pose Estimation
+## 6. Board-Level Pose Estimation
 
 **Module:** `board.rs`, `charuco.rs`
 
@@ -385,7 +325,7 @@ Board pose estimation aggregates evidence from multiple detected tags into a sin
 
 ---
 
-### 7.1 AprilGrid: Tag-Corner Correspondences
+### 6.1 AprilGrid: Tag-Corner Correspondences
 
 **Struct:** `BoardEstimator`
 
@@ -403,7 +343,7 @@ where $\mathbf{o}_{\text{tag}}$ is the tag's top-left corner in board coordinate
 
 ---
 
-### 7.2 ChAruco: Saddle-Point Correspondences
+### 6.2 ChAruco: Saddle-Point Correspondences
 
 **Struct:** `CharucoRefiner`
 

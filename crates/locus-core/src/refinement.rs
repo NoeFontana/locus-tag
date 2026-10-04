@@ -1,68 +1,39 @@
-//! Corner-refinement dispatch.
+//! Corner refinement.
 //!
-//! Owns the [`crate::config::CornerRefinementMode`] decision across the
-//! pipeline's two refinement stages: [`refine_quad_corners`] runs per
-//! candidate during quad extraction, and [`apply_detector_gwlf`] runs
-//! batch-wise after the first homography pass. Both honour the
-//! per-candidate route from [`crate::quad::resolve_route`], so
-//! `AdaptivePpb` policies fire GWLF on the routes that ask for it.
+//! Owns the [`crate::config::CornerRefinementMode`] decision of the quad stage:
+//! [`refine_quad_corners`] runs per candidate during quad extraction and honours the
+//! per-candidate route from [`crate::quad::resolve_route`]. It also holds the sub-pixel
+//! pass that decoded markers go through ([`subpix_marker_corners`]).
 
 #![allow(clippy::cast_possible_wrap)]
 
 use bumpalo::Bump;
 
 use crate::Point;
-use crate::batch::{DetectionBatch, ROUTED_TO_HIGH};
-use crate::config::{
-    CornerRefinementMode, DetectorConfig, QuadExtractionMode, QuadExtractionPolicy,
-};
+use crate::config::CornerRefinementMode;
 use crate::image::ImageView;
-use crate::quad::{CornerCovariances, fit_edge_line, refine_edge_erf};
+use crate::quad::{CornerCovariances, refine_edge_erf};
 
 /// Per-candidate corner refinement dispatch.
 ///
-/// `route_extraction` and `route_refinement` come from
-/// [`crate::quad::resolve_route`]. Behaviour by cell:
-///
-/// | extractor    | mode  | quad-stage action                              |
-/// |--------------|-------|------------------------------------------------|
-/// | any          | None  | passthrough (propagates GN covariances)        |
-/// | any          | Erf   | per-corner PSF Gauss-Newton fit                |
-/// | ContourRdp   | Gwlf  | gradient-peak warm-start for GWLF              |
-/// | EdLines      | Gwlf  | passthrough (GN corners already sub-pixel)     |
-///
-/// The split on `Gwlf` is empirical: `ContourRdp`'s integer-precision
-/// corners need a sub-pixel warm-start before GWLF in
-/// [`apply_detector_gwlf`] converges reliably (no warm-start regresses
-/// mean RMSE +15 % and p90 rotation +210 % on the 1080p render-tag
-/// hub). EdLines' Gauss-Newton corners are already sub-pixel and a
-/// gradient-peak refit only degrades them.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "per-frame corner-refinement dispatch; arena, image, quad, covariances, the two route enums, sigma and decimation are distinct pipeline inputs and grouping them into a struct only adds indirection on the refinement hot path"
-)]
+/// `route_refinement` comes from [`crate::quad::resolve_route`]: `None` passes the
+/// extractor's corners (and its Gauss-Newton covariances) through; `Erf` runs the
+/// per-corner PSF Gauss-Newton fit.
 #[inline]
 pub(crate) fn refine_quad_corners(
     arena: &Bump,
     refinement_img: &ImageView,
     quad_pts: [Point; 4],
     gn_covs: CornerCovariances,
-    route_extraction: QuadExtractionMode,
     route_refinement: CornerRefinementMode,
     sigma: f64,
     decimation: usize,
 ) -> ([Point; 4], CornerCovariances) {
-    match (route_extraction, route_refinement) {
-        (_, CornerRefinementMode::None)
-        | (QuadExtractionMode::EdLines, CornerRefinementMode::Gwlf) => (quad_pts, gn_covs),
-        (_, CornerRefinementMode::Erf) => {
+    match route_refinement {
+        CornerRefinementMode::None => (quad_pts, gn_covs),
+        CornerRefinementMode::Erf => {
             let corners =
-                refine_all_quad_corners(arena, refinement_img, quad_pts, sigma, decimation, true);
-            (corners, [[0.0; 4]; 4])
-        },
-        (QuadExtractionMode::ContourRdp, CornerRefinementMode::Gwlf) => {
-            let corners =
-                refine_all_quad_corners(arena, refinement_img, quad_pts, sigma, decimation, false);
+                refine_all_quad_corners(arena, refinement_img, quad_pts, sigma, decimation);
             (corners, [[0.0; 4]; 4])
         },
     }
@@ -83,32 +54,16 @@ pub(crate) fn refine_all_quad_corners(
     pts: [Point; 4],
     sigma: f64,
     decimation: usize,
-    use_erf: bool,
 ) -> [Point; 4] {
     let lines: [Option<(f64, f64, f64)>; 4] = std::array::from_fn(|i| {
-        edge_line(
-            arena,
-            img,
-            pts[i],
-            pts[(i + 1) % 4],
-            sigma,
-            decimation,
-            use_erf,
-        )
+        refine_edge_erf(arena, img, pts[i], pts[(i + 1) % 4], sigma, decimation)
     });
     std::array::from_fn(|i| intersect_corner(pts[i], lines[(i + 3) % 4], lines[i], decimation))
 }
 
-/// Single-corner refinement: intersect two edge-line fits at point `p`,
+/// Single-corner refinement: intersect the ERF line fits of the two edges meeting at `p`,
 /// using its neighbours `p_prev` and `p_next` to define the edges.
-///
-/// `use_erf = true` runs the PSF-blurred Gauss-Newton fit ([`refine_edge_erf`]);
-/// `use_erf = false` runs the gradient-peak fit ([`fit_edge_line`]).
 #[cfg(test)]
-#[expect(
-    clippy::too_many_arguments,
-    reason = "single-corner refinement primitive; the point, its two neighbours, arena, image, sigma, decimation and use_erf flag are each distinct geometric or tuning inputs with no natural struct grouping"
-)]
 pub(crate) fn refine_corner(
     arena: &Bump,
     img: &ImageView,
@@ -117,30 +72,10 @@ pub(crate) fn refine_corner(
     p_next: Point,
     sigma: f64,
     decimation: usize,
-    use_erf: bool,
 ) -> Point {
-    let line1 = edge_line(arena, img, p_prev, p, sigma, decimation, use_erf);
-    let line2 = edge_line(arena, img, p, p_next, sigma, decimation, use_erf);
+    let line1 = refine_edge_erf(arena, img, p_prev, p, sigma, decimation);
+    let line2 = refine_edge_erf(arena, img, p, p_next, sigma, decimation);
     intersect_corner(p, line1, line2, decimation)
-}
-
-/// Line fit of the edge `a → b`: the ERF fit or the gradient-peak fit. Either is `None` only
-/// for an edge under 4 px (so the gradient-peak fit cannot stand in for a missing ERF fit); a
-/// failed ERF fit returns the unrefined line through `a → b`.
-fn edge_line(
-    arena: &Bump,
-    img: &ImageView,
-    a: Point,
-    b: Point,
-    sigma: f64,
-    decimation: usize,
-    use_erf: bool,
-) -> Option<(f64, f64, f64)> {
-    if use_erf {
-        refine_edge_erf(arena, img, a, b, sigma, decimation)
-    } else {
-        fit_edge_line(img, a, b, decimation)
-    }
 }
 
 /// Intersection of two edge lines as the refined corner, or `p` unchanged when the lines are
@@ -171,126 +106,6 @@ pub(crate) fn intersect_corner(
     }
 
     p
-}
-
-/// Resolves the per-candidate refinement mode from the persisted
-/// `route_label`. Mirrors [`crate::quad::resolve_route`]'s refinement
-/// branch for the post-extraction stage, where PPB is no longer in
-/// scope.
-#[inline]
-fn resolve_route_refinement(config: &DetectorConfig, route_label: u8) -> CornerRefinementMode {
-    match config.quad_extraction_policy {
-        QuadExtractionPolicy::Static => {
-            debug_assert_eq!(
-                route_label,
-                crate::batch::ROUTED_TO_STATIC,
-                "Static policy candidates must carry the ROUTED_TO_STATIC label",
-            );
-            config.refinement_mode
-        },
-        QuadExtractionPolicy::AdaptivePpb(cfg) => {
-            if route_label == ROUTED_TO_HIGH {
-                cfg.high_refinement
-            } else {
-                cfg.low_refinement
-            }
-        },
-    }
-}
-
-/// Returns `true` if any route under the active policy resolves to
-/// `Gwlf`. Used as the fast-exit gate of [`apply_detector_gwlf`].
-#[inline]
-fn any_route_uses_gwlf(config: &DetectorConfig) -> bool {
-    match config.quad_extraction_policy {
-        QuadExtractionPolicy::Static => config.refinement_mode == CornerRefinementMode::Gwlf,
-        QuadExtractionPolicy::AdaptivePpb(cfg) => {
-            cfg.low_refinement == CornerRefinementMode::Gwlf
-                || cfg.high_refinement == CornerRefinementMode::Gwlf
-        },
-    }
-}
-
-/// Detector-level GWLF refinement pass.
-///
-/// Iterates the batch and runs GWLF on every candidate whose
-/// route-resolved refinement is `Gwlf`. On success, overwrites corners
-/// and writes the calibrated 2×2 covariances. On failure, leaves the
-/// quad-stage corners in place — those are already extractor-appropriate
-/// (Edge-warm-started for `ContourRdp+Gwlf`; pristine Gauss-Newton for
-/// `EdLines+Gwlf`).
-///
-/// Returns `Some((fallback_count, avg_delta))` when at least one
-/// candidate routed to `Gwlf`; the caller must then recompute
-/// homographies, since corners may have moved. Returns `None`
-/// otherwise.
-pub(crate) fn apply_detector_gwlf(
-    batch: &mut DetectionBatch,
-    n: usize,
-    refinement_img: &ImageView,
-    config: &DetectorConfig,
-) -> Option<(usize, f32)> {
-    if !any_route_uses_gwlf(config) {
-        return None;
-    }
-
-    let mut gwlf_fallback_count: usize = 0;
-    let mut total_delta = 0.0f32;
-    let mut count: usize = 0;
-
-    for i in 0..n {
-        // Candidates the contrast funnel already rejected are never decoded: skip them.
-        if batch.status_mask[i] != crate::batch::CandidateState::Active
-            || resolve_route_refinement(config, batch.routed_to[i]) != CornerRefinementMode::Gwlf
-        {
-            continue;
-        }
-
-        let coarse = [
-            [batch.corners[i][0].x, batch.corners[i][0].y],
-            [batch.corners[i][1].x, batch.corners[i][1].y],
-            [batch.corners[i][2].x, batch.corners[i][2].y],
-            [batch.corners[i][3].x, batch.corners[i][3].y],
-        ];
-
-        if let Some((refined, covs)) = crate::gwlf::refine_quad_gwlf_with_cov(
-            refinement_img,
-            &coarse,
-            config.gwlf_transversal_alpha,
-        ) {
-            for j in 0..4 {
-                let dx = refined[j][0] - coarse[j][0];
-                let dy = refined[j][1] - coarse[j][1];
-                total_delta += (dx * dx + dy * dy).sqrt();
-                count += 1;
-
-                batch.corners[i][j].x = refined[j][0];
-                batch.corners[i][j].y = refined[j][1];
-
-                batch.corner_covariances[i][j * 4] = covs[j][(0, 0)] as f32;
-                batch.corner_covariances[i][j * 4 + 1] = covs[j][(0, 1)] as f32;
-                batch.corner_covariances[i][j * 4 + 2] = covs[j][(1, 0)] as f32;
-                batch.corner_covariances[i][j * 4 + 3] = covs[j][(1, 1)] as f32;
-            }
-        } else {
-            // Quad-stage refinement already placed sensible corners in
-            // the batch (Edge warm-start for ContourRdp+Gwlf, GN pristine
-            // for EdLines+Gwlf). Leave them alone; just count the failure.
-            gwlf_fallback_count += 1;
-        }
-    }
-
-    if count == 0 && gwlf_fallback_count == 0 {
-        return None;
-    }
-
-    let gwlf_avg_delta = if count > 0 {
-        total_delta / count as f32
-    } else {
-        0.0
-    };
-
-    Some((gwlf_fallback_count, gwlf_avg_delta))
 }
 
 /// Mean side length of a quad.

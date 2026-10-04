@@ -15,7 +15,7 @@
 //! The image rotation is a pure integer transpose-flip (no interpolation), so
 //! the property is mathematically exact on the pixel grid; the only source of
 //! slack is sub-pixel corner refinement. 1 px tolerance is enough to allow for
-//! convergence-basin differences between edge orientations in GWLF but tight
+//! convergence-basin differences between edge orientations in the ERF fit but tight
 //! enough to catch a genuine corner-ordering bug.
 
 use locus_core::bench_api::family_to_decoder;

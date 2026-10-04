@@ -336,7 +336,7 @@ fn refine_decode_first_seed(
     let sigma = config.subpixel_refinement_sigma;
     let pts = seed.map(|p| crate::Point { x: p[0], y: p[1] });
     let quad =
-        crate::refinement::refine_all_quad_corners(arena, img, pts, sigma, config.decimation, true);
+        crate::refinement::refine_all_quad_corners(arena, img, pts, sigma, config.decimation);
     crate::quad::edge_contrast_exceeds(img, quad, &[0.0], config.quad_min_edge_score)
         .then(|| refine_corners_erf(arena, img, &quad.map(|p| [p.x, p.y]), sigma))
 }
@@ -1803,10 +1803,7 @@ pub fn decode_batch_soa(
                             })
                         } {
                             match config.refinement_mode {
-                                crate::config::CornerRefinementMode::None
-                                | crate::config::CornerRefinementMode::Gwlf => {
-                                    // Gwlf not ported to SoA yet.
-                                },
+                                crate::config::CornerRefinementMode::None => {},
                                 crate::config::CornerRefinementMode::Erf => {
                                     let nudge = 0.2;
                                     let mut current_corners = *corners;
