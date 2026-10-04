@@ -206,7 +206,7 @@ impl<'a> ErfEdgeFitter<'a> {
     /// Every offset keeps the pixels with `|n·p + d + offset| < 1`, so all of them lie within
     /// 3.4 px of the line: their projected gradients are sampled once into `arena` and each
     /// offset sums the cached values in the same row-major order, with the same distance
-    /// expression, as a per-offset scan would (`project_gradients_optimized`).
+    /// expression, as a per-offset scan would.
     pub fn scan_initial_d(&mut self, arena: &'a Bump) {
         // Any pixel an offset keeps satisfies |n·p + d| < 1 + 2.4; the margin covers rounding.
         const REACH: f64 = 3.5;
@@ -445,12 +445,12 @@ fn estimate_ab_oneshot(samples: &[(f64, f64, f64)], nx: f64, ny: f64, d: f64) ->
     (dark_sum / dark_weight, light_sum / light_weight)
 }
 
-/// Per-iteration A/B estimation using bilinear sampling (decoder-style).
+/// Per-iteration A/B estimation (decoder-style).
 ///
-/// Re-reads intensities via bilinear interpolation each iteration to track
-/// the line as `d` evolves. Returns `None` when either side lacks weight —
-/// callers are expected to keep the previous iteration's estimate in that
-/// case, matching the legacy decoder behavior.
+/// Re-classifies the collected samples (their cached pixel values) against the current line
+/// each iteration, so the dark and light means track the line as `d` evolves. Returns `None`
+/// when either side lacks weight — callers are expected to keep the previous iteration's
+/// estimate in that case, matching the legacy decoder behavior.
 fn estimate_ab_per_iter(
     samples: &[(f64, f64, f64)],
     nx: f64,
@@ -635,95 +635,6 @@ fn refine_accumulate_optimized(
 
 // ── SIMD-Accelerated Sample Collection ───────────────────────────────────────
 
-/// Gradient projection for one trial offset of the d-scan: the sum of `|gradient · normal|`
-/// over the pixels within one pixel of the line. `ErfEdgeFitter::scan_initial_d` computes all
-/// offsets from one cached pass; this per-offset scan is its test reference.
-#[cfg(test)]
-#[multiversion(targets(
-    "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
-    "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
-    "aarch64+neon"
-))]
-#[expect(
-    clippy::too_many_arguments,
-    reason = "multiversioned SIMD gradient-projection kernel; the edge normal, ROI bounds (x0/x1/y0/y1) and scan offset are passed as flat scalars so the vectorized inner loop stays register-friendly"
-)]
-fn project_gradients_optimized(
-    img: &ImageView,
-    nx: f64,
-    ny: f64,
-    x0: usize,
-    x1: usize,
-    y0: usize,
-    y1: usize,
-    scan_d: f64,
-) -> (f64, usize) {
-    let mut sum_g = 0.0;
-    let mut count = 0;
-
-    for py in y0..=y1 {
-        let y = py as f64 + 0.5;
-        // Only columns that can lie in the band; the per-pixel tests below are unchanged.
-        let Some((mut px, x1)) = band_columns(nx, ny * y + scan_d, 1.0, x0, x1) else {
-            continue;
-        };
-
-        #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
-        if let Some(_dispatch) = multiversion::target::x86_64::avx2::get() {
-            // SAFETY: AVX2 intrinsics guarded by cfg and runtime dispatch.
-            unsafe {
-                use std::arch::x86_64::*;
-                let v_nx = _mm256_set1_pd(nx);
-                let v_ny = _mm256_set1_pd(ny);
-                let v_scan_d = _mm256_set1_pd(scan_d);
-                let v_y = _mm256_set1_pd(y);
-                let v_abs_mask = _mm256_set1_pd(-0.0);
-
-                while px + 4 <= x1 {
-                    let v_x = _mm256_set_pd(
-                        (px + 3) as f64 + 0.5,
-                        (px + 2) as f64 + 0.5,
-                        (px + 1) as f64 + 0.5,
-                        px as f64 + 0.5,
-                    );
-
-                    let v_dist = _mm256_add_pd(
-                        _mm256_add_pd(_mm256_mul_pd(v_nx, v_x), _mm256_mul_pd(v_ny, v_y)),
-                        v_scan_d,
-                    );
-
-                    let v_abs_dist = _mm256_andnot_pd(v_abs_mask, v_dist);
-                    let v_cmp = _mm256_cmp_pd(v_abs_dist, _mm256_set1_pd(1.0), _CMP_LT_OQ);
-                    let mask = _mm256_movemask_pd(v_cmp);
-
-                    if mask != 0 {
-                        for j in 0..4 {
-                            if (mask >> j) & 1 != 0 {
-                                let g = img.sample_gradient_bilinear((px + j) as f64 + 0.5, y);
-                                sum_g += (g[0] * nx + g[1] * ny).abs();
-                                count += 1;
-                            }
-                        }
-                    }
-                    px += 4;
-                }
-            }
-        }
-
-        while px <= x1 {
-            let x = px as f64 + 0.5;
-            let dist = nx * x + ny * y + scan_d;
-            if dist.abs() < 1.0 {
-                let g = img.sample_gradient_bilinear(x, y);
-                sum_g += (g[0] * nx + g[1] * ny).abs();
-                count += 1;
-            }
-            px += 1;
-        }
-    }
-    (sum_g, count)
-}
-
 /// SIMD-accelerated sample collection (stride = 1).
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
@@ -892,6 +803,30 @@ fn collect_samples_strided<'a>(
 mod tests {
     use super::*;
 
+    /// Gradient projection for one trial offset of the d-scan: the sum of `|gradient · normal|`
+    /// over the pixel centres within one pixel of the line, in row-major order — the
+    /// per-offset scan `ErfEdgeFitter::scan_initial_d` replaces with one cached pass.
+    fn project_gradients_reference(
+        img: &ImageView,
+        nx: f64,
+        ny: f64,
+        (x0, x1, y0, y1): (usize, usize, usize, usize),
+        scan_d: f64,
+    ) -> (f64, usize) {
+        let (mut sum_g, mut count) = (0.0, 0usize);
+        for py in y0..=y1 {
+            for px in x0..=x1 {
+                let (x, y) = (px as f64 + 0.5, py as f64 + 0.5);
+                if (nx * x + ny * y + scan_d).abs() < 1.0 {
+                    let g = img.sample_gradient_bilinear(x, y);
+                    sum_g += (g[0] * nx + g[1] * ny).abs();
+                    count += 1;
+                }
+            }
+        }
+        (sum_g, count)
+    }
+
     proptest::proptest! {
         /// The cached d-scan picks exactly the offset that 13 per-offset scans pick.
         #[test]
@@ -922,7 +857,7 @@ mod tests {
             for k in -6..=6 {
                 let offset = f64::from(k) * 0.4;
                 let (sum_g, count) =
-                    project_gradients_optimized(&img, nx, ny, x0, x1, y0, y1, d + offset);
+                    project_gradients_reference(&img, nx, ny, (x0, x1, y0, y1), d + offset);
                 if count > 0 && sum_g > best_grad {
                     best_grad = sum_g;
                     best_offset = offset;
@@ -962,42 +897,6 @@ mod tests {
         }
     }
     use crate::test_utils::subpixel::{Line, SubpixelEdgeRenderer};
-
-    /// The SIMD and scalar paths of `project_gradients_optimized` must sample the same
-    /// pixel centres (`px + 0.5`): compare against a scalar reference on a slanted edge.
-    #[test]
-    fn project_gradients_simd_matches_scalar_reference() {
-        let (width, height) = (64, 48);
-        let renderer = SubpixelEdgeRenderer::new(width, height)
-            .with_intensities(30.0, 220.0)
-            .with_sigma(0.8);
-        let line = Line::from_points_cw([10.3, 4.0], [41.7, 44.0]);
-        let data = renderer.render_edge_u8(&line);
-        let img = ImageView::new(&data, width, height, width).expect("invalid image view");
-        let (dx, dy) = (41.7 - 10.3, 44.0 - 4.0);
-        let len = f64::hypot(dx, dy);
-        let (nx, ny) = (-dy / len, dx / len);
-        for scan_d in [-20.0, -18.7, -17.25] {
-            let (x0, x1, y0, y1) = (2, 60, 2, 45);
-            let (sum, count) = project_gradients_optimized(&img, nx, ny, x0, x1, y0, y1, scan_d);
-            let (mut ref_sum, mut ref_count) = (0.0, 0usize);
-            for py in y0..=y1 {
-                for px in x0..=x1 {
-                    let (x, y) = (px as f64 + 0.5, py as f64 + 0.5);
-                    if (nx * x + ny * y + scan_d).abs() < 1.0 {
-                        let g = img.sample_gradient_bilinear(x, y);
-                        ref_sum += (g[0] * nx + g[1] * ny).abs();
-                        ref_count += 1;
-                    }
-                }
-            }
-            assert_eq!(count, ref_count, "scan_d={scan_d}");
-            assert!(
-                (sum - ref_sum).abs() < 1e-9 * ref_sum.max(1.0),
-                "scan_d={scan_d}: optimized {sum} vs reference {ref_sum}"
-            );
-        }
-    }
 
     #[test]
     fn quad_style_recovers_axis_aligned_subpixel_edge() {

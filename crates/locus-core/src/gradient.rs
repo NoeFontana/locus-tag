@@ -813,8 +813,22 @@ fn angle_diff(a: f32, b: f32) -> f32 {
     diff.min(std::f32::consts::PI - diff)
 }
 
-/// Estimate per-image additive Gaussian noise σ via the robust Immerkær (1996)
-/// Laplacian estimator. Returns σ in pixel-intensity units (same scale as the
+/// Estimate per-image additive Gaussian noise σ via the robust Immerkær (1996) Laplacian
+/// estimator on every pixel. Returns σ in pixel-intensity units (same scale as the input
+/// image's u8 values). A diagnostic, e.g. for checking a configured `sigma_n_sq` against the
+/// observed noise; the estimator is documented on the crate-internal `estimate_noise_sigma`.
+#[must_use]
+pub fn compute_image_noise_floor(img: &ImageView) -> f64 {
+    estimate_noise_sigma(img, 1)
+}
+
+/// Bins of the `|L|` histogram behind [`estimate_noise_sigma`]: one per possible value.
+/// The kernel's positive (and negative) coefficients sum to 8, so `|L| ≤ 8 · 255 = 2040`
+/// and the median is exact for every input (8 KB of stack, once per frame).
+const NOISE_HIST_BINS: usize = 8 * 255 + 1;
+
+/// Estimate additive Gaussian noise σ via the robust Immerkær (1996) Laplacian estimator, on
+/// every `stride`-th pixel in x and y. Returns σ in pixel-intensity units (same scale as the
 /// input image's u8 values).
 ///
 /// The kernel
@@ -832,25 +846,9 @@ fn angle_diff(a: f32, b: f32) -> f32 {
 /// edges, which would otherwise inflate the estimate. The kernel has squared-
 /// coefficient sum 36 (norm 6), and σ ≈ MAD / 0.6745 for Gaussian noise.
 ///
-/// Used by Phase 0 rotation-tail diagnostics to verify configured `sigma_n_sq`
-/// matches observed noise. Phase 3 will reuse this for adaptive σ.
-#[must_use]
-pub fn compute_image_noise_floor(img: &ImageView) -> f64 {
-    estimate_noise_sigma(img, 1)
-}
-
-/// Bins of the `|L|` histogram behind [`estimate_noise_sigma`]: one per possible value.
-/// The kernel's positive (and negative) coefficients sum to 8, so `|L| ≤ 8 · 255 = 2040`
-/// and the median is exact for every input (8 KB of stack, once per frame).
-const NOISE_HIST_BINS: usize = 8 * 255 + 1;
-
-/// Immerkær noise estimate (σ, grey levels) on every `stride`-th pixel in x and y.
-///
-/// Same estimator as [`compute_image_noise_floor`] — the median of `|L|` over the 3×3
-/// Laplacian-difference kernel, divided by `0.6745 · 6` — but allocation-free: `|L|` is an
-/// integer, so a stack histogram yields the exact median. `stride` trades samples for time
-/// (the per-frame hot path uses [`noise_stride`]); `stride = 1` reproduces the dense
-/// estimate.
+/// Allocation-free: `|L|` is an integer, so a stack histogram yields the exact median.
+/// `stride` trades samples for time (the per-frame hot path uses [`noise_stride`]);
+/// `stride = 1` is the dense estimate ([`compute_image_noise_floor`]).
 #[must_use]
 pub fn estimate_noise_sigma(img: &ImageView, stride: usize) -> f64 {
     let (width, height) = (img.width, img.height);
