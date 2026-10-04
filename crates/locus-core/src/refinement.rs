@@ -145,8 +145,9 @@ fn edge_line(
 }
 
 /// Intersection of two edge lines as the refined corner, or `p` unchanged when the lines are
-/// missing, near-parallel, or meet farther than the sanity radius from `p`.
-fn intersect_corner(
+/// missing, near-parallel, or meet farther than the sanity radius from `p` (2 px, plus the
+/// decimation factor when decimated).
+pub(crate) fn intersect_corner(
     p: Point,
     line1: Option<(f64, f64, f64)>,
     line2: Option<(f64, f64, f64)>,
