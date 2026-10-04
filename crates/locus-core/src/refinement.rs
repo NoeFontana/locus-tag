@@ -296,6 +296,9 @@ pub(crate) fn apply_detector_gwlf(
 /// Window half-width bounds of [`corner_subpix`] (px); see [`corner_subpix_half_windows`].
 const SUBPIX_MIN_HALF: u32 = 2;
 const SUBPIX_MAX_HALF: u32 = 4;
+/// Distance (px) the smallest [`corner_subpix`] patch reaches from its corner: the window
+/// half-width plus the ring its central-difference gradients read.
+pub(crate) const MIN_CORNER_SUPPORT_PX: f32 = (SUBPIX_MIN_HALF + 1) as f32;
 /// Candidate window half-widths as fractions of the marker cell.
 const SUBPIX_CELL_FRACTIONS: [f64; 3] = [0.3, 0.5, 0.75];
 /// Largest fraction of a cell the smallest (2 px) window may cover: markers with cells under
@@ -393,35 +396,34 @@ pub(crate) fn subpix_marker_corners(
     let mut refined_bits = 0u8;
     let mut picks = [None::<Subpix>; 4];
     for j in 0..4 {
-        // Accepted solutions, ascending window size.
-        let mut accepted = [None::<Subpix>; 3];
-        for (slot, &half) in accepted.iter_mut().zip(&halves[..count]) {
-            *slot = corner_subpix(img, seed[j], half).filter(|refined| {
-                marker_corner_consistent(
-                    img,
-                    refined.corner,
-                    seed[(j + 3) % 4],
-                    seed[(j + 1) % 4],
-                    seed[j],
-                    probe,
-                )
-            });
-        }
-        let least = accepted
-            .iter()
-            .flatten()
-            .map(|r| r.uncertainty)
-            .fold(f64::INFINITY, f64::min);
-        // The largest window that is not significantly less certain than the best one.
-        if let Some(pick) = accepted
-            .iter()
-            .flatten()
-            .rev()
-            .find(|r| r.uncertainty <= SUBPIX_SIGNIFICANT_RATIO * least)
-        {
+        let (prev, next) = (seed[(j + 3) % 4], seed[(j + 1) % 4]);
+        if let Some(pick) = marker_junction(img, seed[j], prev, next, &halves[..count], probe) {
             out[j] = pick.corner;
             refined_bits |= 1 << j;
-            picks[j] = Some(*pick);
+            picks[j] = Some(pick);
+        }
+    }
+    // A corner the junction model rejects while both neighbours pass is usually not near the
+    // marker's corner at all: quad extraction cut across a blurred apex or a touching square,
+    // and no window reaches the junction. Its two edges still run straight from the good
+    // neighbours, so they place it. A repaired corner can make its neighbour repairable, so
+    // the sweep repeats until no corner changes.
+    let mut repaired = count > 0;
+    while repaired {
+        repaired = false;
+        for j in 0..4 {
+            let (p, n) = ((j + 3) % 4, (j + 1) % 4);
+            if picks[j].is_none()
+                && picks[p].is_some()
+                && picks[n].is_some()
+                && let Some(pick) =
+                    repair_corner(img, &out, j, side, cells, &halves[..count], probe)
+            {
+                out[j] = pick.corner;
+                refined_bits |= 1 << j;
+                picks[j] = Some(pick);
+                repaired = true;
+            }
         }
     }
     // Fuse each L-corner with the intersection of its two whole-edge lines. Under lens
@@ -464,6 +466,82 @@ pub(crate) fn subpix_marker_corners(
     }
     out = fused;
     (out, refined_bits)
+}
+
+/// The marker junction near `seed` (adjacent corners `prev`, `next`): [`corner_subpix`] at each
+/// window half-width in `halves` (ascending), keeping solutions that pass
+/// [`marker_corner_consistent`], and of those the largest window that is not significantly
+/// less certain than the best one.
+fn marker_junction(
+    img: &ImageView,
+    seed: [f64; 2],
+    prev: [f64; 2],
+    next: [f64; 2],
+    halves: &[u32],
+    probe: f64,
+) -> Option<Subpix> {
+    let mut accepted = [None::<Subpix>; 3];
+    for (slot, &half) in accepted.iter_mut().zip(halves) {
+        *slot = corner_subpix(img, seed, half).filter(|refined| {
+            marker_corner_consistent(img, refined.corner, prev, next, seed, probe)
+        });
+    }
+    let least = accepted
+        .iter()
+        .flatten()
+        .map(|r| r.uncertainty)
+        .fold(f64::INFINITY, f64::min);
+    accepted
+        .iter()
+        .flatten()
+        .rev()
+        .find(|r| r.uncertainty <= SUBPIX_SIGNIFICANT_RATIO * least)
+        .copied()
+}
+
+/// Largest repair, as a fraction of the marker side: a quarter side is two to three cells.
+const REPAIR_MAX_SIDE_FRACTION: f64 = 0.25;
+/// Edge refits of a repair, and the corner step (px) under which they stop.
+const REPAIR_ITERATIONS: usize = 4;
+const REPAIR_TOLERANCE_PX: f64 = 0.05;
+
+/// Re-places corner `j` of `quad`, whose neighbours are good, at the crossing of its two edges.
+///
+/// Each edge is fitted on its half next to the good neighbour: a seed `e` px off moves the
+/// seed line at most `0.43·e` from the true edge there, while the half next to the bad seed
+/// may miss the edge entirely; the fit is repeated from each new crossing. The result must
+/// then be confirmed as a marker junction by [`marker_junction`], so a repair is never weaker
+/// evidence than an ordinary refined corner.
+fn repair_corner(
+    img: &ImageView,
+    quad: &[[f64; 2]; 4],
+    j: usize,
+    side: f64,
+    cells: usize,
+    halves: &[u32],
+    probe: f64,
+) -> Option<Subpix> {
+    let (prev, seed, next) = (quad[(j + 3) % 4], quad[j], quad[(j + 1) % 4]);
+    let half = (0.5 * side / cells.max(1) as f64).clamp(2.0, EDGE_MAX_HALF_PX);
+    let mid = |a: [f64; 2], b: [f64; 2]| [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
+    let sample = |x: f64, y: f64| img.sample_bilinear(x, y);
+    // An edge near the rim of the band pulls the station centroids towards the band centre, so
+    // one fit only moves part way; refitting from each new crossing converges.
+    let mut corner = seed;
+    for _ in 0..REPAIR_ITERATIONS {
+        let before = fit_marker_edge(&sample, prev, mid(prev, corner), half)?;
+        let after = fit_marker_edge(&sample, mid(corner, next), next, half)?;
+        let (crossing, _) = intersect_edges(&before, &after)?;
+        let step = (crossing[0] - corner[0]).hypot(crossing[1] - corner[1]);
+        corner = crossing;
+        if step < REPAIR_TOLERANCE_PX {
+            break;
+        }
+    }
+    if (corner[0] - seed[0]).hypot(corner[1] - seed[1]) > REPAIR_MAX_SIDE_FRACTION * side {
+        return None;
+    }
+    marker_junction(img, corner, prev, next, halves, probe)
 }
 
 /// Inverse-covariance fusion of two corner estimates `a`, `b` with covariances `[xx, xy, yy]`.
@@ -1045,6 +1123,36 @@ mod subpix_tests {
         let board = squares(&[[20, 44, 20, 44], [4, 14, 4, 14]]);
         let img = ImageView::new(&board, W, W, W).unwrap();
         assert!(!consistent(&img, [14.0, 14.0], prev, next, at, 3.0));
+    }
+
+    /// A marker seeded with one corner 4 px off its junction, along an edge (quad extraction
+    /// cutting across a blurred apex): the junction model rejects that seed, and the corner
+    /// is re-placed from its two edges; the good corners are untouched.
+    #[test]
+    fn repairs_a_corner_seeded_off_the_junction() {
+        use super::subpix_marker_corners;
+        // 8-cell marker [16, 48)² (4 px cells): a one-cell black ring around a bright payload
+        // with one dark bit, on a bright quiet zone.
+        let mut data = squares(&[[16, 48, 16, 48]]);
+        for y in 20..44 {
+            for x in 20..44 {
+                data[y * W + x] = if (28..32).contains(&x) && (24..28).contains(&y) {
+                    40
+                } else {
+                    220
+                };
+            }
+        }
+        let img = ImageView::new(&data, W, W, W).unwrap();
+        let truth = [[16.0, 16.0], [48.0, 16.0], [48.0, 48.0], [16.0, 48.0]];
+        let mut seed = truth;
+        seed[2] = [48.0, 44.0];
+        let (got, bits) = subpix_marker_corners(&img, seed, 8, true);
+        assert_eq!(bits, 0b1111);
+        for (g, t) in got.iter().zip(&truth) {
+            let d = (g[0] - t[0]).hypot(g[1] - t[1]);
+            assert!(d < 0.3, "{got:?} vs {truth:?}");
+        }
     }
 
     /// A tilted, anti-aliased straight edge: dark where `(p − origin)·normal > 0`.

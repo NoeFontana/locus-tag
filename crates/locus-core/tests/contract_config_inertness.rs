@@ -640,7 +640,7 @@ fn cases() -> Vec<FieldCase> {
         FieldCase {
             field: "segmentation_connectivity",
             base: noop,
-            mutate: |c| c.segmentation_connectivity = SegmentationConnectivity::Four,
+            mutate: |c| c.segmentation_connectivity = SegmentationConnectivity::Eight,
             inert_reason: None,
         },
         FieldCase {
@@ -672,8 +672,10 @@ fn cases() -> Vec<FieldCase> {
         },
         FieldCase {
             field: "decoder_max_border_error_rate",
-            base: noop,
-            // Observable only on `BORDER_PROBE`, whose ring has 3 bright cells.
+            // Observable only on `BORDER_PROBE`, whose ring has 3 bright cells. 4-connected
+            // segmentation splits that broken ring into arcs, so no candidate reaches the
+            // budget; 8-connected keeps the marker one component.
+            base: |c| c.segmentation_connectivity = SegmentationConnectivity::Eight,
             mutate: |c| c.decoder_max_border_error_rate = Some(1.0),
             inert_reason: None,
         },

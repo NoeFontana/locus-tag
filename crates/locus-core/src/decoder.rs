@@ -438,6 +438,27 @@ const RECOVERY_FALSE_TRIGGER_RATE: f64 = 0.1;
 /// near-misses spread over the whole range; this skips 75–90 % of the futile ones.
 const RECOVERY_RING_MAX_ERROR_RATE: f32 = 0.2;
 
+/// Whether a decoded outline is observed rather than cut by the frame of a `width × height`
+/// image (pixel `(i, j)` spans `[i, i + 1] × [j, j + 1]`).
+///
+/// A marker the frame cuts reports the frame edge as one of its sides and a clipped corner
+/// where the printed one lies outside (EuRoC: 4–5 px off on 10 of 11 border false positives).
+/// So every corner must lie in the image, and every side's middle at least the reach of the
+/// smallest corner window from the border: closer, the side's outer half is not seen and it
+/// cannot be told from the frame edge. A corner may touch the border: there its two edges
+/// still place it (tag16h5 render: a corner 0.5 px from the border, 0.1 px from the truth).
+#[allow(clippy::cast_precision_loss)]
+fn outline_observed(corners: &[Point2f; 4], width: usize, height: usize) -> bool {
+    let (w, h) = (width as f32, height as f32);
+    let margin = |x: f32, y: f32| x.min(y).min(w - x).min(h - y);
+    (0..4).all(|j| {
+        let (a, b) = (corners[j], corners[(j + 1) % 4]);
+        margin(a.x, a.y) >= 0.0
+            && margin(0.5 * (a.x + b.x), 0.5 * (a.y + b.y))
+                >= crate::refinement::MIN_CORNER_SUPPORT_PX
+    })
+}
+
 /// Largest `h` with `4 · num_codes · Σ_{k ≤ h} C(bit_count, k) / 2^bit_count ≤
 /// RECOVERY_FALSE_TRIGGER_RATE`: the union bound, over every rotated code, on the probability
 /// that random bits land within `h` of one. 36h11 → 6 (0.08), ArUcoMip36h12 → 6 (0.03),
@@ -2173,6 +2194,12 @@ pub(crate) fn decode_batch_soa_generic(
                     }
                 }
 
+                if *status_slot == CandidateState::Valid
+                    && !outline_observed(corners_slot, img.width, img.height)
+                {
+                    *status_slot = CandidateState::FailedDecode;
+                }
+
                 // Apply rotation reorder, if any.
                 if state == CandidateState::Valid && rot > 0 {
                     let mut temp_corners = [Point2f::default(); 4];
@@ -2539,6 +2566,35 @@ pub fn family_to_decoder(family: config::TagFamily) -> Box<dyn TagDecoder + Send
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn outline_observed_rejects_markers_the_frame_cuts() {
+        let p = |x: f32, y: f32| Point2f { x, y };
+        let (w, h) = (64, 48);
+        // A corner touching the border is still observed.
+        assert!(outline_observed(
+            &[p(20.0, 0.5), p(40.0, 12.0), p(28.0, 30.0), p(8.0, 18.0)],
+            w,
+            h
+        ));
+        // A corner outside the image.
+        assert!(!outline_observed(
+            &[p(20.0, -0.5), p(40.0, 12.0), p(28.0, 30.0), p(8.0, 18.0)],
+            w,
+            h
+        ));
+        // A side running along the bottom border: the frame edge, not a marker edge.
+        assert!(!outline_observed(
+            &[p(10.0, 20.0), p(30.0, 20.0), p(30.0, 46.0), p(10.0, 46.5)],
+            w,
+            h
+        ));
+        assert!(outline_observed(
+            &[p(10.0, 20.0), p(30.0, 20.0), p(30.0, 44.0), p(10.0, 44.5)],
+            w,
+            h
+        ));
+    }
 
     proptest! {
         #[test]

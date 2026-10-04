@@ -72,8 +72,10 @@ fn test_failed_decode_telemetry() {
         .expect("detection failed");
 
     assert_eq!(batch.len(), 0);
-    assert_eq!(batch.rejected_corners.len(), 1);
-    assert!(batch.rejected_error_rates[0] > 0.0);
+    // The corrupted marker's failed decode reports its bit errors. Without blob-shape gates
+    // its inner components reach the decoder too, so the count is not fixed.
+    assert!(!batch.rejected_corners.is_empty());
+    assert!(batch.rejected_error_rates.iter().any(|&e| e > 0.0));
 }
 
 #[test]

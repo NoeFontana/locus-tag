@@ -210,7 +210,7 @@
           "type": "number"
         },
         "max_elongation": {
-          "default": 20.0,
+          "default": 0.0,
           "minimum": 0.0,
           "title": "Max Elongation",
           "type": "number"
@@ -229,7 +229,7 @@
           "type": "integer"
         },
         "min_density": {
-          "default": 0.15,
+          "default": 0.0,
           "maximum": 1.0,
           "minimum": 0.0,
           "title": "Min Density",
@@ -248,7 +248,7 @@
           "type": "number"
         },
         "min_fill_ratio": {
-          "default": 0.1,
+          "default": 0.0,
           "maximum": 1.0,
           "minimum": 0.0,
           "title": "Min Fill Ratio",

@@ -1,7 +1,7 @@
 # Recall, quad extraction & ICRA — lessons
 
 **Status:** ACTIVE — the 2026-07 issues are CLOSED (fixes shipped; `max_recall_adaptive` removed); the [2026-10-01 real-image recall](#2026-10-01-real-image-recall-liu4k-euroc-the-segmentation-model) findings are open.
-**Last updated:** 2026-10-01
+**Last updated:** 2026-10-04
 **Owning code:** quad extraction (`extract_quads_soa` / `extract_quads_soa_with_camera` and `pixel_count_descending_order` in the quad module), the AdaptivePpb extraction router (`quad.extraction_policy`), the decoder Hamming/bit-sample path, and the shipped profiles under `crates/locus-core/profiles/` (`standard.json`, `high_accuracy.json`).
 
 ## TL;DR
@@ -99,6 +99,87 @@ off): ICRA forward −0.36 pp recall and +0.019 px corner RMSE (0.280 → 0.298)
 `tag16h5` precision (RC2); serial latency (L1). Sharpening, and PR #384's shoot-limited
 variant, are a crutch for RC1 on the ContourRdp route; on Liu4K, sharpening off is best
 once the threshold model is fixed.
+
+## 2026-10-04 — EuRoC, the only real-data benchmark: scorer, connectivity, clipped and gross corners
+
+**Status:** SHIPPED in `standard`: 4-connectivity and no blob gates; the gross-corner repair
+and the frame-clipping rejection are in every profile. OPEN: a cut below the local
+midpoint, and a merge-robust quad seed. Numbers:
+[`benchmarking/euroc_sota_20261004.md`](../benchmarking/euroc_sota_20261004.md).
+
+**1. Fix the measurement first.** EuRoC has no per-corner truth: its scorer fits a board
+homography to the pooled detections after undistorting with the published camera model.
+Three defects made a correct detector look wrong, and every detector shows the same
+residual curve:
+- **Lens model range:** the radtan model fails beyond r ≈ 380 px from the principal point
+  (radial residual −1.5, −4.9, −10.4 px in the 380–400, 400–420 and 420–440 px bands).
+- **Error space:** errors were measured after undistortion, which stretches the periphery
+  1.5–2×.
+- **Reference pool:** the pool included OpenCV NONE/SUBPIX corners, which sit inset on the
+  2-bit border, so the verdict changed with which runs shared the directory.
+
+Judge only inside the model's radius, in image pixels, against a pool of self-consistent
+detectors. Locus's "precision loss" (417 FP) was nearly all reference error: 12 of 12 and 16
+of 16 inspected cases.
+
+**2. Connectivity is topology, not tuning.** AprilGrid connector squares touch every tag at
+a corner. 8-connectivity links any diagonal contact, so the whole board becomes one
+component (recall 20 %). 4-connectivity separates them (86 %), and it is AprilTag 3's choice
+for dark regions. The cost is markers of about 2 px per cell: their one-pixel ring connects only
+diagonally. A local rule linking diagonals only through thin structures (dark-pixel count in
+each half of the 3 × 3 neighbourhood) cannot separate the two regimes:
+
+| Rule | EuRoC recall | ChArUco 16 px frame (markers kept) |
+| :-- | --: | --: |
+| 4-connectivity | 86.8 % | 3 / 14 |
+| k = 2 | 86.4 % | 7 / 14 |
+| k = 3 | 55 % | 14 / 14 |
+
+Not shipped.
+
+**3. A corner contact is a saddle at exactly half the local range.** For any symmetric PSF,
+the blurred X-junction where two dark squares touch reads 50 %. A midpoint threshold resolves
+it by noise, so blurred frames still fuse under 4-connectivity. Cutting at a fraction `f` of
+the local range lifts EuRoC recall:
+
+| `f` | 0.50 | 0.42 | 0.40 | 0.35 | 0.30 | 0.25 |
+| :-- | --: | --: | --: | --: | --: | --: |
+| EuRoC recall | 86 % | 95 % | 96 % | 98 % | 97 % | 88 % (thin features vanish) |
+
+It also lifts Liu4K 37 → 59 % and low_key 66 → 100 %. With the same local min/max, a lower cut
+can only shrink or split dark regions, never merge them. It still costs render-tag recall
+(640: 100 → 94–98 %, tag16h5 98 → 93–96 %): a tag's border then merges differently with the
+background, and the quad reducer picks a vertex 17 px off. **Open:** ship the cut once quad
+seeds are robust to merged components.
+
+**4. Blob gates assume a filled blob.** `min_fill_ratio`, `min_density` and `max_elongation`
+reject markers whose black cells are wider than the tile neighbourhood (hollow rings: 4K
+tags of 250–370 px) and markers merged with structure. With them off, Kannala–Brandt recall goes
+88 → 96 % and ICRA circle 83 → 85 %, with no precision cost (the ring check and code budget
+judge candidates).
+
+**5. Reporting a corner the image does not show is a false positive.** A marker cut by the
+frame reports the frame edge as a side. Reject it when a corner is outside the image, or a
+side's middle is within the smallest corner window's reach (3 px) of the border. A pure
+distance-to-border rule (OpenCV's `minDistanceToBorder`) would reject correct corners: a
+tag16h5 corner 0.5 px from the edge is within 0.1 px of the truth.
+
+**6. Gross seeds survive because every later stage abstains.**
+- **Mechanism:** the junction model rejects a seed 4–5 px off and keeps it, and fusion needs
+  all four junctions. Re-placing a rejected corner from its two edges (fitted on the halves next
+  to the good neighbours, iterated, confirmed by the junction model) fixes them.
+- **Open:** a seed that lands on a *different* genuine junction (scene_0004's quiet-zone corner,
+  9.5 px off) still needs a marker-model refit.
+- **Snapshots that average pose over few tags are noisy:** repairing one of two gross corners
+  on a tag can raise its pose error (2.4° → 3.4°) because the two errors partly cancelled.
+
+**Negative results:**
+- **Kalibr's 2-bit border decoded with its true lattice** (sample points scaled by
+  `(d+2)/(d+2b)`) gave more false positives (66 → 256) and worse LOO than the 0.9 scale retry.
+- **Declaring the camera model** sends Locus through the separate `non_rectified` camera path:
+  EuRoC recall 86 → 66 %, Hub Brown–Conrady corners 0.07 → 0.36 px. Distortion over a 40–60 px
+  tag bends an edge by only 0.1–0.4 px, which the marker calibration's bow terms absorb. The
+  camera model belongs in pose. Deferred to the next release.
 
 ## Re-attempt / watch-outs
 - Do **not** reintroduce a standalone `max_recall_adaptive` profile — its `AdaptivePpb` block already lives in `high_accuracy`. Any revival must justify why the shared router isn't sufficient.

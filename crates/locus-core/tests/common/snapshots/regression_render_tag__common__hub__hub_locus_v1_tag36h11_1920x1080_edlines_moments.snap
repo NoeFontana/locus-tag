@@ -1,14 +1,13 @@
 ---
 source: crates/locus-core/tests/common/hub.rs
-assertion_line: 473
 expression: report
 ---
 summary:
   dataset_size: 50
   mean_recall: 0.96
   mean_precision: 1
-  mean_rmse: 0.5861
-  mean_reprojection_rmse: 0.5809
+  mean_rmse: 0.586
+  mean_reprojection_rmse: 0.5808
   p50_translation_error: 0.0029
   p90_translation_error: 0.0224
   p99_translation_error: 0.0571

@@ -290,3 +290,68 @@ def test_scoreboard_reports_bias_without_judging_it() -> None:
     board = {"hub-640": report.win_table({"locus_x": {"recall": 1.0}}, "gt-hub", "locus_x", True)}
     md = scoreboard.render(board, "locus_x", {"hub-640": {"locus_x": -0.6, "aruco_nano": -0.68}})
     assert "| hub-640 | -0.600 | -0.680 |" in md
+
+
+# ── euroc ────────────────────────────────────────────────────────────────────
+
+
+def _euroc_runs(tmp_path: Path, detectors: dict[str, dict[int, np.ndarray]]) -> None:
+    """Eight identical frames per detector; ``detectors`` maps a label to per-tag corner
+    offsets (px, image space) applied to the exact projection of a board."""
+    # Board (m) -> undistorted pixels: 300 px/m, board origin placed at (u0, v0).
+    u0, v0 = 230.0, 110.0
+    h = np.array([[300.0, 0.0, u0], [0.0, 300.0, v0], [0.0, 0.0, 1.0]])
+    for label, offsets in detectors.items():
+        lines = []
+        for k in range(8):
+            ids, corners = [], []
+            for t in range(36):
+                c = score._redist(score._proj(h, score._board(t, score._PERMS[0])))
+                ids.append(t)
+                corners.append((c + offsets.get(t, 0.0)).tolist())
+            lines.append(
+                json.dumps(
+                    {
+                        "image": f"f{k}.png",
+                        "ms": 1.0,
+                        "ids": ids,
+                        "corners": corners,
+                        "convention": "opencv",
+                    }
+                )
+            )
+        (tmp_path / f"{label}.jsonl").write_text("\n".join(lines) + "\n")
+
+
+def _inset(px: float) -> dict[int, np.ndarray]:
+    """Per-tag offsets moving every corner ``px`` towards its tag's centre (an inset detector)."""
+    d = px / np.sqrt(2.0)
+    return {t: np.array([[d, d], [-d, d], [-d, -d], [d, -d]]) for t in range(36)}
+
+
+def test_euroc_reference_is_pooled_from_self_consistent_detectors(tmp_path: Path) -> None:
+    exact: dict[int, np.ndarray] = {}
+    _euroc_runs(tmp_path, {"exact": exact, "inset": _inset(2.5)})
+    r = score.score_euroc(tmp_path)
+    assert r["_meta"]["reference_pool"] == ["exact"]
+    assert r["exact"]["fp"] == 0
+    assert r["exact"]["loo_own_median_px"] < 0.05
+
+
+def test_euroc_judges_corners_in_image_pixels_inside_the_modelled_radius(tmp_path: Path) -> None:
+    # Tag 0's top-left corner lies near (230, 110) px, inside the modelled radius: moving it
+    # 5 px in the image makes a false positive, moving it 3 px does not.
+    off5 = {0: np.array([[5.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])}
+    off3 = {0: np.array([[3.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]])}
+    _euroc_runs(tmp_path, {"exact": {}, "off5": off5, "off3": off3})
+    r = score.score_euroc(tmp_path)
+    assert r["off5"]["fp"] == 8
+    assert r["off3"]["fp"] == 0
+
+
+def test_euroc_does_not_judge_tags_beyond_the_lens_model() -> None:
+    c = score.EUROC_K[:2, 2]
+    inside = c + np.array([[score.EUROC_VALID_RADIUS_PX - 1.0, 0.0]])
+    beyond = c + np.array([[0.0, score.EUROC_VALID_RADIUS_PX + 1.0]])
+    assert score._modelled(inside)
+    assert not score._modelled(np.vstack([inside, beyond]))
