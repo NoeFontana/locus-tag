@@ -50,22 +50,23 @@ const MAX_CELLS: usize = 10;
 /// Positions along each boundary segment (fractions of its cell) where the edge is measured.
 /// The segment ends are left out: there the boundary meets the next one at a junction.
 const STATIONS: [f64; 2] = [1.0 / 3.0, 2.0 / 3.0];
-/// Profile sample spacing (px). With central differences over two samples this is the 1 px
-/// derivative baseline of the edge fits in `refinement.rs`.
-const PROFILE_STEP: f64 = 0.5;
-/// Half-width cap (px) of the window around each expected edge. It covers the blur measured on
-/// the benchmarks; the window also stays within half a cell so the neighbouring boundary is
-/// outside it.
-const MAX_WINDOW_PX: f64 = 4.0;
+/// Profile sample spacing (px), as in the edge fits of `refinement.rs`. With central
+/// differences over two samples this is their 1 px derivative baseline.
+const PROFILE_STEP: f64 = crate::refinement::EDGE_PROFILE_STEP;
+/// Half-width cap (px) of the window around each expected edge, the edge fits' band cap. It
+/// covers the blur measured on the benchmarks; the window also stays within half a cell so the
+/// neighbouring boundary is outside it.
+const MAX_WINDOW_PX: f64 = crate::refinement::EDGE_MAX_HALF_PX;
 /// Profile buffer: the widest window (`2 · MAX_WINDOW_PX / PROFILE_STEP + 1` samples) plus one
 /// sample each side for the central difference.
-const MAX_PROFILE: usize = 19;
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+const MAX_PROFILE: usize = 2 * ((MAX_WINDOW_PX / PROFILE_STEP) as usize + 1) + 1;
 /// Most boundary measurements: two axes × `MAX_CELLS` lines × `MAX_CELLS + 1` boundaries ×
 /// stations.
 const MAX_MEASUREMENTS: usize = 2 * MAX_CELLS * (MAX_CELLS + 1) * STATIONS.len();
 /// Smallest cell (px) calibrated: the same floor as `corner_subpix`. Below it a cell holds
 /// little more than the blur, and neighbouring boundaries share a window.
-const MIN_CELL_PX: f64 = 2.0 / 0.6;
+const MIN_CELL_PX: f64 = crate::refinement::SUBPIX_MIN_CELL_PX;
 /// Smallest dark-to-white contrast (grey levels) for the bit pattern to be read.
 const MIN_CONTRAST: f64 = 20.0;
 /// Fraction of the marker's contrast an edge must step through within its window to count as
@@ -151,13 +152,7 @@ pub(crate) fn calibrate_marker_corners(
     if !(3..=MAX_CELLS).contains(&cells) {
         return None;
     }
-    let side = (0..4)
-        .map(|j| {
-            let (p, q) = (corners[j], corners[(j + 1) % 4]);
-            (q[0] - p[0]).hypot(q[1] - p[1])
-        })
-        .sum::<f64>()
-        * 0.25;
+    let side = crate::refinement::mean_side(&corners);
     let n = cells as f64;
     if side / n < MIN_CELL_PX {
         return None;
@@ -166,33 +161,39 @@ pub(crate) fn calibrate_marker_corners(
     // Image point of layout coordinates (u, v) ∈ [0, N]².
     let at = |u: f64, v: f64| h.project([2.0 * u / n - 1.0, 2.0 * v / n - 1.0]);
     // Every sample lies within one cell of the layout square (the quiet-zone reads at half a
-    // cell out, profiles reach half a cell past the outline). The projective image of that
-    // square is a convex quad, so its corners bound every sample.
-    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
-    for (u, v) in [
+    // cell out, profiles reach half a cell past the outline). While the projective depth `w`
+    // keeps one sign over that padded square (it is affine in the layout coordinates, so its
+    // corners decide), the square's image is a convex quad and its corners bound every sample.
+    // A vanishing line crossing the padding (a strongly foreshortened quad) breaks that, and so
+    // does a non-finite projection; both take the checked sampler.
+    let padded = [
         (-1.0, -1.0),
         (n + 1.0, -1.0),
         (n + 1.0, n + 1.0),
         (-1.0, n + 1.0),
-    ] {
+    ];
+    let depth = |(u, v): (f64, f64)| {
+        let (x, y) = (2.0 * u / n - 1.0, 2.0 * v / n - 1.0);
+        h.h[(2, 0)] * x + h.h[(2, 1)] * y + h.h[(2, 2)]
+    };
+    let convex = padded.iter().all(|&c| depth(c) > 0.0) || padded.iter().all(|&c| depth(c) < 0.0);
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for &(u, v) in &padded {
         let p = at(u, v);
         for k in 0..2 {
             lo[k] = lo[k].min(p[k]);
             hi[k] = hi[k].max(p[k]);
         }
     }
-    #[allow(clippy::cast_precision_loss)]
-    let inside = lo[0] >= 1.0
-        && lo[1] >= 1.0
-        && hi[0] <= img.width as f64 - 2.0
-        && hi[1] <= img.height as f64 - 2.0;
-    if inside {
+    if convex && img.bilinear_box_is_safe(lo, hi) {
         #[allow(
             unsafe_code,
             reason = "the bounds of every sample are checked once per marker above, so the per-sample checks of the safe sampler are redundant on this hot path"
         )]
-        // SAFETY: every sample point lies in `[1, width − 2] × [1, height − 2]` (bounded above),
-        // so after the sampler's −0.5 shift both bilinear taps are valid pixel indices.
+        // SAFETY: `w` keeps one sign over the padded layout square, so its image is the convex
+        // quad of its four corners, which lie in the box `[lo, hi]` that
+        // `bilinear_box_is_safe` accepted (finite, since NaN fails its comparisons). Every
+        // sample point is inside that quad, hence inside the box.
         calibrate_with(
             &|x, y| unsafe { img.sample_bilinear_unchecked(x, y) },
             &at,

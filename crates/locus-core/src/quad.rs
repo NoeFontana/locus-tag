@@ -2,15 +2,20 @@
 //!
 //! This module implements the middle stage of the detection pipeline:
 //! 1. **Contour Tracing**: Extracting the boundary of connected components.
-//! 2. **Simplification**: Using Douglas-Peucker to reduce complex contours to polygons.
-//! 3. **Quad Fitting**: Heuristics to reduce polygons to quadrilaterals and verify convexity.
-//! 4. **Sub-pixel Refinement**: Intensity-based edge localization for maximum precision.
+//! 2. **Simplification**: Selecting the contour's dominant vertices (a parameter-free
+//!    Douglas-Peucker decomposition) and reducing them to four corners.
+//! 3. **Quad Fitting**: Geometric gates (area, compactness, edge length) and the edge-contrast
+//!    gate on the candidate quad.
+//! 4. **Corner Refinement**: dispatched to [`crate::refinement`] per route. Under decode-first
+//!    ordering ([`DetectorConfig::decode_first`]) the ERF route skips it here and keeps the
+//!    contour corners: the decoder refines only the candidates that decode or nearly do.
 
 #![allow(clippy::cast_possible_wrap)]
 #![allow(clippy::cast_sign_loss)]
 #![allow(clippy::similar_names)]
 #![allow(unsafe_code)]
 
+#[cfg(any(test, feature = "bench-internals"))]
 use crate::Detection;
 use crate::batch::{CandidateState, DetectionBatch, MAX_CANDIDATES, Point2f};
 use crate::config::DetectorConfig;
@@ -28,9 +33,10 @@ use crate::workspace::WORKSPACE_ARENA;
 /// Per-corner 2×2 covariances as `[[σ_xx, σ_xy, σ_yx, σ_yy]; 4]`.
 pub(crate) type CornerCovariances = [[f32; 4]; 4];
 
-/// PPB-denom fallback used by the legacy single-quad helper. Conservative
+/// PPB-denom fallback used by [`extract_quads_with_config`]. Conservative
 /// (smaller than any registered family) so AdaptivePpb routes high. Live
 /// callers go through `LocusEngine::min_outer_dim` instead.
+#[cfg(any(test, feature = "bench-internals"))]
 const MIN_OUTER_DIM_FALLBACK: u32 = 6;
 
 /// Per-candidate extraction result carried from the Rayon worker back to the
@@ -119,10 +125,8 @@ fn resolve_route(
     }
 }
 
-/// Fast quad extraction using bounding box stats from CCL.
-/// Only traces contours for components that pass geometric filters.
-/// Uses default configuration.
-#[allow(dead_code)]
+/// [`extract_quads_with_config`] with the default configuration, undecimated (tests).
+#[cfg(test)]
 pub(crate) fn extract_quads_fast(
     arena: &Bump,
     img: &ImageView,
@@ -199,18 +203,13 @@ pub fn extract_quads_soa(
                 y: corner.y as f32,
             };
         }
-        // Write per-corner 2×2 covariances (4 floats each, 16 total per candidate).
-        if covs.is_empty() {
-            batch.corner_covariances[i].fill(0.0);
-            batch.corner_refined[i] = 0;
-        } else {
-            for (chunk, cov) in batch.corner_covariances[i]
-                .chunks_exact_mut(4)
-                .zip(covs.iter())
-            {
-                chunk.copy_from_slice(cov);
-            }
+        // Per-corner 2×2 covariances (4 floats each, 16 per candidate). The corner-class bits
+        // belong to the decoder's sub-pixel stage; clear them so a slot never carries bits from
+        // an earlier frame (the distortion-aware decoder does not write them).
+        for (chunk, cov) in batch.corner_covariances[i].chunks_exact_mut(4).zip(&covs) {
+            chunk.copy_from_slice(cov);
         }
+        batch.corner_refined[i] = 0;
         if let Some(ref mut u) = unrefined {
             u.push(unrefined_pts);
         }
@@ -330,7 +329,7 @@ fn extract_single_quad(
             let fill = contour_fill(&contour);
             let perimeter = contour.len() as f64;
             if fill < min_fill
-                || 12.566 * fill / (perimeter * perimeter) < 0.5 * MIN_QUAD_COMPACTNESS
+                || ISOPERIMETRIC_SCALE * fill / (perimeter * perimeter) < 0.5 * MIN_QUAD_COMPACTNESS
             {
                 return None;
             }
@@ -343,7 +342,7 @@ fn extract_single_quad(
             reduced.push(corners[0]);
 
             let area = polygon_area(&reduced);
-            let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
+            let compactness = (ISOPERIMETRIC_SCALE * area.abs()) / (perimeter * perimeter);
 
             if area.abs() <= f64::from(config.quad_min_area) || compactness <= MIN_QUAD_COMPACTNESS
             {
@@ -449,6 +448,8 @@ fn extract_single_quad(
 
 /// Quads with isoperimetric compactness `4π·area / perimeter²` at or below this are rejected.
 const MIN_QUAD_COMPACTNESS: f64 = 0.1;
+/// The `4π` of the isoperimetric compactness, to three decimals (the gates were tuned with it).
+const ISOPERIMETRIC_SCALE: f64 = 12.566;
 
 /// Smallest filled area, in (decimated) pixels, of a dark outline that can hold a decodable
 /// marker: the smallest active family is `min_outer_dim` cells across, a cell must cover at
@@ -597,17 +598,10 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
                 y: corner.y as f32,
             };
         }
-        if covs.is_empty() {
-            batch.corner_covariances[i].fill(0.0);
-            batch.corner_refined[i] = 0;
-        } else {
-            for (chunk, cov) in batch.corner_covariances[i]
-                .chunks_exact_mut(4)
-                .zip(covs.iter())
-            {
-                chunk.copy_from_slice(cov);
-            }
+        for (chunk, cov) in batch.corner_covariances[i].chunks_exact_mut(4).zip(&covs) {
+            chunk.copy_from_slice(cov);
         }
+        batch.corner_refined[i] = 0;
         if let Some(ref mut u) = unrefined {
             u.push(unrefined_pts);
         }
@@ -753,9 +747,9 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     reduced.push(corners[0]);
 
     let area = polygon_area(&reduced);
-    let compactness = (12.566 * area.abs()) / (perimeter * perimeter);
+    let compactness = (ISOPERIMETRIC_SCALE * area.abs()) / (perimeter * perimeter);
 
-    if area.abs() <= f64::from(config.quad_min_area) || compactness <= 0.1 {
+    if area.abs() <= f64::from(config.quad_min_area) || compactness <= MIN_QUAD_COMPACTNESS {
         return None;
     }
 
@@ -909,10 +903,13 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     Some((corners, quad_pts, out_covs, route_label, ppb_estimate))
 }
 
-/// Quad extraction with custom configuration.
+/// Quad extraction with custom configuration, as [`Detection`]s (benchmarks and tests; the
+/// detector uses [`extract_quads_soa`]).
 ///
-/// This is the main entry point for quad detection with custom parameters.
-/// Components are processed in parallel for maximum throughput.
+/// Components are processed in parallel. Under a decode-first configuration
+/// (`DetectorConfig::decode_first`) the ERF route returns the unrefined contour corners
+/// (decode-first seeds), as the detector's quad stage does; the decoder refines them.
+#[cfg(any(test, feature = "bench-internals"))]
 #[allow(clippy::too_many_lines)]
 pub fn extract_quads_with_config(
     _arena: &Bump,
@@ -975,86 +972,6 @@ pub fn extract_quads_with_config(
             })
         })
         .collect()
-}
-
-/// Legacy extract_quads for backward compatibility.
-#[allow(dead_code)]
-pub(crate) fn extract_quads(arena: &Bump, img: &ImageView, labels: &[u32]) -> Vec<Detection> {
-    let mut detections = Vec::new();
-    let num_labels = (labels.len() / 32) + 1;
-    let processed_labels = arena.alloc_slice_fill_copy(num_labels, 0u32);
-
-    let width = img.width;
-    let height = img.height;
-
-    for y in 1..height - 1 {
-        let row_off = y * width;
-        let prev_row_off = (y - 1) * width;
-
-        for x in 1..width - 1 {
-            let idx = row_off + x;
-            let label = labels[idx];
-
-            if label == 0 {
-                continue;
-            }
-
-            if labels[idx - 1] == label || labels[prev_row_off + x] == label {
-                continue;
-            }
-
-            let bit_idx = (label as usize) / 32;
-            let bit_mask = 1 << (label % 32);
-            if processed_labels[bit_idx] & bit_mask != 0 {
-                continue;
-            }
-
-            processed_labels[bit_idx] |= bit_mask;
-            let contour = trace_boundary(arena, labels, width, height, x, y, label, 0);
-
-            if contour.len() >= 12 {
-                // Lowered from 30 to support 8px+ tags
-                let simplified = douglas_peucker(arena, &contour, 4.0);
-                if simplified.len() == 5 {
-                    let area = polygon_area(&simplified);
-                    let perimeter = contour.len() as f64;
-                    let compactness = (12.566 * area) / (perimeter * perimeter);
-
-                    if area > 400.0 && compactness > 0.5 {
-                        let mut ok = true;
-                        for i in 0..4 {
-                            let d2 = (simplified[i].x - simplified[i + 1].x).powi(2)
-                                + (simplified[i].y - simplified[i + 1].y).powi(2);
-                            if d2 < 100.0 {
-                                ok = false;
-                                break;
-                            }
-                        }
-
-                        if ok {
-                            detections.push(Detection {
-                                id: label,
-                                center: polygon_center(&simplified),
-                                corners: [
-                                    [simplified[0].x, simplified[0].y],
-                                    [simplified[1].x, simplified[1].y],
-                                    [simplified[2].x, simplified[2].y],
-                                    [simplified[3].x, simplified[3].y],
-                                ],
-                                hamming: 0,
-                                rotation: 0,
-                                decision_margin: area,
-                                bits: 0,
-                                pose: None,
-                                pose_covariance: None,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    }
-    detections
 }
 
 #[multiversion(targets(
@@ -1418,10 +1335,12 @@ pub(crate) fn select_dominant_vertices<'a>(
     Some(out)
 }
 
-/// Simplify a contour using the Douglas-Peucker algorithm.
+/// Simplify a contour using the Douglas-Peucker algorithm (the fixed-epsilon reference for
+/// [`select_dominant_vertices`]'s tests).
 ///
 /// Leverages an iterative implementation with a manual stack to avoid
 /// the overhead of recursive function calls and multiple temporary allocations.
+#[cfg(test)]
 pub(crate) fn douglas_peucker<'a>(
     arena: &'a Bump,
     points: &[Point],
@@ -1480,18 +1399,6 @@ fn polygon_area(points: &[Point]) -> f64 {
         area += (points[i].x * points[i + 1].y) - (points[i + 1].x * points[i].y);
     }
     area * 0.5
-}
-
-#[allow(dead_code)]
-fn polygon_center(points: &[Point]) -> [f64; 2] {
-    let mut cx = 0.0;
-    let mut cy = 0.0;
-    let n = points.len() - 1;
-    for p in points.iter().take(n) {
-        cx += p.x;
-        cy += p.y;
-    }
-    [cx / n as f64, cy / n as f64]
 }
 
 /// Fit a line (a*x + b*y + c = 0) to an edge by sampling gradient peaks.
@@ -1577,15 +1484,14 @@ pub(crate) fn fit_edge_line(
 }
 
 /// Refine edge position using the unified ERF intensity model and return
-/// the line coefficients `(nx, ny, d)` for downstream intersection in
-/// `refine_corner`.
+/// the line coefficients `(nx, ny, d)` for the corner intersection in
+/// [`crate::refinement::refine_all_quad_corners`].
 ///
-/// The fitter uses a left-hand normal convention; `refine_corner`'s
-/// intersection math is sign-invariant because both sibling lines flip together.
+/// The fitter uses a left-hand normal convention; the intersection math is
+/// sign-invariant because both sibling lines flip together.
 ///
-/// `fit()` may return false on sample shortfall or low contrast; in that case
-/// `line_params()` still holds the geometric normal of p1→p2, which is a
-/// safer fallback than `fit_edge_line`'s gradient-peak search.
+/// `None` only for an edge under 4 px. When the fit fails (sample shortfall or
+/// low contrast) the result is the unrefined line through `p1 → p2`.
 pub(crate) fn refine_edge_erf(
     arena: &Bump,
     img: &ImageView,
@@ -1792,11 +1698,9 @@ fn fit_edge_line_curved<C: crate::camera::CameraModel>(
     Some((n_vec.x, n_vec.y, c))
 }
 
-/// Calculate the minimum average gradient magnitude along the 4 edges of the quad.
-///
-/// Returns the lowest score among the 4 edges. If any edge is very weak,
-/// the return value will be low, indicating a likely false positive.
-/// Camera-aware edge-score for the straight-space quad extractor.
+/// Camera-aware edge score for the straight-space quad extractor: the minimum over the four
+/// edges of the mean gradient magnitude along the edge, so a single weak edge (a likely false
+/// positive) gives a low score. An edge under 4 px scores 0.
 ///
 /// `rect_corners` are in **decimated rectified-pixel** space (the output of
 /// RDP). For each edge we walk a parametric straight line in that space,
@@ -1921,21 +1825,40 @@ fn reduce_to_quad<'a>(arena: &'a Bump, poly: &[Point], significance: &[f64]) -> 
     current
 }
 
+/// Length of the chord `p1 → p2`.
+fn chord_len(p1: Point, p2: Point) -> f64 {
+    let dx = p2.x - p1.x;
+    let dy = p2.y - p1.y;
+    (dx * dx + dy * dy).sqrt()
+}
+
 /// Mean gradient magnitude along the chord `p1 → p2`: `clamp(len, 3, 10)` samples, corners
 /// excluded, each taking the strongest response over `normal_offsets` (pixels along the edge
 /// normal). `None` when the edge is shorter than 4 px.
+#[cfg(test)]
 fn edge_mean_gradient(
     img: &ImageView,
     p1: Point,
     p2: Point,
     normal_offsets: &[f64],
 ) -> Option<f64> {
-    let dx = p2.x - p1.x;
-    let dy = p2.y - p1.y;
-    let len = (dx * dx + dy * dy).sqrt();
+    let len = chord_len(p1, p2);
     if len < 4.0 {
         return None;
     }
+    Some(mean_gradient_along(img, p1, p2, len, normal_offsets))
+}
+
+/// [`edge_mean_gradient`] of an edge of length `len` (`chord_len(p1, p2)`, at least 4 px).
+fn mean_gradient_along(
+    img: &ImageView,
+    p1: Point,
+    p2: Point,
+    len: f64,
+    normal_offsets: &[f64],
+) -> f64 {
+    let dx = p2.x - p1.x;
+    let dy = p2.y - p1.y;
     let n_samples = (len as usize).clamp(3, 10);
     let (nx, ny) = (-dy / len, dx / len);
     let mut edge_mag_sum = 0.0;
@@ -1952,7 +1875,7 @@ fn edge_mean_gradient(
             })
             .fold(0.0, f64::max);
     }
-    Some(edge_mag_sum / n_samples as f64)
+    edge_mag_sum / n_samples as f64
 }
 
 /// The edge-contrast gate: whether the minimum over the four edges of
@@ -1970,23 +1893,23 @@ pub(crate) fn edge_contrast_exceeds(
     threshold: f64,
 ) -> bool {
     let edge = |i: usize| (corners[i], corners[(i + 1) % 4]);
-    let edge_len =
-        |(a, b): (Point, Point)| ((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)).sqrt();
-    if (0..4).any(|i| edge_len(edge(i)) < 4.0) {
+    let lens: [f64; 4] = core::array::from_fn(|i| {
+        let (a, b) = edge(i);
+        chord_len(a, b)
+    });
+    if lens.iter().any(|&len| len < 4.0) {
         return 0.0 > threshold;
     }
     (0..4).all(|i| {
         let (a, b) = edge(i);
-        let Some(chord) = edge_mean_gradient(img, a, b, &[0.0]) else {
-            return 0.0 > threshold;
-        };
+        let chord = mean_gradient_along(img, a, b, lens[i], &[0.0]);
         if chord > threshold {
             return true;
         }
         let mean = if normal_offsets == [0.0] {
             chord
         } else {
-            edge_mean_gradient(img, a, b, normal_offsets).unwrap_or(0.0)
+            mean_gradient_along(img, a, b, lens[i], normal_offsets)
         };
         // A NaN mean is skipped by the minimum, so only `mean <= threshold` fails.
         mean > threshold || mean.is_nan()

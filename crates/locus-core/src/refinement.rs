@@ -102,9 +102,8 @@ pub(crate) fn refine_all_quad_corners(
 /// Single-corner refinement: intersect two edge-line fits at point `p`,
 /// using its neighbours `p_prev` and `p_next` to define the edges.
 ///
-/// `use_erf = true` runs the PSF-blurred Gauss-Newton fit and falls
-/// back to the gradient-peak fit on sample shortfall. `use_erf = false`
-/// runs only the gradient-peak fit.
+/// `use_erf = true` runs the PSF-blurred Gauss-Newton fit ([`refine_edge_erf`]);
+/// `use_erf = false` runs the gradient-peak fit ([`fit_edge_line`]).
 #[cfg(test)]
 #[expect(
     clippy::too_many_arguments,
@@ -125,8 +124,9 @@ pub(crate) fn refine_corner(
     intersect_corner(p, line1, line2, decimation)
 }
 
-/// Line fit of the edge `a → b`: the ERF fit with a gradient-peak fallback, or the
-/// gradient-peak fit alone.
+/// Line fit of the edge `a → b`: the ERF fit or the gradient-peak fit. Either is `None` only
+/// for an edge under 4 px (so the gradient-peak fit cannot stand in for a missing ERF fit); a
+/// failed ERF fit returns the unrefined line through `a → b`.
 fn edge_line(
     arena: &Bump,
     img: &ImageView,
@@ -138,15 +138,15 @@ fn edge_line(
 ) -> Option<(f64, f64, f64)> {
     if use_erf {
         refine_edge_erf(arena, img, a, b, sigma, decimation)
-            .or_else(|| fit_edge_line(img, a, b, decimation))
     } else {
         fit_edge_line(img, a, b, decimation)
     }
 }
 
 /// Intersection of two edge lines as the refined corner, or `p` unchanged when the lines are
-/// missing, near-parallel, or meet farther than the sanity radius from `p`.
-fn intersect_corner(
+/// missing, near-parallel, or meet farther than the sanity radius from `p` (2 px, plus the
+/// decimation factor when decimated).
+pub(crate) fn intersect_corner(
     p: Point,
     line1: Option<(f64, f64, f64)>,
     line2: Option<(f64, f64, f64)>,
@@ -293,6 +293,17 @@ pub(crate) fn apply_detector_gwlf(
     Some((gwlf_fallback_count, gwlf_avg_delta))
 }
 
+/// Mean side length of a quad.
+pub(crate) fn mean_side(quad: &[[f64; 2]; 4]) -> f64 {
+    (0..4)
+        .map(|j| {
+            let (p, q) = (quad[j], quad[(j + 1) % 4]);
+            (q[0] - p[0]).hypot(q[1] - p[1])
+        })
+        .sum::<f64>()
+        * 0.25
+}
+
 /// Window half-width bounds of [`corner_subpix`] (px); see [`corner_subpix_half_windows`].
 const SUBPIX_MIN_HALF: u32 = 2;
 const SUBPIX_MAX_HALF: u32 = 4;
@@ -306,6 +317,8 @@ const SUBPIX_CELL_FRACTIONS: [f64; 3] = [0.3, 0.5, 0.75];
 /// where the 2 px window degraded board rotation (0.07° → 0.21° on 2.9 px cells); neutral on
 /// the ICRA, render-tag, AprilGrid, Liu4K and EuRoC benchmarks.
 const SUBPIX_MIN_WINDOW_CELL_FRACTION: f64 = 0.6;
+/// The smallest cell (px) [`corner_subpix_half_windows`] gives a window: `2 / 0.6 ≈ 3.3`.
+pub(crate) const SUBPIX_MIN_CELL_PX: f64 = SUBPIX_MIN_HALF as f64 / SUBPIX_MIN_WINDOW_CELL_FRACTION;
 /// Uncertainty ratio past which a smaller window is preferred over a larger one. Both
 /// uncertainties are residual-variance estimates from a few dozen effective samples, whose
 /// ratio is F-distributed; a factor of 2 is about where a difference stops being noise. Taking
@@ -375,23 +388,20 @@ const SUBPIX_EPS: f64 = 0.005;
 /// At an L-corner the two estimates are combined by inverse covariance when they agree
 /// ([`fuse_corner`]); both covariances are statistically calibrated. At an X-junction
 /// ([`junction_is_x`]: AprilGrid connectors) the edge lines carry the photometric edge offset
-/// and the junction point does not, so the junction estimate stands alone. Fusion needs a
-/// `rectified` image: under lens distortion the edges are curves.
+/// and the junction point does not, so the junction estimate stands alone. Fusion assumes a
+/// pinhole image, where the edges are straight; the decoder only calls this on one.
 pub(crate) fn subpix_marker_corners(
     img: &ImageView,
     seed: [[f64; 2]; 4],
     cells: usize,
-    rectified: bool,
 ) -> ([[f64; 2]; 4], u8) {
-    let side = (0..4)
-        .map(|j| {
-            let (p, q) = (seed[j], seed[(j + 1) % 4]);
-            (q[0] - p[0]).hypot(q[1] - p[1])
-        })
-        .sum::<f64>()
-        * 0.25;
+    let side = mean_side(&seed);
+    let cell = side / cells.max(1) as f64;
     let (halves, count) = corner_subpix_half_windows(side, cells);
-    let probe = (0.5 * side / cells.max(1) as f64).max(1.0);
+    // The consistency probes sit half a cell from the corner.
+    let probe = (0.5 * cell).max(1.0);
+    // The edge band spans the blur and the refined corners' error, and stays within half a cell.
+    let half = (0.5 * cell).clamp(2.0, EDGE_MAX_HALF_PX);
     let mut out = seed;
     let mut refined_bits = 0u8;
     let mut picks = [None::<Subpix>; 4];
@@ -416,8 +426,7 @@ pub(crate) fn subpix_marker_corners(
             if picks[j].is_none()
                 && picks[p].is_some()
                 && picks[n].is_some()
-                && let Some(pick) =
-                    repair_corner(img, &out, j, side, cells, &halves[..count], probe)
+                && let Some(pick) = repair_corner(img, &out, j, side, half, &halves[..count], probe)
             {
                 out[j] = pick.corner;
                 refined_bits |= 1 << j;
@@ -426,29 +435,25 @@ pub(crate) fn subpix_marker_corners(
             }
         }
     }
-    // Fuse each L-corner with the intersection of its two whole-edge lines. Under lens
-    // distortion the marker's edges are curves, not lines.
-    if !rectified {
+    // Fuse each L-corner with the intersection of its two whole-edge lines. All four corners
+    // or none: a marker whose corners mix the two estimators (they differ by the junction
+    // model's apex bias) is no longer a consistent square, which the pose turns into rotation
+    // error. So every corner must be a refined L-corner before any edge is fitted.
+    let [Some(p0), Some(p1), Some(p2), Some(p3)] = picks else {
         return (out, refined_bits);
-    }
-    let cell = side / cells.max(1) as f64;
-    // The band spans the blur and the refined corners' error, and stays within half a cell.
-    let half = (0.5 * cell).clamp(2.0, EDGE_MAX_HALF_PX);
+    };
+    let locals = [p0, p1, p2, p3];
     // Edges between the locally refined corners: their directions are already corrected.
     let anchors = out;
-    let edges: [Option<EdgeLine>; 4] = edge_lines(img, &anchors, half);
-    // All four corners or none: a marker whose corners mix the two estimators (they differ by
-    // the junction model's apex bias) is no longer a consistent square, which the pose turns
-    // into rotation error.
-    let mut fused = [[0.0f64; 2]; 4];
-    for j in 0..4 {
-        let Some(local) = picks[j] else {
-            return (out, refined_bits);
-        };
+    if (0..4).any(|j| {
         let (prev, next) = (anchors[(j + 3) % 4], anchors[(j + 1) % 4]);
-        if junction_is_x(img, local.corner, prev, next, anchors[j], probe) {
-            return (out, refined_bits);
-        }
+        junction_is_x(img, locals[j].corner, prev, next, anchors[j], probe)
+    }) {
+        return (out, refined_bits);
+    }
+    let edges: [Option<EdgeLine>; 4] = edge_lines(img, &anchors, half);
+    let mut fused = [[0.0f64; 2]; 4];
+    for (j, local) in locals.iter().enumerate() {
         let (Some(before), Some(after)) = (edges[(j + 3) % 4], edges[j]) else {
             return (out, refined_bits);
         };
@@ -512,17 +517,19 @@ const REPAIR_TOLERANCE_PX: f64 = 0.05;
 /// may miss the edge entirely; the fit is repeated from each new crossing. The result must
 /// then be confirmed as a marker junction by [`marker_junction`], so a repair is never weaker
 /// evidence than an ordinary refined corner.
+///
+/// `side` is the marker's mean side, `half` the edge band half-width and `halves`, `probe` the
+/// junction windows and consistency probe distance, all as [`subpix_marker_corners`] sets them.
 fn repair_corner(
     img: &ImageView,
     quad: &[[f64; 2]; 4],
     j: usize,
     side: f64,
-    cells: usize,
+    half: f64,
     halves: &[u32],
     probe: f64,
 ) -> Option<Subpix> {
     let (prev, seed, next) = (quad[(j + 3) % 4], quad[j], quad[(j + 1) % 4]);
-    let half = (0.5 * side / cells.max(1) as f64).clamp(2.0, EDGE_MAX_HALF_PX);
     let mid = |a: [f64; 2], b: [f64; 2]| [0.5 * (a[0] + b[0]), 0.5 * (a[1] + b[1])];
     let sample = |x: f64, y: f64| img.sample_bilinear(x, y);
     // An edge near the rim of the band pulls the station centroids towards the band centre, so
@@ -585,14 +592,17 @@ const LINE_CORNER_MAX_MOVE_PX: f64 = 3.0;
 /// neighbouring edge and the junction blur the profile.
 const EDGE_END_MARGIN: f64 = 0.15;
 /// Spacing (px) of the edge-normal samples of one station.
-const EDGE_PROFILE_STEP: f64 = 0.5;
+pub(crate) const EDGE_PROFILE_STEP: f64 = 0.5;
 /// Profile samples on each side of the central difference: 1 × 0.5 px, a 1 px baseline.
-const EDGE_DERIVATIVE_TAPS: usize = 1;
+pub(crate) const EDGE_DERIVATIVE_TAPS: usize = 1;
 /// Widest band half-width (px): the blur measured on the benchmarks plus the refined corners'
 /// error. A wider band only adds samples and clutter.
-const EDGE_MAX_HALF_PX: f64 = 4.0;
-/// Profile buffer size: the widest band plus the taps.
-const EDGE_MAX_PROFILE: usize = 2 * (8 + EDGE_DERIVATIVE_TAPS) + 1;
+pub(crate) const EDGE_MAX_HALF_PX: f64 = 4.0;
+/// Profile buffer size: the widest band (`EDGE_MAX_HALF_PX / EDGE_PROFILE_STEP` samples each
+/// side of the centre) plus the taps.
+#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+const EDGE_MAX_PROFILE: usize =
+    2 * ((EDGE_MAX_HALF_PX / EDGE_PROFILE_STEP) as usize + EDGE_DERIVATIVE_TAPS) + 1;
 /// Stations per pixel of edge length. Half of 0.7 measured equal on ICRA, ChArUco and
 /// render-tag, at 15 % less latency on dense frames.
 const EDGE_STATION_DENSITY: f64 = 0.35;
@@ -615,15 +625,6 @@ struct EdgeLine {
     var_angle: f64,
 }
 
-/// Fits the marker edge from `p0` to `p1`.
-///
-/// Stations are spread over the middle of the edge (`EDGE_END_MARGIN` left out at each end).
-/// At each, the edge's position is the `|∇I·n|`-weighted centroid of samples across the edge
-/// within `±half` px. A total-least-squares line through the station positions gives the edge;
-/// the residual variance `s²` of the stations about it gives `Var(offset) = s²/N` and
-/// `Var(angle) = s²/Σt²`. Bit edges crossing the band, lens curvature or clutter scatter the
-/// stations and so inflate the line's own uncertainty, which is what keeps a contaminated edge
-/// from dominating a fusion.
 /// [`fit_marker_edge`] for the four sides of `quad`. When every profile sample is inside the
 /// image, as for nearly every marker, the samples skip the per-sample bounds check.
 fn edge_lines(img: &ImageView, quad: &[[f64; 2]; 4], half: f64) -> [Option<EdgeLine>; 4] {
@@ -636,18 +637,14 @@ fn edge_lines(img: &ImageView, quad: &[[f64; 2]; 4], half: f64) -> [Option<EdgeL
             hi[k] = hi[k].max(p[k] + reach);
         }
     }
-    #[allow(clippy::cast_precision_loss)]
-    let inside = lo[0] >= 1.0
-        && lo[1] >= 1.0
-        && hi[0] <= img.width as f64 - 2.0
-        && hi[1] <= img.height as f64 - 2.0;
-    if inside {
+    if img.bilinear_box_is_safe(lo, hi) {
         #[allow(
             unsafe_code,
             reason = "the bounds of every sample are checked once per marker above, so the per-sample checks of the safe sampler are redundant on this hot path"
         )]
-        // SAFETY: every sample point lies in `[1, width − 2] × [1, height − 2]` (bounded above),
-        // so after the sampler's −0.5 shift both bilinear taps are valid pixel indices.
+        // SAFETY: every sample point lies on a side of `quad` offset along its normal by at
+        // most the profile reach, so inside `[lo, hi]` (the corners' bounding box widened by
+        // that reach plus a pixel), which `bilinear_box_is_safe` accepted.
         let sample = |x: f64, y: f64| unsafe { img.sample_bilinear_unchecked(x, y) };
         core::array::from_fn(|e| fit_marker_edge(&sample, quad[e], quad[(e + 1) % 4], half))
     } else {
@@ -656,6 +653,15 @@ fn edge_lines(img: &ImageView, quad: &[[f64; 2]; 4], half: f64) -> [Option<EdgeL
     }
 }
 
+/// Fits the marker edge from `p0` to `p1`.
+///
+/// Stations are spread over the middle of the edge (`EDGE_END_MARGIN` left out at each end).
+/// At each, the edge's position is the `|∇I·n|`-weighted centroid of samples across the edge
+/// within `±half` px. A total-least-squares line through the station positions gives the edge;
+/// the residual variance `s²` of the stations about it gives `Var(offset) = s²/N` and
+/// `Var(angle) = s²/Σt²`. Bit edges crossing the band, lens curvature or clutter scatter the
+/// stations and so inflate the line's own uncertainty, which is what keeps a contaminated edge
+/// from dominating a fusion.
 fn fit_marker_edge(
     sample: &impl Fn(f64, f64) -> f64,
     p0: [f64; 2],
@@ -790,6 +796,31 @@ fn intersect_edges(a: &EdgeLine, b: &EdgeLine) -> Option<([f64; 2], [f64; 3])> {
     Some((corner, cov))
 }
 
+/// The diagonal probes around `corner`: `(a, b) ↦` the image at `corner + probe·(a·u + b·v)`,
+/// with `u`, `v` the unit directions from `at` towards `prev` and `next` (the marker's two
+/// edges). Shared by [`junction_is_x`] and [`marker_corner_consistent`].
+fn diagonal_probes<'a>(
+    img: &'a ImageView<'a>,
+    corner: [f64; 2],
+    prev: [f64; 2],
+    next: [f64; 2],
+    at: [f64; 2],
+    probe: f64,
+) -> impl Fn(f64, f64) -> f64 + 'a {
+    let unit = |to: [f64; 2]| {
+        let (dx, dy) = (to[0] - at[0], to[1] - at[1]);
+        let n = dx.hypot(dy);
+        [dx / n, dy / n]
+    };
+    let (u, v) = (unit(prev), unit(next));
+    move |a: f64, b: f64| {
+        img.sample_bilinear(
+            corner[0] + probe * (a * u[0] + b * v[0]),
+            corner[1] + probe * (a * u[1] + b * v[1]),
+        )
+    }
+}
+
 /// Whether the marker corner at `corner` is an X-junction: the outward diagonal reads as dark
 /// as the inward one (an AprilGrid connector square touches the corner). There the whole-edge
 /// lines carry the photometric edge offset while the junction point does not, so the two
@@ -803,18 +834,7 @@ fn junction_is_x(
     at: [f64; 2],
     probe: f64,
 ) -> bool {
-    let unit = |to: [f64; 2]| {
-        let (dx, dy) = (to[0] - at[0], to[1] - at[1]);
-        let n = dx.hypot(dy);
-        [dx / n, dy / n]
-    };
-    let (u, v) = (unit(prev), unit(next));
-    let at_offset = |a: f64, b: f64| {
-        img.sample_bilinear(
-            corner[0] + probe * (a * u[0] + b * v[0]),
-            corner[1] + probe * (a * u[1] + b * v[1]),
-        )
-    };
+    let at_offset = diagonal_probes(img, corner, prev, next, at, probe);
     let inward = at_offset(1.0, 1.0);
     let outward = at_offset(-1.0, -1.0);
     let bright = 0.5 * (at_offset(1.0, -1.0) + at_offset(-1.0, 1.0));
@@ -840,18 +860,7 @@ fn marker_corner_consistent(
     at: [f64; 2],
     probe: f64,
 ) -> bool {
-    let unit = |to: [f64; 2]| {
-        let (dx, dy) = (to[0] - at[0], to[1] - at[1]);
-        let n = dx.hypot(dy);
-        [dx / n, dy / n]
-    };
-    let (u, v) = (unit(prev), unit(next));
-    let at_offset = |a: f64, b: f64| {
-        img.sample_bilinear(
-            corner[0] + probe * (a * u[0] + b * v[0]),
-            corner[1] + probe * (a * u[1] + b * v[1]),
-        )
-    };
+    let at_offset = diagonal_probes(img, corner, prev, next, at, probe);
     let inward = at_offset(1.0, 1.0);
     let (side_u, side_v) = (at_offset(1.0, -1.0), at_offset(-1.0, 1.0));
     let contrast = 0.5 * (side_u + side_v) - inward;
@@ -1147,7 +1156,7 @@ mod subpix_tests {
         let truth = [[16.0, 16.0], [48.0, 16.0], [48.0, 48.0], [16.0, 48.0]];
         let mut seed = truth;
         seed[2] = [48.0, 44.0];
-        let (got, bits) = subpix_marker_corners(&img, seed, 8, true);
+        let (got, bits) = subpix_marker_corners(&img, seed, 8);
         assert_eq!(bits, 0b1111);
         for (g, t) in got.iter().zip(&truth) {
             let d = (g[0] - t[0]).hypot(g[1] - t[1]);

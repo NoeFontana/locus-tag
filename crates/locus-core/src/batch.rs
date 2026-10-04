@@ -11,6 +11,22 @@ pub struct Point2f {
     pub y: f32,
 }
 
+/// The corners of a quad as `f64` `[x, y]` pairs.
+#[must_use]
+pub(crate) fn quad_to_f64(quad: &[Point2f; 4]) -> [[f64; 2]; 4] {
+    quad.map(|p| [f64::from(p.x), f64::from(p.y)])
+}
+
+/// The corners of a quad rounded to the batch's `f32` points.
+#[must_use]
+#[allow(clippy::cast_possible_truncation)]
+pub(crate) fn quad_to_f32(quad: &[[f64; 2]; 4]) -> [Point2f; 4] {
+    quad.map(|p| Point2f {
+        x: p[0] as f32,
+        y: p[1] as f32,
+    })
+}
+
 /// A 3x3 homography matrix (f32).
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C, align(32))]
@@ -249,24 +265,7 @@ impl DetectionBatch {
     pub fn reassemble(&self, v: usize) -> Vec<crate::Detection> {
         let mut detections = Vec::with_capacity(v);
         for i in 0..v {
-            let corners = [
-                [
-                    f64::from(self.corners[i][0].x),
-                    f64::from(self.corners[i][0].y),
-                ],
-                [
-                    f64::from(self.corners[i][1].x),
-                    f64::from(self.corners[i][1].y),
-                ],
-                [
-                    f64::from(self.corners[i][2].x),
-                    f64::from(self.corners[i][2].y),
-                ],
-                [
-                    f64::from(self.corners[i][3].x),
-                    f64::from(self.corners[i][3].y),
-                ],
-            ];
+            let corners = quad_to_f64(&self.corners[i]);
 
             let center = [
                 (corners[0][0] + corners[1][0] + corners[2][0] + corners[3][0]) / 4.0,
@@ -429,24 +428,7 @@ impl DetectionBatchView<'_> {
         let v = self.ids.len();
         let mut detections = Vec::with_capacity(v);
         for i in 0..v {
-            let corners = [
-                [
-                    f64::from(self.corners[i][0].x),
-                    f64::from(self.corners[i][0].y),
-                ],
-                [
-                    f64::from(self.corners[i][1].x),
-                    f64::from(self.corners[i][1].y),
-                ],
-                [
-                    f64::from(self.corners[i][2].x),
-                    f64::from(self.corners[i][2].y),
-                ],
-                [
-                    f64::from(self.corners[i][3].x),
-                    f64::from(self.corners[i][3].y),
-                ],
-            ];
+            let corners = quad_to_f64(&self.corners[i]);
             let center = [
                 (corners[0][0] + corners[1][0] + corners[2][0] + corners[3][0]) / 4.0,
                 (corners[0][1] + corners[1][1] + corners[2][1] + corners[3][1]) / 4.0,
