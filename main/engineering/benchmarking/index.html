@@ -3286,7 +3286,8 @@ locus_v1_tag36h11_3840x2160,charuco_golden_v1_1920x1080,aprilgrid_golden_v1_1920
 <li>
 <p><strong>Run Hub Tests</strong>:
    <div class="highlight"><pre><span></span><code><span class="c1"># Tag-level regression (regression_render_tag)</span>
-<span class="c1"># Covers 4 resolutions × the shipped extraction/refinement routes and Fast/Accurate pose modes.</span>
+<span class="c1"># Covers the 4-resolution `high_accuracy` baseline plus quad-extraction variants</span>
+<span class="c1"># (EdLines with None refinement, moments culling) at 720p/1080p.</span>
 <span class="c1"># Requires LOCUS_HUB_DATASET_DIR to locate the cache.</span>
 <span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--test<span class="w"> </span>regression_render_tag<span class="w"> </span>--features<span class="w"> </span>bench-internals<span class="w"> </span>--<span class="w"> </span>--nocapture

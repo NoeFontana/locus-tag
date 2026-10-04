@@ -3083,6 +3083,11 @@ calibration concern, not a correctness concern.</p>
 <td><code>InvalidLocalMeanRadius</code></td>
 </tr>
 <tr>
+<td><code>threshold_noise_k</code> finite and <code>&gt; 0</code></td>
+<td><code>DetectorConfig::validate</code></td>
+<td><code>InvalidNoiseK</code></td>
+</tr>
+<tr>
 <td><code>decoder_max_border_error_rate</code>, when set, lies in <code>[0, 1]</code> (<code>None</code> = the family's <code>max_hamming / bit_count</code>; <code>1.0</code> disables the ring check)</td>
 <td><code>DetectorConfig::validate</code></td>
 <td><code>InvalidBorderErrorRate</code></td>
@@ -3108,7 +3113,7 @@ calibration concern, not a correctness concern.</p>
 <td><code>InvalidEdgeLength</code></td>
 </tr>
 <tr>
-<td><code>structure_tensor_radius &lt;= 8</code></td>
+<td><code>1 &lt;= structure_tensor_radius &lt;= 8</code></td>
 <td><code>DetectorConfig::validate</code></td>
 <td><code>InvalidStructureTensorRadius</code></td>
 </tr>
@@ -3137,6 +3142,11 @@ calibration concern, not a correctness concern.</p>
 <td><code>DetectorConfig::validate</code></td>
 <td><code>AdaptivePolicyThresholdOutOfRange</code></td>
 </tr>
+<tr>
+<td><code>quad_extraction_policy == AdaptivePpb</code> ⇒ <code>refinement_mode == None</code> (each route carries its own refinement)</td>
+<td><code>DetectorConfig::validate</code></td>
+<td><code>AdaptivePolicyStaticRefinement</code></td>
+</tr>
 </tbody>
 </table>
 <p>A further check runs per call: a <code>Static</code> <code>EdLines</code>
@@ -3153,11 +3163,11 @@ declares explicit ranges:</p>
 <li><code>quad_max_elongation</code>, <code>quad_min_density</code></li>
 <li><code>huber_delta_px</code>, <code>tikhonov_alpha_max</code>, <code>sigma_n_sq</code></li>
 </ul>
-<p>The Pydantic model declares ranges for most of these. Every Python
-construction path goes through it: <code>Detector(profile=…)</code> and
-<code>Detector(config=…)</code> both serialize a validated <code>DetectorConfig</code>, and there is
-no keyword path that bypasses it. A config therefore reaches Rust unchecked
-only as a user-authored JSON payload handed to the Rust API directly.</p>
+<p>The Pydantic model declares ranges for most of these. <code>Detector(profile=…)</code>,
+<code>Detector(config=…)</code> and <code>locus.DetectorBuilder.build()</code> all serialize a validated
+<code>DetectorConfig</code>. A field assigned on an existing model after construction is not
+re-validated (the model has no <code>validate_assignment</code>), so Rust's <code>validate()</code> is the
+backstop for that path and for user-authored JSON handed to the Rust API.</p>
 <h3 id="field-scope-live-telemetry-only-inert">Field scope: live, telemetry-only, inert</h3>
 <p>A config field that is accepted, stored and echoed back by <code>Detector.config()</code>
 but never read is a contract violation in its own right — the API promises an
@@ -3183,11 +3193,15 @@ also fails the test — so neither category can drift silently.</p>
 <td><strong>Live but output-invariant</strong> by design: it picks the scoped Rayon pool (<code>LocusEngine::run_scoped</code>). Allowlisted as inert <em>for output</em>; <code>nthreads_selects_the_pipeline_pool</code> separately proves the pool is installed.</td>
 </tr>
 <tr>
-<td><code>threshold_local_mean_radius</code> and the LocalMean offset</td>
-<td><strong>Live under <code>threshold_mode = LocalMean</code> only</strong> (the local-mean window and its offset); ignored by <code>TileMidExtreme</code>. Not allowlisted: their cases switch the mode on first.</td>
+<td><code>threshold_local_mean_radius</code>, <code>threshold_noise_k</code></td>
+<td><strong>Live under <code>threshold_mode = LocalMean</code> only</strong> (the local-mean window and its noise-calibrated offset); ignored by <code>TileMidExtreme</code>. Not allowlisted: their cases switch the mode on first.</td>
 </tr>
 </tbody>
 </table>
+<p>The tile-contrast floor that used to be the <code>threshold_min_range</code> field is now an internal
+constant (<code>TILE_MIN_RANGE = 10</code> in <code>threshold.rs</code>). It is telemetry-only: the tile-validity
+mask it drives is applied only while writing <code>telemetry.binarized</code>, never to the
+<code>threshold_map</code> segmentation consumes.</p>
 <hr />
 <h2 id="4-detector-constructor-_create_detector_from_config">4. <code>Detector</code> constructor (<code>_create_detector_from_config</code>)</h2>
 <p>Rust entry: <code>_create_detector_from_config</code> in <code>crates/locus-py/src/lib.rs</code>.

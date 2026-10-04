@@ -2834,9 +2834,12 @@ string to Rust's <code>from_profile_json</code>; <code>Detector.config()</code> 
 format is therefore the single contract on both sides — Rust and Python are
 independent <em>reader and writer</em> of one format, and the round-trip is total over
 every field (no hand-maintained field-by-field FFI struct to drift).</p>
-<p>One consequence: <code>f64::INFINITY</code> (the documented value that disables the
-pose-consistency escape clause) has no JSON number form, so it round-trips as
-<code>null</code> — the serde shim maps <code>∞ ↔ null</code> and Pydantic maps <code>math.inf ↔ null</code>.</p>
+<p>Every key of a profile is optional. The serde shim marks each nested group
+<code>#[serde(default)]</code> with its <code>Default</code> projected from
+<code>DetectorConfig::default()</code>, and the Pydantic field defaults equal those same
+values (<code>standard</code>), so a key omitted from a custom profile takes the same
+value in Rust and Python. <code>test_profiles.py</code> parses sparse documents on both
+sides and compares them.</p>
 <p>The Python type stub (<code>locus.pyi</code>) is <strong>generated</strong> from the annotated pyo3
 surface by the <code>stub_gen</code> binary; do not hand-edit it.</p>
 <h2 id="drift-tripwires">Drift tripwires</h2>
