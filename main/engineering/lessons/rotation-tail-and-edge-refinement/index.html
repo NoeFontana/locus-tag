@@ -1601,6 +1601,8 @@
       
         
       
+        
+      
     
     
     
@@ -1826,6 +1828,34 @@
     
   
     Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarking/sota_scoreboard_20261004/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    SOTA scoreboard checkpoint (2026-10-04)
   
 
     
@@ -2142,6 +2172,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#2026-10-04-the-marker-calibrates-its-own-photometric-inset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026-10-04 — The marker calibrates its own photometric inset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#durable-conclusion" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2207,7 +2248,7 @@
 
 <h1 id="pose-rotation-error-tail-lessons">Pose rotation-error tail — lessons</h1>
 <p><strong>Status:</strong> RESOLVED for single-frame — model-edge pose refinement shipped in v0.7.0 (<code>high_accuracy</code>); corner-level levers remain trade-bound. The <a href="#2026-10-01-corner-bias-is-photometric-not-a-psf-floor">2026-10-01 photometric finding</a> is ACTIVE and qualifies the "~0.6 px edge-line floor" below.
-<strong>Last updated:</strong> 2026-10-01
+<strong>Last updated:</strong> 2026-10-04
 <strong>Owning code:</strong> <code>crates/locus-core/src/model_edge.rs</code> and the pose LM stack (<code>pose.rs</code> / <code>pose_weighted.rs</code>).</p>
 <h2 id="tldr">TL;DR</h2>
 <p>The residual rotation-p99 tail on <code>high_accuracy</code> Accurate-mode pose (≈0.60° at 1080p) was first read as a <em>physical law</em> — the IPPE planar-pose ambiguity that any 4-corner PnP inherits. That belief was refuted: the tail is not physics but <strong>corner localization</strong>, and it concentrates in a handful of scenes (removing the worst 2 tags already hits the target). We then chased it at the corner level — GWLF/apriltag-edge refit, per-corner repair, per-tag switching (even an oracle), and internal fusion — and every one proved <strong>trade-bound</strong>: rotation improved only by adopting a common-mode corner profile that structurally regressed translation (e.g. GWLF: rot p99 0.600°→0.398° but trans p99 18.6→63.0 mm). The reframe that finally won was to stop reshaping the same 4 corners and <strong>add independent information</strong>: refine the 6-DoF pose against the decoded tag's ~40 internal bit-grid edges. That over-constrains rotation without disturbing corner-anchored translation, cutting rot p99 47–76% across resolutions (1080p 0.600°→0.249°, under OpenCV apriltag's 0.376°) at Locus's best-in-class translation. It shipped <strong>on by default in <code>high_accuracy</code> in v0.7.0</strong>.</p>
@@ -2358,6 +2399,94 @@ linearized sampler (photometric response applied as an f32 LUT inside the sample
 re-quantizing the 8-bit image, which cost 10–12 pp recall in a probe), with EdLines'
 outward bias fixed in the same change. Otherwise render-tag regresses when the
 cancellation breaks.</p>
+<h2 id="2026-10-04-the-marker-calibrates-its-own-photometric-inset">2026-10-04 — The marker calibrates its own photometric inset</h2>
+<p><strong>Status:</strong> SHIPPED in <code>decoder.corner_subpix</code> (<code>standard</code>, <code>grid</code>). Owning code:
+<code>crates/locus-core/src/marker_inset.rs</code>. Supersedes the "no fix shipped" status of the
+2026-10-01 section above for every decoded marker with cells ≥ 3.3 px on a rectified image.</p>
+<p><strong>Trigger.</strong> Fusing the junction corner with whole-edge line corners (same PR) halved the debiased
+corner scatter but <em>raised</em> single-tag rotation p99 on render-tag (high_iso 0.44° → 0.62°,
+tag16h5 0.57° → 0.80°). The tail was a few small (39–78 px), oblique (52–58° AoI) tags.</p>
+<p><strong>Root cause, step by step.</strong>
+1. A pure 0.6 px uniform inset added to the ground-truth corners reproduces the tail on the
+   same scenes (0.55–0.77°), plus 80–170 mm of translation error. The fused corners sat almost
+   exactly on that "pure inset" prediction; <code>main</code>'s noisier corners partly cancelled it by
+   chance.
+2. Along an oblique edge the inset is not even constant: blur, and hence the tone-curve shift,
+   changes with depth (0.71 px at one end of an edge, 0.35 px at the other). A whole-edge line
+   therefore tilts, and its scatter-based covariance cannot see a systematic tilt.
+3. The inset is shared by every gradient detector (OpenCV and aruco_nano: −0.6 to −0.8 px radial
+   on render-tag and ChArUco), and it depends on the dataset's tone curve. A fixed sRGB
+   linearisation fixes render-tag (−0.59 → −0.04) but breaks ICRA (0.00 → +0.26) and low_key
+   (+0.29 → +1.14).</p>
+<p><strong>Falsified: a pose-level inset nuisance.</strong> Adding <code>δ·d_k</code> (exact edge-offset direction) to the
+single-tag pose LM, marginalised by variable projection with a Gaussian prior, cannot work. The
+Cramér–Rao bound on <code>δ</code> is 4–23 px on the tail tags at σ = 0.15 px, because an inset is
+first-order depth plus pose. Measured: σ_δ ≤ 1 px is a no-op and σ_δ = 10 px is catastrophic.
+Boards can identify it (#432) because their layout fixes the marker centres.</p>
+<p><strong>What works: the decoded marker measures its own inset.</strong> Every bit boundary of the decoded
+pattern shifts toward its dark side by the same <code>δ</code>, whatever the tone curve and blur, and the
+layout says where each boundary is. Per marker, a robust fit of all boundary offsets separates
+<code>δ</code> (by polarity), an interior layout scale <code>s</code>, and the detected corners' inset <code>ε</code> per side
+(pinned by the outer boundaries); the corners move outward by <code>ε</code>. On the Blender renders the
+fit gives δ ≈ 0.41 px, <code>s − 1</code> = 0.0000, and an ε equal to the ground-truth inset of each
+corner estimator.</p>
+<p><strong>Two traps, and how the model handles them.</strong>
+- <em>ICRA's artwork.</em> Its interior dark features are about 4 % of a cell thin while the outer
+  edge is exact (border ring 0.960 cells thick, measured with ground-truth corners). Within one
+  marker that is indistinguishable from a photometric shift, and it cannot happen on a printed
+  marker, where ink spread or erosion moves the outer edge too. Accepted as a dataset artefact
+  (decision 2026-10-04): ICRA corners move outward by ≈ 0.2 px.
+- <em>Undeclared lens distortion.</em> The default build cannot represent distortion, so distorted
+  images run the pinhole path. A homography maps lines to lines, so distortion shows as a bow
+  along each boundary. The model carries four bow parameters, kept only when an F-test (99 %)
+  shows they are significant. On rectified images they then cost nothing; with them, a
+  barrel-distorted synthetic marker is recovered to &lt; 0.15 px (1.01 px without). Declared
+  distortion skips the calibration and the edge-line fusion entirely.</p>
+<p><strong>Measured</strong> (regression snapshots, render-tag 1080p, the suites' built-in pose path; with the
+edge-line band capped at 4 px, which on large markers had reached the bit edges):</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Set</th>
+<th style="text-align: left;">Corner mean RMSE (px)</th>
+<th style="text-align: left;">Rotation p99 (°)</th>
+<th style="text-align: left;">Translation p99 (mm)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">high_iso</td>
+<td style="text-align: left;">0.711 → 0.062</td>
+<td style="text-align: left;">0.438 → 0.201</td>
+<td style="text-align: left;">66 → 21</td>
+</tr>
+<tr>
+<td style="text-align: left;">tag16h5</td>
+<td style="text-align: left;">0.704 → 0.055</td>
+<td style="text-align: left;">0.563 → 0.379</td>
+<td style="text-align: left;">128 → 17</td>
+</tr>
+<tr>
+<td style="text-align: left;">low_key (n = 6)</td>
+<td style="text-align: left;">0.022 → 0.005</td>
+<td style="text-align: left;">0.564 → 0.153</td>
+<td style="text-align: left;">4.9 → 1.0</td>
+</tr>
+<tr>
+<td style="text-align: left;">raw_pipeline</td>
+<td style="text-align: left;">0.497 → 0.303</td>
+<td style="text-align: left;">unchanged (one 2.6° frame)</td>
+<td style="text-align: left;">41 → 21</td>
+</tr>
+</tbody>
+</table>
+<p>Boards: ChArUco rotation p50 0.0094° → 0.0022°; ChArUco refiner rotation mean 0.32° → 0.10°.
+The board-level inset nuisance (#432) is still needed for corners the calibration skips:
+without it, board translation p95 rises 0.65 → 11 mm (AprilGrid).</p>
+<p><strong>Re-attempt / revisit only if:</strong> a real-camera dataset shows interior dark features scaling
+differently from the outline (the ICRA pattern). That would need a frame-level split of <code>δ</code>
+(constant in px) from artwork erosion (proportional to the cell), regressing across the tags of
+a frame.</p>
 <h2 id="durable-conclusion">Durable conclusion</h2>
 <p>Every "reshape the same 4 corners" lever is trade-bound because a corner-refinement method has a fixed error <em>profile</em>: you can trade Locus's low-absolute-error/high-variance EdLines corners for apriltag/GWLF's high-absolute-error/low-variance corners, buying rotation consistency at the cost of translation bias — but you cannot escape the frontier, because rotation and translation are read off the <em>same four observations</em>. The only way to improve both at once is to add observations the corners don't carry. Model-edge refinement does exactly that: the decoded interior pattern supplies ~40 independent, interior-distributed edge constraints that pin orientation an order of magnitude better than 4 corners, while translation stays anchored to the trusted corners. Adding information beat reshaping information.</p>
 <h2 id="still-open-re-attempt-only-if">Still open / re-attempt only if</h2>
