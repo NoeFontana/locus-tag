@@ -106,6 +106,21 @@ jobs:
       - name: Run Doc Tests
         run: cargo test --doc --all-features
 
+      # Neither step above reaches a `regression_*` binary: `.config/nextest.toml`'s
+      # `default-filter` excludes `binary(~regression)`, the `ci` profile inherits it, and
+      # `cargo insta test` defaults to `--test-runner auto`, which picks the installed
+      # nextest and so inherits the same filter. Most of those suites need a dataset and
+      # cannot run here, but `regression_straight_space` is **synthetic** — it renders its
+      # own fisheye and polynomial scenes — so it is a free gate, and it is the only CI
+      # coverage of the distortion-aware extraction and decode routes.
+      # Features named explicitly rather than `--all-features`: this suite needs exactly
+      # `non_rectified` (the distortion models) and `bench-internals` (its synthetic
+      # renderer), and `--all-features` would also enable `tracy`, whose client aborts a
+      # test binary on hosts without an invariant TSC. No `regression_*` binary has ever
+      # run under `--all-features` here, so this step should not be the one to find out.
+      - name: Synthetic Distortion Acceptance (no datasets)
+        run: cargo test --release --features bench-internals,non_rectified --test regression_straight_space
+
       - name: Verify Snapshot Parity
         run: cargo insta test --release --all-features --features bench-internals --check
 

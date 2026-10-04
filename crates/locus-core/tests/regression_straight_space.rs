@@ -203,6 +203,84 @@ fn kannala_brandt_recovers_tag_corners() {
     );
 }
 
+/// The sub-pixel corner pass must run on the **distortion-aware** decode route.
+///
+/// `decode_batch_soa_with_camera_inner` is a second implementation of the decode loop, and
+/// this pass (plus every corner improvement before it) existed only in the pinhole
+/// `decode_batch_soa_generic`. Its absence was invisible: toggling `decoder.corner_subpix`
+/// under declared distortion produced byte-identical output, and on the shipped distortion
+/// hubs it cost ~5x in corner RMSE. This test is dataset-free on purpose — the hub suites
+/// that measured the regression only run where the Hugging Face cache is present, so without
+/// it the behaviour has no coverage in CI.
+#[test]
+fn corner_subpix_runs_on_the_distorted_route() {
+    let (source, _) =
+        generate_synthetic_test_image(TagFamily::AprilTag36h11, 0, TAG_SIZE, CANVAS, 0.0);
+
+    let bc = BrownConradyModel {
+        k1: -0.2,
+        k2: 0.03,
+        p1: 0.0,
+        p2: 0.0,
+        k3: 0.0,
+    };
+    let mut intrinsics = scene_intrinsics(CANVAS, CANVAS);
+    intrinsics.distortion = locus_core::pose::DistortionCoeffs::BrownConrady {
+        k1: bc.k1,
+        k2: bc.k2,
+        p1: bc.p1,
+        p2: bc.p2,
+        k3: bc.k3,
+    };
+    assert!(
+        intrinsics.distortion.is_distorted(),
+        "the test must exercise the distorted route"
+    );
+
+    let pixels = render_distorted(&source, CANVAS, &bc, &intrinsics, CANVAS, CANVAS);
+    let view = ImageView::new(&pixels, CANVAS, CANVAS, CANVAS).expect("valid view");
+
+    let corners_for = |subpix: bool| {
+        let config = locus_core::DetectorConfig {
+            decoder_corner_subpix: subpix,
+            ..Default::default()
+        };
+        let mut detector = DetectorBuilder::new()
+            .with_config(config)
+            .with_family(TagFamily::AprilTag36h11)
+            .build();
+        let batch = detector
+            .detect(&view, Some(&intrinsics), None, false)
+            .expect("detect should not error");
+        assert!(!batch.is_empty(), "distorted detection recovered no tags");
+        (batch.corners[0], batch.corner_refined[0])
+    };
+
+    let (refined_corners, bits) = corners_for(true);
+    let (seed_corners, seed_bits) = corners_for(false);
+
+    assert_eq!(
+        seed_bits, 0,
+        "with the pass off no corner may be marked refined"
+    );
+    assert_ne!(
+        bits, 0,
+        "no corner was refined on the distorted route: the pass did not run, or every \
+         candidate window was rejected"
+    );
+    let moved = (0..4)
+        .map(|j| {
+            f64::from(refined_corners[j].x - seed_corners[j].x)
+                .hypot(f64::from(refined_corners[j].y - seed_corners[j].y))
+        })
+        .fold(0.0_f64, f64::max);
+    assert!(
+        moved > 1e-6,
+        "`decoder.corner_subpix` is inert on the distorted route: corners are identical \
+         with the pass on and off (max move {moved:.3e} px)"
+    );
+}
+
 #[test]
 fn brown_conrady_recovers_tag_corners() {
     let (source, gt_src) =

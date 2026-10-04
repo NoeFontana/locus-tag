@@ -30,7 +30,6 @@ use common::hub::{
     DatasetProvider, HubProvider, RegressionHarness, build_intrinsics, load_rich_truth_entries,
 };
 
-#[cfg(feature = "non_rectified")]
 use locus_core::{
     ConfigError, Detector, DetectorConfig, DetectorError, ImageView,
     config::{CornerRefinementMode, QuadExtractionMode},
@@ -89,6 +88,33 @@ fn run_distortion_hub_test(config_name: &str, family: TagFamily) {
             options.tag_size = Some(size_mm / 1000.0);
         }
     }
+
+    // The suite asserts its own premise, against what the detector is actually handed.
+    //
+    // `build_intrinsics` falls through to `CameraIntrinsics::new` (no distortion) whenever the
+    // declared model cannot be represented — which is what happens without `non_rectified`,
+    // since the `DistortionCoeffs` variants are themselves feature-gated. Before this check the
+    // two tests below ran the **pinhole** detector on fisheye frames and blessed the result, so
+    // the whole distortion path (straight-space quad extraction, the distortion-aware pose LMs,
+    // the `AdaptivePpb` fallback) had no coverage at all. `required-features` in `Cargo.toml`
+    // makes that unreachable; this keeps it unreachable if the intrinsics plumbing is rerouted.
+    //
+    // Checked per frame, not on `options.intrinsics`: the harness uses
+    // `gt.intrinsics.or(options.intrinsics)`, so the per-entry value wins and the fallback is
+    // dead whenever `rich_truth.json` carries `k_matrix` per record (it does). Asserting on the
+    // fallback alone would pass while every frame ran pinhole.
+    let undistorted = provider.frames_without_distortion(options.intrinsics);
+    assert!(
+        undistorted.is_empty(),
+        "{config_name}: {} of {} frames would be detected with no distortion model, so this \
+         suite would silently measure the pinhole path on a distorted dataset (first: {:?}). \
+         Check that every rich_truth.json record declares `distortion_model` and its \
+         coefficients (`distortion_coeffs`, read as `dist_coeffs`) alongside `k_matrix`, and \
+         that the build enables `--features non_rectified`.",
+        undistorted.len(),
+        provider.gt_map.len(),
+        undistorted.first()
+    );
 
     let snapshot = format!("hub_{}", provider.name());
 
@@ -151,7 +177,6 @@ fn regression_hub_distortion_kannala_brandt() {
 /// `debug_telemetry=true`. The policy is built inline (rather than loaded from a
 /// profile) so the dispatch coverage is independent of any shipped profile's
 /// candidate-area gate.
-#[cfg(feature = "non_rectified")]
 #[test]
 fn test_adaptive_ppb_falls_back_under_distortion() {
     let _guard = common::telemetry::init("test_adaptive_ppb_falls_back_under_distortion");
@@ -315,7 +340,6 @@ fn test_adaptive_ppb_falls_back_under_distortion() {
 /// `ConfigError::EdLinesUnsupportedWithDistortion`. This is coverage for the
 /// gate at the top of `run_detection_pipeline`. We don't load a hub dataset:
 /// the gate fires before any pixel work, so a synthetic blank image is fine.
-#[cfg(feature = "non_rectified")]
 #[test]
 fn test_static_edlines_errors_under_distortion() {
     let _guard = common::telemetry::init("test_static_edlines_errors_under_distortion");

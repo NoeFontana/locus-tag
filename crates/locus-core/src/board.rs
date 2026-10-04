@@ -747,10 +747,15 @@ fn ippe_branches_from_sample_homography(
             // homography model is pinhole, so feeding distorted pixels would bias
             // the seed on a distorted camera (identity for DistortionCoeffs::None,
             // so undistorted results are unchanged).
-            let [ux, uy] = intrinsics.undistort_pixel(
+            // Checked: a correspondence the lens model cannot invert is skipped rather than
+            // contributing a bogus DLT row. The seed is over-determined, so dropping one is
+            // strictly better than biasing all of them.
+            let Some([ux, uy]) = intrinsics.undistort_pixel_checked(
                 f64::from(corr.image_points[k].x),
                 f64::from(corr.image_points[k].y),
-            );
+            ) else {
+                continue;
+            };
             let u = (ux - intrinsics.cx) / intrinsics.fx;
             let v = (uy - intrinsics.cy) / intrinsics.fy;
 

@@ -166,8 +166,53 @@ impl CameraIntrinsics {
         )
     }
 
+    /// [`Self::undistort_pixel`], but `None` unless the inverse is trustworthy — i.e.
+    /// re-distorting lands back on the input within
+    /// [`crate::camera::MAX_UNDISTORT_RESIDUAL`].
+    ///
+    /// Use this, not `undistort_pixel`, whenever the result becomes **geometry** (a
+    /// homography, an IPPE seed, a DLT row). The models' inverse cannot fail by signature, so
+    /// for a radius outside the model's invertible domain it returns a point that is not a
+    /// preimage of its argument, and the caller cannot tell. Identity — and so always
+    /// `Some` — for [`DistortionCoeffs::None`].
+    #[must_use]
+    pub fn undistort_pixel_checked(&self, px: f64, py: f64) -> Option<[f64; 2]> {
+        match self.distortion {
+            DistortionCoeffs::None => Some([px, py]),
+            #[cfg(feature = "non_rectified")]
+            DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 } => {
+                let m = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
+                self.undistort_pixel_with(&m, px, py)
+            },
+            #[cfg(feature = "non_rectified")]
+            DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 } => {
+                let m = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
+                self.undistort_pixel_with(&m, px, py)
+            },
+        }
+    }
+
+    /// Shared body of [`Self::undistort_pixel_checked`]: normalize, invert with the
+    /// round-trip check, scale back to pixels.
+    #[cfg(feature = "non_rectified")]
+    #[inline]
+    fn undistort_pixel_with<C: crate::camera::CameraModel>(
+        &self,
+        model: &C,
+        px: f64,
+        py: f64,
+    ) -> Option<[f64; 2]> {
+        let xn = (px - self.cx) / self.fx;
+        let yn = (py - self.cy) / self.fy;
+        let [xu, yu] = model.undistort_checked(xn, yn)?;
+        Some([xu * self.fx + self.cx, yu * self.fy + self.cy])
+    }
+
     /// Map a pixel coordinate `(px, py)` in the distorted image to an ideal
     /// (undistorted) pixel coordinate.
+    ///
+    /// Returns its best effort even where the model is not invertible; prefer
+    /// [`Self::undistort_pixel_checked`] when the result is used as geometry.
     ///
     /// For [`DistortionCoeffs::None`] this is an identity operation.
     #[must_use]
@@ -805,6 +850,27 @@ impl ConsistencyThresholds {
     }
 }
 
+/// The four corners in ideal (undistorted) pixel space, or `None` if any of them lies where the
+/// lens model is not invertible.
+///
+/// IPPE runs in ideal space while the LM residuals run in observed space, so this is the one
+/// place the corners cross over. Checked rather than best-effort: a corner that is not a
+/// preimage would seed IPPE with a point the lens cannot explain and the homography would
+/// absorb it silently. No pose beats a pose built on such a corner.
+fn ideal_pixel_corners(
+    intrinsics: &CameraIntrinsics,
+    corners: &[[f64; 2]; 4],
+) -> Option<[[f64; 2]; 4]> {
+    if intrinsics.distortion == DistortionCoeffs::None {
+        return Some(*corners);
+    }
+    let mut ideal = [[0.0_f64; 2]; 4];
+    for (slot, corner) in ideal.iter_mut().zip(corners.iter()) {
+        *slot = intrinsics.undistort_pixel_checked(corner[0], corner[1])?;
+    }
+    Some(ideal)
+}
+
 /// Variant of [`estimate_tag_pose_with_config`] that additionally returns
 /// pose-consistency diagnostics for telemetry. `thresholds = None` means
 /// the gate is disabled — the consistency check short-circuits to "accept"
@@ -823,10 +889,8 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>, PoseDiagnostics) {
     // For distorted cameras, IPPE runs in ideal space; LM residuals run in
     // observed (distorted) space. Keep both forms.
-    let ideal_corners: [[f64; 2]; 4] = if intrinsics.distortion == DistortionCoeffs::None {
-        *corners
-    } else {
-        core::array::from_fn(|i| intrinsics.undistort_pixel(corners[i][0], corners[i][1]))
+    let Some(ideal_corners) = ideal_pixel_corners(intrinsics, corners) else {
+        return (None, None, PoseDiagnostics::empty());
     };
 
     let Some(h_poly) = crate::decoder::Homography::square_to_quad(&ideal_corners) else {

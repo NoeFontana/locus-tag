@@ -284,6 +284,15 @@ name = "regression_straight_space"
 path = "tests/regression_straight_space.rs"
 required-features = ["non_rectified", "bench-internals"]
 
+# Without `non_rectified` the distortion models do not exist, so the harness's
+# `build_intrinsics` silently yields pinhole intrinsics and the suite measures the
+# pinhole path on fisheye frames. Requiring the feature makes the target disappear
+# instead of blessing a meaningless baseline.
+[[test]]
+name = "regression_distortion_hub"
+path = "tests/regression_distortion_hub.rs"
+required-features = ["non_rectified"]
+
 [[test]]
 name = "regression_euroc"
 path = "tests/regression_euroc.rs"

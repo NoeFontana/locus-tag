@@ -474,13 +474,6 @@ fn contour_fill(contour: &[Point]) -> f64 {
     twice_area.abs() * 0.5 + n as f64 * 0.5 + 1.0
 }
 
-/// Max per-point `distort(undistort(xd)) − xd` drift tolerated during
-/// boundary rectification. Chosen at 2× the `camera_geometry.rs` round-trip
-/// proptest envelope (`< 1e-4`) so Newton blow-up bails while
-/// well-conditioned points stay.
-#[cfg(feature = "non_rectified")]
-const MAX_UNDISTORT_RESIDUAL: f64 = 2e-4;
-
 /// Intrinsics rescaled to the decimation grid: every coordinate (focals and principal
 /// point) divided by `d`, the inverse of [`crate::image::decimated_to_full`] for
 /// pixel-centre-at-0.5 coordinates.
@@ -722,13 +715,10 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         for p in &contour {
             let xd = (p.x - scaled.cx) / scaled.fx;
             let yd = (p.y - scaled.cy) / scaled.fy;
-            let [xn, yn] = camera.undistort(xd, yd);
-            let [xd_chk, yd_chk] = camera.distort(xn, yn);
-            let dx = xd_chk - xd;
-            let dy = yd_chk - yd;
-            if (dx * dx + dy * dy).sqrt() > MAX_UNDISTORT_RESIDUAL {
-                return None;
-            }
+            // Non-convergence and out-of-domain radii are rejected here, once, for the whole
+            // candidate: a contour point whose inverse is not a preimage would otherwise enter
+            // the rectified contour and bend the straight-space fit.
+            let [xn, yn] = camera.undistort_checked(xd, yd)?;
             rect.push(Point {
                 x: xn * scaled.fx + scaled.cx,
                 y: yn * scaled.fy + scaled.cy,
