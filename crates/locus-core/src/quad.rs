@@ -417,12 +417,11 @@ fn extract_single_quad(
     }
 
     if ok {
-        // Decode-first ordering (`quad_refine_before_decode = false`) keeps the contour
-        // corners; the decoder refines only the candidates that decode or nearly do. Only the
-        // ERF route has that decoder-side refinement, so every other route refines here.
-        let refined = config.quad_refine_before_decode
-            || route_refinement != crate::config::CornerRefinementMode::Erf
-            || config.refinement_mode != crate::config::CornerRefinementMode::Erf;
+        // Decode-first ordering keeps the contour corners; the decoder refines only the
+        // candidates that decode or nearly do. Only the ERF route has that decoder-side
+        // refinement, so every other route refines here.
+        let refined =
+            !config.decode_first() || route_refinement != crate::config::CornerRefinementMode::Erf;
         let (corners, out_covs) = if refined {
             crate::refinement::refine_quad_corners(
                 arena,

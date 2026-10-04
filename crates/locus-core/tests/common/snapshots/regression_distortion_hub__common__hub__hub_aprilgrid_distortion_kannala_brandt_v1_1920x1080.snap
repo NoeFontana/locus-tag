@@ -4,17 +4,17 @@ expression: report
 ---
 summary:
   dataset_size: 50
-  mean_recall: 0.817996678476501
-  mean_precision: 0.9882073263093316
+  mean_recall: 0.8171798588019225
+  mean_precision: 0.9872742047713714
   mean_rmse: 0.2404
-  mean_reprojection_rmse: 2.7328
-  p50_translation_error: 0.0878
+  mean_reprojection_rmse: 2.679
+  p50_translation_error: 0.0874
   p90_translation_error: 0.2939
   p99_translation_error: 0.6935
-  p50_rotation_error: 7.3926
-  p90_rotation_error: 31.6281
+  p50_rotation_error: 7.387
+  p90_rotation_error: 31.3384
   p99_rotation_error: 55.0114
-  mean_hamming: 0.001
+  mean_hamming: 0.0039
   mean_total_ms: "[DURATION]"
   worst_offenders:
     - filename: scene_0011_cam_0000.png

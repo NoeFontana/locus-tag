@@ -581,6 +581,16 @@ fn border_ring_ok(
         )
 }
 
+/// Border-ring error budget of a family whose decodes accept up to `max_h` errors in `bits`
+/// bits: the configured rate, or by default the codeword's own error density `max_h / bits`
+/// (one ring cell of 28 for tag36h11 at h = 2, none for tag16h5 at h = 0).
+#[allow(clippy::cast_precision_loss)]
+fn ring_error_rate(config: &crate::config::DetectorConfig, max_h: u32, bits: usize) -> f32 {
+    config
+        .decoder_max_border_error_rate
+        .unwrap_or_else(|| max_h as f32 / bits.max(1) as f32)
+}
+
 /// Sample values from the image using DDA-based coordinate generation and SIMD bilinear sampling.
 #[multiversion(targets("x86_64+avx2+fma", "aarch64+neon"))]
 fn sample_grid_values_dda_simd(
@@ -1236,7 +1246,11 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
                 if improves
                     && hamming <= decoder_max_h_buf[decoder_idx]
                     && *ring_cache[decoder_idx].get_or_insert_with(|| {
-                        let rate = config.decoder_max_border_error_rate;
+                        let rate = ring_error_rate(
+                            config,
+                            decoder_max_h_buf[decoder_idx],
+                            decoder.bit_count(),
+                        );
                         rate >= 1.0
                             || ring_budget_ok(
                                 h_report.as_ref().and_then(|h| {
@@ -1484,6 +1498,22 @@ pub(crate) fn decode_batch_soa_generic(
             .unwrap_or_else(|| d.default_max_hamming());
     }
     let decoder_max_h = &decoder_max_h_buf[..decoders.len()];
+    let mut decoder_ring_rate_buf = [0.0f32; 8];
+    for (idx, d) in decoders.iter().enumerate() {
+        decoder_ring_rate_buf[idx] = ring_error_rate(config, decoder_max_h[idx], d.bit_count());
+    }
+    let decoder_ring_rate = &decoder_ring_rate_buf[..decoders.len()];
+    // Decode-first matches come from unrefined contour corners, about a pixel off on small
+    // markers, so a ring sample can land in the white surround. Such a match is verified on the
+    // refined quad with the full budget; the seed only has to look like a marker, with the
+    // recovery gate's tolerance.
+    let mut seed_ring_rate_buf = decoder_ring_rate_buf;
+    if config.decode_first() {
+        for rate in &mut seed_ring_rate_buf[..decoders.len()] {
+            *rate = rate.max(RECOVERY_RING_MAX_ERROR_RATE);
+        }
+    }
+    let seed_ring_rate = &seed_ring_rate_buf[..decoders.len()];
     // Looser frame-level floor used by the recovery-refinement gate
     // ("did we fail to accept anywhere?"). In single-family setups this
     // equals the family default; in multi-family setups it preserves
@@ -1682,7 +1712,7 @@ pub(crate) fn decode_batch_soa_generic(
                                                     &roi,
                                                     homography,
                                                     decoder.as_ref(),
-                                                    config.decoder_max_border_error_rate,
+                                                    seed_ring_rate[decoder_idx],
                                                 )
                                             })
                                         {
@@ -1697,7 +1727,12 @@ pub(crate) fn decode_batch_soa_generic(
                             {
                                 best_id = id;
                                 best_rot = rot;
-                                best_code = Some(code);
+                                // A decode-first match stands only once its refined quad
+                                // verifies it below; until then it must not reach the
+                                // acceptance after the scale loop with its contour corners.
+                                if !config.decode_first() {
+                                    best_code = Some(code);
+                                }
                                 let decoder = decoders[decoder_idx].as_ref();
 
                                 // Always perform ERF refinement for finalists if requested
@@ -1711,16 +1746,19 @@ pub(crate) fn decode_batch_soa_generic(
                                             [f64::from(corners[j].x), f64::from(corners[j].y)];
                                     }
 
-                                    let refined_corners = if config.quad_refine_before_decode {
+                                    let refined_corners = if !config.decode_first() {
                                         refine_corners_erf(
                                             arena,
                                             img,
                                             &current_corners,
                                             config.subpixel_refinement_sigma,
                                         )
-                                    } else if let Some(refined) =
-                                        refine_decode_first_seed(arena, img, &current_corners, config)
-                                    {
+                                    } else if let Some(refined) = refine_decode_first_seed(
+                                        arena,
+                                        img,
+                                        &current_corners,
+                                        config,
+                                    ) {
                                         refined
                                     } else {
                                         continue;
@@ -1751,7 +1789,7 @@ pub(crate) fn decode_batch_soa_generic(
                                         continue;
                                     }
 
-                                    if !config.quad_refine_before_decode {
+                                    if config.decode_first() {
                                         // Decode-first: the match came from unrefined corners,
                                         // so it stands only if the refined quad decodes the
                                         // same id within budget at the scale that matched and
@@ -1791,7 +1829,7 @@ pub(crate) fn decode_batch_soa_generic(
                                                         &roi,
                                                         &ref_h_mat,
                                                         decoder,
-                                                        config.decoder_max_border_error_rate,
+                                                        decoder_ring_rate[decoder_idx],
                                                     )
                                             });
                                         if let Some((code_ref, _, hamming_ref, rot_ref)) = verified
@@ -1873,11 +1911,12 @@ pub(crate) fn decode_batch_soa_generic(
                                     // Decode-first ordering left these corners unrefined: a
                                     // near miss gets the refinement it skipped, then one more
                                     // decode at each scale, before the coarse nudge search.
-                                    if !config.quad_refine_before_decode
+                                    if config.decode_first()
                                         && let Some(refined) = refine_decode_first_seed(
                                             arena,
                                             img,
-                                            &current_corners.map(|c| [f64::from(c.x), f64::from(c.y)]),
+                                            &current_corners
+                                                .map(|c| [f64::from(c.x), f64::from(c.y)]),
                                             config,
                                         )
                                     {
@@ -1941,7 +1980,7 @@ pub(crate) fn decode_batch_soa_generic(
                                                             &roi,
                                                             &h_unscaled,
                                                             decoder.as_ref(),
-                                                            config.decoder_max_border_error_rate,
+                                                            decoder_ring_rate[decoder_idx],
                                                         )
                                                     {
                                                         return (
@@ -2030,7 +2069,8 @@ pub(crate) fn decode_batch_soa_generic(
                                                                             &roi,
                                                                             &h_mat,
                                                                             decoder.as_ref(),
-                                                                            config.decoder_max_border_error_rate,
+                                                                            decoder_ring_rate
+                                                                                [decoder_idx],
                                                                         )
                                                                     {
                                                                         best_id = id;
@@ -2108,8 +2148,12 @@ pub(crate) fn decode_batch_soa_generic(
                     let seed = core::array::from_fn(|j| {
                         [f64::from(corners_slot[j].x), f64::from(corners_slot[j].y)]
                     });
-                    let (mut refined, bits) =
-                        crate::refinement::subpix_marker_corners(img, seed, subpix_cells, rectified);
+                    let (mut refined, bits) = crate::refinement::subpix_marker_corners(
+                        img,
+                        seed,
+                        subpix_cells,
+                        rectified,
+                    );
                     // Remove the photometric inset the decoded marker's bit edges measure.
                     if rectified
                         && let Some(calibrated) = crate::marker_inset::calibrate_marker_corners(

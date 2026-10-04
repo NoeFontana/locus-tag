@@ -243,9 +243,10 @@ class QuadConfig(BaseModel):
     extraction_policy: QuadExtractionPolicy = "Static"
     refine_before_decode: bool = False
     """Refine every candidate's corners before decoding (the historical order, kept by
-    ``high_accuracy``). ``False`` (decode-first, the default) decodes from contour corners and refines only candidates that decode or
-    nearly do, keeping a match only if the refined quad still decodes it. ERF refinement on
-    undistorted cameras only; other configurations always refine first."""
+    ``high_accuracy``). ``False`` (decode-first, the default) decodes from contour corners and
+    refines only candidates that decode or nearly do, keeping a match only if the refined quad
+    still decodes it. Decode-first needs ERF refinement, an undistorted camera and no
+    upscaling; other configurations always refine first."""
 
     @model_validator(mode="after")
     def _check_fill_ratio_ordering(self) -> QuadConfig:
@@ -272,9 +273,11 @@ class DecoderConfig(BaseModel):
     explicit integer overrides every family uniformly.
     """
     gwlf_transversal_alpha: float = Field(default=0.01, ge=0.0)
-    max_border_error_rate: float = Field(default=0.0, ge=0.0, le=1.0)
+    max_border_error_rate: float | None = Field(default=None, ge=0.0, le=1.0)
     """Largest fraction of the black border ring that may read bright for a decoded
-    candidate to be accepted. ``1.0`` disables the check."""
+    candidate to be accepted. ``None`` (the default) gives each family the codeword's own
+    error density, ``max_hamming_error / bit_count``: one ring cell of 28 for tag36h11, none
+    for tag16h5. ``1.0`` disables the check (the ``high_accuracy`` profile)."""
     corner_subpix: bool = True
     """Sub-pixel corner stage for every decoded marker, after ``refinement_mode``. Each
     corner is the gradient-orthogonality junction (the ``cv::cornerSubPix`` model) fused
