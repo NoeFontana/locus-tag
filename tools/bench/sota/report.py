@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from tools.bench.sota.score import failed_runs
+from tools.bench.sota.score import LOCUS_PREFIX, failed_runs, run_labels
 from tools.bench.sota.spec import load_specs
 
 # Published operating points the win table compares against (`refrun` modes). AprilTag 3
@@ -187,6 +187,22 @@ def _detector_table(scorer: str, rows: dict[str, dict[str, Any]], order: list[st
     return out
 
 
+def locus_extensions(runs_dir: Path) -> dict[str, list[str]]:
+    """The Locus native module each current Locus run imported (``locus_extension`` in its
+    first JSONL record, written by ``tools.bench.sota.run``) -> the run labels that used it."""
+    labels = run_labels(runs_dir)
+    out: dict[str, list[str]] = {}
+    for p in sorted(runs_dir.glob(f"{LOCUS_PREFIX}*.jsonl")):
+        if labels is not None and p.stem not in labels:
+            continue
+        with open(p) as f:
+            first = f.readline()
+        ext = json.loads(first).get("locus_extension") if first.strip() else None
+        key = f"`{ext['path']}` (mtime {ext['mtime']})" if ext else "not recorded"
+        out.setdefault(key, []).append(p.stem)
+    return out
+
+
 def render(
     name: str,
     runs_dir: Path,
@@ -214,8 +230,12 @@ def render(
         f"| Images | {meta['images']} (stride {meta['stride']}) |",
         f"| Threads | {meta['threads']} per detector (`RAYON_NUM_THREADS` / `cv::setNumThreads`) |",
         f"| Timing | best of {meta['reps']} per image, decode excluded; {timing} |",
-        "",
     ]
+    out += [
+        f"| Locus extension | {ext}: {', '.join(runs)} |"
+        for ext, runs in locus_extensions(runs_dir).items()
+    ]
+    out.append("")
     m = score.get("_meta", {})
     if spec.scorer == "euroc":
         out += [

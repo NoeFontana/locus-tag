@@ -422,3 +422,18 @@ def test_comparative_deltas_orients_negative_as_locus_worse():
     assert by_metric.loc["recall", "delta"] == pytest.approx(-0.1)  # locus worse
     assert by_metric.loc["trans_err_p99_m", "delta"] == pytest.approx(0.02)  # locus better
     assert isinstance(pd.DataFrame(), pd.DataFrame)
+
+
+def test_shipped_locus_space_can_express_the_standard_profile():
+    import locus
+
+    from tools.bench.tune.materialize import materialize_locus
+
+    space = load_space("locus_default")
+    standard = locus.DetectorConfig.from_profile("standard").model_dump(mode="json")
+    draw = {}
+    for path, spec in space.params.items():
+        group, key = path.split(".")
+        assert standard[group][key] in spec.grid_axis(), path
+        draw[path] = standard[group][key]
+    assert materialize_locus(space, draw).model_dump(mode="json") == standard

@@ -4,8 +4,10 @@
 //
 // Runs one *published, unpatched* reference detector over every image in
 // `list.txt` and writes one JSON object per image:
-//   {"image": ..., "ms": <best-of-reps detect() ms>, "ids": [...], "corners": [[[x,y]x4], ...]}
-// Corners are in OpenCV's pixel-centre-at-integer convention.
+//   {"image": ..., "ms": <best-of-reps detect() ms>, "ids": [...], "corners": [[[x,y]x4], ...],
+//    "convention": "opencv"}
+// Corners are in OpenCV's pixel-centre-at-integer convention, written with 4 decimals (the
+// default 6 significant digits would keep only 2 decimals on a 4K image).
 //
 // Protocol (mirrors aruco_nano's testperf.cpp so published numbers are comparable):
 //   * image decode is outside the timer; one untimed warm-up call on the first image;
@@ -23,6 +25,7 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <map>
 #include <string>
@@ -81,6 +84,7 @@ int main(int argc, char** argv) {
 
     std::ifstream list(argv[4]);
     std::ofstream out(argv[5]);
+    out << std::fixed << std::setprecision(4);
     std::string path;
     bool warmed = false;
     while (std::getline(list, path)) {
@@ -118,7 +122,7 @@ int main(int argc, char** argv) {
                 out << (c ? "," : "") << "[" << corners[i][c].x << "," << corners[i][c].y << "]";
             out << "]";
         }
-        out << "]}\n";
+        out << "],\"convention\":\"opencv\"}\n";
     }
     return 0;
 }

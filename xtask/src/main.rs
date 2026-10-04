@@ -74,6 +74,8 @@ fn main() {
 
 fn run(args: &[String]) -> Result<()> {
     let root = workspace_root()?;
+    // Paths given on the command line are relative to where xtask was invoked.
+    let cwd = env::current_dir()?;
     env::set_current_dir(&root)?;
     match args
         .iter()
@@ -82,10 +84,12 @@ fn run(args: &[String]) -> Result<()> {
         .as_slice()
     {
         ["data", rest @ ..] => data(rest),
-        ["sota", "setup", ..] => setup(&root),
+        ["sota", "setup"] => setup(&root),
         ["sota", "list"] => spec_cmd(&["list"]),
         ["sota", "fetch", ds] => fetch(&dataset(ds)?),
-        ["sota", "run", ds, rest @ ..] => run_detectors(&root, &dataset(ds)?, &Opts::parse(rest)?),
+        ["sota", "run", ds, rest @ ..] => {
+            run_detectors(&root, &dataset(ds)?, &Opts::parse(rest, &cwd)?)
+        },
         ["sota", "score", ds] => score(&root, &dataset(ds)?),
         ["sota", "report", ds] => report(&root, &dataset(ds)?),
         ["sota", "scoreboard", rest @ ..] => scoreboard(&root, rest),
@@ -93,7 +97,7 @@ fn run(args: &[String]) -> Result<()> {
             let d = dataset(ds)?;
             setup(&root)?;
             fetch(&d)?;
-            run_detectors(&root, &d, &Opts::parse(rest)?)?;
+            run_detectors(&root, &d, &Opts::parse(rest, &cwd)?)?;
             score(&root, &d)?;
             report(&root, &d)
         },
@@ -147,7 +151,9 @@ struct Opts {
 }
 
 impl Opts {
-    fn parse(args: &[&str]) -> Result<Self> {
+    /// `cwd` is the invocation directory: `locus:<label>=<profile>+<file.json>` override
+    /// files are resolved against it, since xtask itself runs from the workspace root.
+    fn parse(args: &[&str], cwd: &Path) -> Result<Self> {
         let mut o = Self {
             detectors: DEFAULT_DETECTORS.iter().map(ToString::to_string).collect(),
             threads: 1,
@@ -164,7 +170,12 @@ impl Opts {
                     .ok_or_else(|| format!("{a} needs a value"))
             };
             match a {
-                "--detectors" => o.detectors = val()?.split(',').map(str::to_string).collect(),
+                "--detectors" => {
+                    o.detectors = val()?
+                        .split(',')
+                        .map(|spec| resolve_override_file(spec, cwd))
+                        .collect();
+                },
                 "--threads" => o.threads = val()?.parse()?,
                 "--reps" => o.reps = val()?.parse()?,
                 "--stride" => o.stride = val()?.parse::<usize>()?.max(1),
@@ -175,6 +186,18 @@ impl Opts {
         }
         Ok(o)
     }
+}
+
+/// Makes the override file of `locus:<label>=<profile>+<file.json>` absolute (relative to
+/// `cwd`); every other detector spec is returned unchanged.
+fn resolve_override_file(spec: &str, cwd: &Path) -> String {
+    if let Some(rest) = spec.strip_prefix("locus:")
+        && let Some((label, def)) = rest.split_once('=')
+        && let Some((profile, file)) = def.split_once('+')
+    {
+        return format!("locus:{label}={profile}+{}", cwd.join(file).display());
+    }
+    spec.to_string()
 }
 
 fn dataset(run: &str) -> Result<Dataset> {
@@ -265,7 +288,9 @@ fn python() -> Command {
 fn setup(root: &Path) -> Result<()> {
     let base = sota_dir(root);
     let src = base.join("src");
-    let prefix = base.join("opencv");
+    // Versioned by tag, so bumping `OPENCV_TAG` builds a fresh install instead of reusing
+    // the old one.
+    let prefix = base.join(format!("opencv-{OPENCV_TAG}"));
     let bin = base.join("bin");
     fs::create_dir_all(&src)?;
     fs::create_dir_all(&bin)?;
@@ -468,7 +493,7 @@ fn detector_cmd(
         c.args(["-m", "tools.bench.sota.run", "apriltag3", fam])
             .arg(list)
             .arg(out_dir.join("apriltag3.jsonl"))
-            .arg(&threads);
+            .args([&threads, &reps]);
         ("apriltag3".to_string(), c)
     } else {
         return Err(format!("unknown detector spec {spec}").into());
@@ -572,7 +597,7 @@ fn write_meta(root: &Path, d: &Dataset, o: &Opts, n_images: usize, out_dir: &Pat
         .find(|l| l.starts_with("Model name:"))
         .map_or("unknown", |l| l["Model name:".len()..].trim());
     let meta = format!(
-        "{{\n  \"dataset\": \"{}\",\n  \"images\": {n_images},\n  \"stride\": {},\n  \"threads\": {},\n  \"reps\": {},\n  \"jobs\": {},\n  \"timing_valid\": {},\n  \"git_rev\": \"{}\",\n  \"cpu_model\": \"{}\",\n  \"lscpu\": \"{}\",\n  \"kernel\": \"{}\",\n  \"rustc\": \"{}\",\n  \"opencv\": \"{OPENCV_TAG}\",\n  \"aruco_nano\": \"{ARUCO_NANO_COMMIT}\",\n  \"locus_build\": \"see README: wheel must be built with maturin develop --release\"\n}}\n",
+        "{{\n  \"dataset\": \"{}\",\n  \"images\": {n_images},\n  \"stride\": {},\n  \"threads\": {},\n  \"reps\": {},\n  \"jobs\": {},\n  \"timing_valid\": {},\n  \"git_rev\": \"{}\",\n  \"cpu_model\": \"{}\",\n  \"lscpu\": \"{}\",\n  \"kernel\": \"{}\",\n  \"rustc\": \"{}\",\n  \"opencv\": \"{OPENCV_TAG}\",\n  \"aruco_nano\": \"{ARUCO_NANO_COMMIT}\",\n  \"locus_build\": \"release wheel (maturin develop --release); each Locus run records the imported extension as locus_extension in its first JSONL record\"\n}}\n",
         d.name,
         o.stride,
         o.threads,
@@ -626,4 +651,30 @@ fn scoreboard(root: &Path, args: &[&str]) -> Result<()> {
         .args(["-m", "tools.bench.sota.scoreboard"])
         .arg(sota_dir(root).join("runs"))
         .arg(champion))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn override_file_is_resolved_against_the_invocation_dir() {
+        let cwd = Path::new("/work/here");
+        assert_eq!(
+            resolve_override_file("locus:mine=standard+cfg/my.json", cwd),
+            "locus:mine=standard+/work/here/cfg/my.json"
+        );
+        assert_eq!(
+            resolve_override_file("locus:mine=standard+/abs/my.json", cwd),
+            "locus:mine=standard+/abs/my.json"
+        );
+        for spec in [
+            "locus:standard",
+            "locus:g=grid",
+            "aruco_nano",
+            "opencv-subpix",
+        ] {
+            assert_eq!(resolve_override_file(spec, cwd), spec);
+        }
+    }
 }

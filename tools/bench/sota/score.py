@@ -45,10 +45,12 @@ and the scatter around it is judged.
   several pixels off for every detector. Tags reaching past it are not present, their
   detections are neither TP nor FP, and their corners enter neither the reference nor LOO.
 * **Precision** — a detection is a TP when its id is on the board and all four
-  corners lie within 4 px (in the image) of the redistorted reference projection.
-* **Accuracy** — leave-one-tag-out: a tag's corners are predicted from a DLT
-  homography fitted to the *same detector's* other tags in the frame; reported on
-  the (frame, tag) set common to every *reference* detector with >= 20 % recall.
+  corners lie within 4 px *in the image* (distorted pixels) of the redistorted reference
+  projection.
+* **Accuracy** — leave-one-tag-out, measured on *undistorted* corners (undistorted pixels,
+  unlike the image-pixel precision gate): a tag's undistorted corners are predicted from a
+  DLT homography fitted to the *same detector's* other undistorted tags in the frame;
+  reported on the (frame, tag) set common to every *reference* detector with >= 20 % recall.
 """
 
 from __future__ import annotations
@@ -64,10 +66,13 @@ from typing import Any
 import cv2
 import numpy as np
 
-from tools.bench.liu4k import LIU4K_MATCH_THRESHOLD_PX, load_liu4k
-from tools.bench.matching import MATCH_DISTANCE_THRESHOLD_PX, match_detections_to_gt
+from tools.bench.liu4k import LIU4K_MATCH_THRESHOLD_PX, first_match, load_liu4k
+from tools.bench.matching import (
+    MATCH_DISTANCE_THRESHOLD_PX,
+    TagGroundTruth,
+    match_detections_to_gt,
+)
 from tools.bench.sota.spec import Spec, load_specs
-from tools.bench.utils import TagGroundTruth
 
 Dets = dict[int, list[np.ndarray]]
 # Reference detectors below this recall do not restrict the common-tag set (they would
@@ -124,8 +129,8 @@ def _f1(p: float, r: float) -> float:
 
 SIDE_BINS = [0.0, 20.0, 45.0, 100.0, 250.0, float("inf")]
 # The 8 dihedral relabellings of a quad's corners (4 rotations x 2 windings).
-DIHEDRAL = [np.roll(np.arange(4), k) for k in range(4)] + [
-    np.roll(np.array([0, 3, 2, 1]), k) for k in range(4)
+DIHEDRAL: list[list[int]] = [np.roll(np.arange(4), k).tolist() for k in range(4)] + [
+    np.roll(np.array([0, 3, 2, 1]), k).tolist() for k in range(4)
 ]
 
 
@@ -183,7 +188,7 @@ def _tally_frame(
         t.matches[(image, g)] = (corners[d], gt)
 
 
-def _rmse(det: np.ndarray, gt: np.ndarray, perm: np.ndarray) -> float:
+def _rmse(det: np.ndarray, gt: np.ndarray, perm: list[int]) -> float:
     return float(np.sqrt(np.mean(np.sum((det - gt[perm]) ** 2, axis=1))))
 
 
@@ -194,7 +199,7 @@ def _corner_errors(t: Tally) -> tuple[list[int], dict[tuple[str, int], float]]:
     pairs = list(t.matches.values())
     medians = [float(np.median([_rmse(d, g, perm) for d, g in pairs])) for perm in DIHEDRAL]
     perm = DIHEDRAL[int(np.argmin(medians))]
-    return perm.tolist(), {k: _rmse(d, g, perm) for k, (d, g) in t.matches.items()}
+    return perm, {k: _rmse(d, g, perm) for k, (d, g) in t.matches.items()}
 
 
 def _radial_debias(
@@ -265,7 +270,7 @@ def _summarise(tallies: dict[str, Tally]) -> dict[str, Any]:
             **_stats(list(errs.values()), "corner"),
             # On the reference-defined common set; a detector that missed some of those tags
             # is scored on the ones it found (its recall already counts the misses).
-            **_stats([errs[k] for k in common if k in errs], "corner_common"),
+            **_stats([errs[k] for k in sorted(common) if k in errs], "corner_common"),
             "corner_common_coverage": _pct(sum(k in errs for k in common), len(common)),
         }
         bias, debiased = _radial_debias([t.matches[k] for k in sorted(common) if k in errs], perm)
@@ -275,25 +280,6 @@ def _summarise(tallies: dict[str, Tally]) -> dict[str, Any]:
 
 
 # ── Liu4K ────────────────────────────────────────────────────────────────────
-
-
-def first_match(
-    ids: list[int], corners: np.ndarray, tags: list[TagGroundTruth], threshold: float
-) -> list[tuple[int, int]]:
-    """aruco_nano ``evaluateDetection``: each detection, in order, takes the *first*
-    unmatched same-id GT marker whose centre is within ``threshold`` (``<=``)."""
-    used = [False] * len(tags)
-    centres = [np.asarray(g.corners, dtype=np.float64).mean(0) for g in tags]
-    pairs = []
-    for d, (tid, c) in enumerate(zip(ids, corners, strict=True)):
-        for j, g in enumerate(tags):
-            if used[j] or g.tag_id != tid:
-                continue
-            if np.linalg.norm(c.mean(0) - centres[j]) <= threshold:
-                used[j] = True
-                pairs.append((d, j))
-                break
-    return pairs
 
 
 def score_liu4k(spec: Spec, runs_dir: Path) -> dict[str, Any]:
@@ -417,11 +403,6 @@ EUROC_VALID_RADIUS_PX = 380.0
 # 0.27 (Locus) and 0.48 px (OpenCV APRILTAG) qualify, NONE / SUBPIX (1.9 / 1.5 px) do not.
 REFERENCE_MAX_SELF_ERROR_PX = 1.0
 _LOCAL = np.array([[0.0, 0.0], [TAG, 0.0], [TAG, TAG], [0.0, TAG]])
-# Corner order on the board is detector-convention dependent; the right dihedral
-# permutation is selected empirically per detector (all agree in practice).
-_PERMS = [list(np.roll(range(4), k)) for k in range(4)] + [
-    list(np.roll([0, 3, 2, 1], k)) for k in range(4)
-]
 
 
 def _board(tid: int, perm: list[int]) -> np.ndarray:
@@ -468,8 +449,10 @@ def _unique(dets: Dets) -> dict[int, np.ndarray]:
 
 
 def _find_perm(frames: dict[str, tuple[float, Dets]]) -> list[int]:
-    best = (float("inf"), _PERMS[0])
-    for perm in _PERMS:
+    """Corner order on the board is detector-convention dependent: the dihedral relabelling
+    that best fits a homography is selected per detector (all agree in practice)."""
+    best = (float("inf"), DIHEDRAL[0])
+    for perm in DIHEDRAL:
         errs = []
         for _, dets in list(frames.values())[::7]:
             ok = _unique(dets)
@@ -537,7 +520,7 @@ def score_euroc(runs_dir: Path) -> dict[str, Any]:
         n_ref += 1
         present = set()
         for t in range(36):
-            pu = _proj(href, _board(t, _PERMS[0]))
+            pu = _proj(href, _board(t, DIHEDRAL[0]))
             if np.any(np.abs(pu - EUROC_K[:2, 2]) > 1500):
                 continue
             pd = _redist(pu)

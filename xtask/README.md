@@ -50,13 +50,17 @@ cargo xtask sota run liu4k --detectors 'locus:standard,locus:mine=standard+my.js
 cargo xtask sota scoreboard                             # win table over every scored benchmark
 ```
 
-`locus:<name>=<profile>+<file.json>` merges the JSON into the profile. A top-level
-`"detector"` object in it holds per-call `Detector` options instead of profile keys, e.g.
-`{"detector": {"decimation": 2}}`.
+`locus:<name>=<profile>+<file.json>` merges the JSON into the profile. A relative
+`<file.json>` is resolved against the directory `cargo xtask` was invoked from (xtask itself
+runs from the repository root). A top-level `"detector"` object in it holds per-call
+`Detector` options instead of profile keys, e.g. `{"detector": {"decimation": 2}}`.
 
 Outputs land in `target/sota/runs/<benchmark>/`: one `<detector>.jsonl` per
 detector (ids + corners + per-image latency), `meta.json` (verified hardware,
-git revision, threads, protocol), `score.json`, and `report.md`.
+git revision, threads, protocol), `score.json`, and `report.md`. The first record of each
+Locus run carries `locus_extension` (path and mtime of the imported native module), which
+the report lists, so a stale or debug build is visible. OpenCV is installed under
+`target/sota/opencv-<tag>`, so bumping the pinned tag rebuilds it.
 `scoreboard` writes `target/sota/scoreboard.md`.
 
 ### Win table
@@ -89,7 +93,7 @@ width, scorer, ground truth and its pixel convention, unsupported references) an
 | Benchmark | Content | Ground truth | Scorer |
 | :-- | :-- | :-- | :-- |
 | `liu4k` | 924 4K photos, `ARUCO_MIP_36h12` (Zenodo 10.5281/zenodo.18667018, CC BY 4.0) | ids + corners | aruco_nano `testperf.cpp` rule: same id, centre ≤ 10 px, first-match TP/FP/FN; recall by marker side; corner error |
-| `euroc` | 1450 frames of the EuRoC `cam_april` sequence, 6×6 Kalibr AprilGrid (tag36h11, **2-bit border**), strong radtan distortion | none per corner | GT-free: a homography after undistortion, pooled from the self-consistent detectors, defines presence and precision (corner error in image pixels, only within the 380 px radius where the published lens model holds); leave-one-tag-out corner error on a common tag set |
+| `euroc` | 1450 frames of the EuRoC `cam_april` sequence, 6×6 Kalibr AprilGrid (tag36h11, **2-bit border**), strong radtan distortion | none per corner | GT-free: a homography after undistortion, pooled from the self-consistent detectors, defines presence and precision (4 px gate in image pixels, only within the 380 px radius where the published lens model holds); leave-one-tag-out corner error, measured on undistorted corners, on a common tag set |
 | `icra-{forward,circle,random}` | ICRA 2020 AprilTag localization dataset, `pure_tags` images, tag36h11 | corners (`tags.csv`) | `gt-csv` |
 | `hub-{640,720p,1080p,4k,high-iso,low-key,raw-pipeline,tag16h5}` | Locus render-tag suites (Blender), one tag per frame | corners (`rich_truth.json`) | `gt-hub` |
 | `hub-aprilgrid`, `hub-charuco` | Board renders (tag36h11 1-bit AprilGrid; ArUco 6x6_250 ChArUco), scored per marker | corners | `gt-hub` |
