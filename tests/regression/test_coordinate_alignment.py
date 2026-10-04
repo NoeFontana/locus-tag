@@ -26,7 +26,10 @@ def generate_synthetic_tag(tag_size=100, canvas_size=320, start=110):
 
 def test_decimation_mapping():
     """Verify that decimation=2 doesn't introduce a coordinate shift."""
-    tag_size = 100
+    # A whole number of pixels per cell (8 cells across): otherwise nearest-neighbour artwork
+    # puts the interior cell boundaries up to 0.5 px off the layout, and the corner calibration
+    # reads that interior geometry.
+    tag_size = 104
     canvas_size = 400
     start = 140
     img, gt_corners = generate_synthetic_tag(tag_size, canvas_size, start)

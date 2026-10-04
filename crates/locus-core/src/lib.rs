@@ -43,6 +43,8 @@ pub(crate) mod gradient;
 pub(crate) mod gwlf;
 /// Image buffer abstractions.
 pub mod image;
+/// Photometric calibration of decoded marker corners from their bit edges.
+pub(crate) mod marker_inset;
 /// Model-based edge pose refinement (opt-in Accurate-mode post-decode stage).
 pub(crate) mod model_edge;
 /// 3D Pose Estimation (PnP).

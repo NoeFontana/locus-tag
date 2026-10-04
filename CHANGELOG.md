@@ -7,6 +7,65 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Fused, photometrically calibrated marker corners (in `decoder.corner_subpix`; `standard`, `grid`).**
+  - **Fusion:** each L-corner's gradient-orthogonality junction estimate is fused, by inverse
+    covariance, with the intersection of the marker's two whole-edge lines.
+    - **Edge line:** a total-least-squares fit through gradient-centroid stations. The band is
+      `±min(cell/2, 4 px)`; a wider band reaches the bit edges of large markers.
+    - **Edge-line covariance:** from the stations' scatter, with a χ² 95 % bound.
+    - **When to fuse:** only if all of these hold: the χ²₂ 99 % agreement test passes, both
+      covariances are positive definite, the fused point lies between the two estimates, and
+      all four corners qualify.
+    - X-junctions (AprilGrid connectors) keep the junction estimate.
+  - **Calibration (`marker_inset.rs`):** removes the photometric corner inset.
+    - **Why:** cameras blur in linear light and then apply a tone curve. Every gradient
+      estimator therefore finds edges shifted toward the dark side, so corners sit 0.4–0.8 px
+      inside the printed ones (OpenCV and aruco_nano included). On a single tag this becomes
+      centimetres of depth error. Under perspective, and because the blur varies with depth along
+      an oblique edge, it also becomes rotation error.
+    - **Method:** every bit boundary of the decoded marker shifts by the same `δ` toward its
+      dark side. A robust per-marker fit separates:
+      - `δ`, by polarity;
+      - an interior layout scale;
+      - each side's corner inset `ε`, pinned by the outline;
+      - a lens-distortion bow along each boundary, kept only when an F-test (99 %) finds it
+        significant.
+
+      The corners then move outward by `ε`. No tone curve, blur model or camera knowledge is
+      needed.
+    - **Guards:** small cells, low contrast, layout mismatch (for example a 2-bit Kalibr border
+      read as 1-bit) and inconsistent fits keep the corners unchanged.
+    - **Scope:** fusion and calibration are both skipped when lens distortion is declared.
+    - **Why not in the pose solver:** a single tag cannot identify the inset. The Cramér–Rao
+      bound on a pose-level inset nuisance is 4–23 px on small oblique tags.
+  - **Results** (`cargo xtask sota`, full datasets, debiased corner error, px):
+    - Accuracy cells won: 47 → 52 of 73.
+
+      | Dataset | Before (mean / p90) | After (mean / p90) | Best reference (mean / p90) |
+      | :-- | --: | --: | --: |
+      | render-tag 1080p | 0.228 / 0.326 | 0.062 / 0.109 | 0.230 / 0.323 |
+      | render-tag 4K | 0.217 / 0.295 | 0.050 / 0.083 | 0.221 / 0.314 |
+      | tag16h5 | 0.209 / 0.299 | 0.055 / 0.089 | 0.208 / 0.297 |
+      | ChArUco | 0.150 / 0.203 | 0.032 / 0.052 | 0.170 / 0.233 |
+      | AprilGrid | 0.058 / 0.074 | 0.045 / 0.060 | 0.056 / 0.074 |
+
+    - Single-tag pose (render-tag regression suites, the detector's pose path):
+
+      | Set | Rotation p99 (°) | Translation p99 (mm) |
+      | :-- | --: | --: |
+      | high_iso | 0.44 → 0.20 | 66 → 21 |
+      | tag16h5 | 0.56 → 0.38 | 128 → 17 |
+
+    - ChArUco board rotation p50: 0.0094° → 0.0022°.
+    - **Cost:** ICRA's rendered artwork has 0.96-cell borders with an exact outline, which no
+      printed marker does, so its corners move outward by about 0.2 px. ICRA circle mean goes
+      0.112 → 0.156 px and loses 2 cells. EuRoC LOO median goes 0.304 → 0.314 px (OpenCV 0.527).
+    - **Latency:** 1 thread, `--release`, `RAYON_NUM_THREADS` unset with `--threads 1`, AMD
+      EPYC-Milan KVM, 8 vCPU, AVX2, Linux 6.8.0, rustc 1.92.0.
+      - ICRA random (≈130 markers/frame): 48.5 → 55.2 ms; re-measured 48.4 → 55.1 ms.
+      - ICRA forward: 42.7 → 44.2 ms.
+      - Liu4K, render-tag 1080p and 4K: within 1 %.
+
 - **Gradient-orthogonality corner refinement (`decoder.corner_subpix`; on in `standard` and `grid`, off in `high_accuracy`).**
   - **Model:** the `cv::cornerSubPix` model, run on every decoded marker after the configured
     `refinement_mode`. Each corner moves to the least-squares point that every gradient in a

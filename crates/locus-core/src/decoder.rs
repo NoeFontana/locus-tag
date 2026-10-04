@@ -1386,6 +1386,13 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
 ///
 /// This phase executes SIMD bilinear interpolation and Hamming error correction.
 /// If a candidate fails decoding, its `status_mask` is flipped to `FailedDecode`.
+///
+/// Assumes a rectified camera. The detector calls the crate-internal generic decoder directly so
+/// it can say otherwise; this entry point serves the distortion dispatch and the bench API.
+#[cfg_attr(
+    not(any(feature = "non_rectified", feature = "bench-internals")),
+    allow(dead_code)
+)]
 #[tracing::instrument(skip_all, name = "pipeline::decoding_pass")]
 pub fn decode_batch_soa(
     batch: &mut crate::batch::DetectionBatch,
@@ -1394,7 +1401,7 @@ pub fn decode_batch_soa(
     decoders: &[Box<dyn TagDecoder + Send + Sync>],
     config: &crate::config::DetectorConfig,
 ) {
-    decode_batch_soa_generic(batch, n, img, decoders, config);
+    decode_batch_soa_generic(batch, n, img, decoders, config, true);
 }
 
 /// Distortion-aware entry point for [`decode_batch_soa`].
@@ -1433,18 +1440,23 @@ pub fn decode_batch_soa_with_camera<C: crate::camera::CameraModel>(
     }
 }
 
+/// Pinhole decode of every candidate. `rectified` is false when the camera has lens distortion
+/// that this path does not model: the marker's edges are then not the straight lines of a
+/// homography, so the edge-line corner fusion and the photometric corner calibration, which
+/// rely on that, are skipped.
 #[allow(
     clippy::too_many_lines,
     clippy::cast_possible_wrap,
     clippy::collapsible_if,
     unused_assignments
 )]
-fn decode_batch_soa_generic(
+pub(crate) fn decode_batch_soa_generic(
     batch: &mut crate::batch::DetectionBatch,
     n: usize,
     img: &crate::image::ImageView,
     decoders: &[Box<dyn TagDecoder + Send + Sync>],
     config: &crate::config::DetectorConfig,
+    rectified: bool,
 ) {
     use crate::batch::CandidateState;
     use rayon::prelude::*;
@@ -2096,8 +2108,18 @@ fn decode_batch_soa_generic(
                     let seed = core::array::from_fn(|j| {
                         [f64::from(corners_slot[j].x), f64::from(corners_slot[j].y)]
                     });
-                    let (refined, bits) =
-                        crate::refinement::subpix_marker_corners(img, seed, subpix_cells);
+                    let (mut refined, bits) =
+                        crate::refinement::subpix_marker_corners(img, seed, subpix_cells, rectified);
+                    // Remove the photometric inset the decoded marker's bit edges measure.
+                    if rectified
+                        && let Some(calibrated) = crate::marker_inset::calibrate_marker_corners(
+                            img,
+                            refined,
+                            subpix_cells,
+                        )
+                    {
+                        refined = calibrated;
+                    }
                     refined_bits = bits;
                     for (slot, r) in corners_slot.iter_mut().zip(refined) {
                         *slot = Point2f {
