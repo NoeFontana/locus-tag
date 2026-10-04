@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/benchmarking/">
       
       
-        <link rel="prev" href="../general-style/">
+        <link rel="prev" href="../lessons/pose-covariance/">
       
       
         <link rel="next" href="lessons/">
@@ -1196,6 +1196,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -1576,6 +1580,198 @@
                 
   
   
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_13" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../lessons/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Lessons
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_7_13" id="__nav_7_13_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_13_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_13">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Lessons
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons/recall-quad-icra/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Recall, quad extraction &amp; ICRA — lessons
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons/rotation-tail-and-edge-refinement/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pose rotation-error tail — lessons
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons/edlines-segmentation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    EdLines quad extraction &amp; segmentation — lessons
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lessons/pose-covariance/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pose covariance calibration — lessons
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1619,10 +1815,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_13" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_14" checked>
         
           
-          <label class="md-nav__link" for="__nav_7_13" id="__nav_7_13_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_7_14" id="__nav_7_14_label" tabindex="0">
             
   
   
@@ -1640,8 +1836,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_13_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_7_13">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_14_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_7_14">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1718,16 +1914,27 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-3-tier-tooling-stack" class="md-nav__link">
+  <a href="#the-tooling-stack" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The 3-Tier Tooling Stack
+        The Tooling Stack
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The 3-Tier Tooling Stack">
+    <nav class="md-nav" aria-label="The Tooling Stack">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#comparative-tier-cargo-xtask-sota-published-comparisons" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparative tier: cargo xtask sota (published comparisons)
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#tier-1-end-to-end-regression-the-python-cli" class="md-nav__link">
@@ -1778,6 +1985,17 @@
   
     <nav class="md-nav" aria-label="Rust Benchmarking (Core Engine)">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dataset-provisioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dataset provisioning
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#regression-suite-icra-2020" class="md-nav__link">
@@ -2387,6 +2605,155 @@
 
               
             
+              
+                
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_15" >
+        
+          
+          <label class="md-nav__link" for="__nav_7_15" id="__nav_7_15_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Historical
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_15_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7_15">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Historical
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../track2_precision_threshold/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Track 2 — Pose-Consistency Gate Calibration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../latency_audit_2160p_segmentation_addendum_2026-05-03/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2160p latency audit — Segmentation span addendum (2026-05-03)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../erf-simd-attempt-postmortem/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    ERF Refinement SIMD Rewrite — Abandoned
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
           </ul>
         </nav>
       
@@ -2509,16 +2876,27 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#the-3-tier-tooling-stack" class="md-nav__link">
+  <a href="#the-tooling-stack" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The 3-Tier Tooling Stack
+        The Tooling Stack
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="The 3-Tier Tooling Stack">
+    <nav class="md-nav" aria-label="The Tooling Stack">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#comparative-tier-cargo-xtask-sota-published-comparisons" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparative tier: cargo xtask sota (published comparisons)
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#tier-1-end-to-end-regression-the-python-cli" class="md-nav__link">
@@ -2569,6 +2947,17 @@
   
     <nav class="md-nav" aria-label="Rust Benchmarking (Core Engine)">
       <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#dataset-provisioning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dataset provisioning
+      
+    </span>
+  </a>
+  
+</li>
         
           <li class="md-nav__item">
   <a href="#regression-suite-icra-2020" class="md-nav__link">
@@ -2819,8 +3208,14 @@
 
 <h1 id="benchmarking-diagnostics">Benchmarking &amp; Diagnostics</h1>
 <p>Tools for benchmarking and diagnosing failures, covering both the core Rust engine and the Python bindings.</p>
-<h2 id="the-3-tier-tooling-stack">The 3-Tier Tooling Stack</h2>
-<p>Strict boundaries between measurement tools, to avoid the "Observer Effect" (see Tier 2).</p>
+<h2 id="the-tooling-stack">The Tooling Stack</h2>
+<p>Strict boundaries between measurement tools, to avoid the "Observer Effect" (see Tier 2). Three tiers measure Locus itself; a comparative tier measures it against other detectors.</p>
+<h3 id="comparative-tier-cargo-xtask-sota-published-comparisons">Comparative tier: <code>cargo xtask sota</code> (published comparisons)</h3>
+<ul>
+<li><strong>Tool</strong>: <code>cargo xtask sota</code> (<a href="https://github.com/NoeFontana/locus-tag/blob/main/xtask/README.md"><code>xtask/README.md</code></a>).</li>
+<li><strong>Purpose</strong>: Reproducible comparison against <strong>pinned</strong> references — OpenCV <code>aruco</code> 4.10.0 (three corner refiners), aruco_nano <code>961b18b</code>, AprilTag 3 — on every dataset they can decode (Liu4K, EuRoC, ICRA 2020, the render-tag and board suites). It reports recall, precision, F1, order-preserving and <strong>debiased</strong> corner error, and latency, and ends with a win table; <code>cargo xtask sota scoreboard</code> aggregates every scored benchmark.</li>
+<li><strong>Rule</strong>: Any published "Locus vs X" number comes from this tool. Publish latency only from <code>--jobs 1</code> runs on an idle machine. The Python sweep tools (<code>bench sweep</code> / <code>tune</code> / <code>compare-instances</code>) use the unpinned <code>opencv-python</code> wheel from the <code>bench</code> group and are for exploration, not publication.</li>
+</ul>
 <h3 id="tier-1-end-to-end-regression-the-python-cli">Tier 1: End-to-End Regression (The Python CLI)</h3>
 <ul>
 <li><strong>Tool</strong>: <code>uv run tools/cli.py bench real</code> (ICRA 2020 scenarios or Hugging Face Hub datasets via <code>--hub-config</code>).</li>
@@ -2842,11 +3237,18 @@
 <hr />
 <h2 id="rust-benchmarking-core-engine">Rust Benchmarking (Core Engine)</h2>
 <p>Source of truth for core engine performance and regressions.</p>
+<h3 id="dataset-provisioning">Dataset provisioning</h3>
+<p>Every external dataset (Hub render suites, ICRA 2020, EuRoC, Liu4K) is pinned in <code>xtask/datasets.toml</code> and fetched into <code>tests/data/</code> with <code>cargo xtask data</code>:</p>
+<div class="highlight"><pre><span></span><code>cargo<span class="w"> </span>xtask<span class="w"> </span>data<span class="w"> </span>list<span class="w">                                  </span><span class="c1"># what exists, where, licence</span>
+cargo<span class="w"> </span>xtask<span class="w"> </span>data<span class="w"> </span>fetch<span class="w"> </span>icra2020-forward<span class="w"> </span>icra2020-circle
+cargo<span class="w"> </span>xtask<span class="w"> </span>data<span class="w"> </span>fetch<span class="w"> </span>euroc<span class="w"> </span>liu4k<span class="w">                     </span><span class="c1"># EuRoC mirror needs `hf auth login` or HF_TOKEN</span>
+cargo<span class="w"> </span>xtask<span class="w"> </span>data<span class="w"> </span>fetch<span class="w"> </span>hub<span class="w"> </span>--subsets<span class="w"> </span>all
+cargo<span class="w"> </span>xtask<span class="w"> </span>data<span class="w"> </span>verify<span class="w">                                </span><span class="c1"># missing or stale-pin copies -&gt; exit 1</span>
+</code></pre></div>
+<p>Rust tests and Python loaders read the same <code>tests/data/</code> paths. <code>LOCUS_ICRA_DATASET_DIR</code>, <code>LOCUS_EUROC_DATASET_DIR</code> and <code>LOCUS_HUB_DATASET_DIR</code> only relocate a dataset — except that the render-tag and distortion Hub suites still require <code>LOCUS_HUB_DATASET_DIR</code> to be set (they skip otherwise).</p>
 <h3 id="regression-suite-icra-2020">Regression Suite (ICRA 2020)</h3>
 <ol>
-<li><strong>Set Dataset Path</strong>:
-   <div class="highlight"><pre><span></span><code><span class="nb">export</span><span class="w"> </span><span class="nv">LOCUS_ICRA_DATASET_DIR</span><span class="o">=</span>/path/to/icra2020
-</code></pre></div></li>
+<li><strong>Fetch the dataset</strong>: <code>cargo xtask data fetch icra2020-forward</code> (plus <code>icra2020-circle</code> / <code>icra2020-random</code> for the extended run).</li>
 <li><strong>Run Benchmarks</strong>:
    <div class="highlight"><pre><span></span><code><span class="c1"># Core check (Forward dataset + Fixtures, approx 15s)</span>
 cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--test<span class="w"> </span>regression_icra2020<span class="w"> </span>--features<span class="w"> </span>bench-internals
@@ -2884,7 +3286,7 @@ locus_v1_tag36h11_3840x2160,charuco_golden_v1_1920x1080,aprilgrid_golden_v1_1920
 <li>
 <p><strong>Run Hub Tests</strong>:
    <div class="highlight"><pre><span></span><code><span class="c1"># Tag-level regression (regression_render_tag)</span>
-<span class="c1"># Covers 4 resolutions × Erf/GWLF/EdLines variants and Fast/Accurate pose modes.</span>
+<span class="c1"># Covers 4 resolutions × the shipped extraction/refinement routes and Fast/Accurate pose modes.</span>
 <span class="c1"># Requires LOCUS_HUB_DATASET_DIR to locate the cache.</span>
 <span class="nv">LOCUS_HUB_DATASET_DIR</span><span class="o">=</span>tests/data/hub_cache<span class="w"> </span><span class="se">\</span>
 <span class="w">  </span>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--test<span class="w"> </span>regression_render_tag<span class="w"> </span>--features<span class="w"> </span>bench-internals<span class="w"> </span>--<span class="w"> </span>--nocapture
@@ -2925,13 +3327,14 @@ cargo<span class="w"> </span>bench<span class="w"> </span>--bench<span class="w"
 <li><a href="micro-benchmarking-guide/">Micro-Benchmarking Guide</a> — 3-tier validation loop</li>
 </ul>
 <h3 id="point-in-time-reports-historical-snapshots">Point-in-time reports (historical snapshots)</h3>
+<p>The two 2026-10-04 reports describe the current <code>standard</code> pipeline; the rest are history.</p>
 <ul>
-<li><a href="euroc_sota_20261004/">EuRoC, the real-data benchmark (2026-10-04)</a> — scorer fixes, 4-connectivity, clipped and gross corners: EuRoC recall 20.9 → 86.0 %, 65/93 cells vs <code>main</code> 57/93; latency +17–28 %</li>
-<li><a href="sota_scoreboard_20261004/">SOTA scoreboard checkpoint (2026-10-04)</a> — fused + photometrically calibrated corners (#434): 52/73 vs <code>main</code> 47/73; render-tag corners ≈ 3.7× better than the best reference</li>
+<li><a href="euroc_sota_20261004/">EuRoC, the real-data benchmark (2026-10-04)</a> — <strong>latest.</strong> Scorer fixes, 4-connectivity, clipped and gross corners: EuRoC recall 20.9 → 86.0 %, 65/93 cells vs <code>main</code> 57/93; latency +17–28 %</li>
+<li><a href="sota_scoreboard_20261004/">SOTA scoreboard checkpoint (2026-10-04)</a> — <strong>latest for corner metrics.</strong> Fused + photometrically calibrated corners (#434): 52/73 vs <code>main</code> 47/73; render-tag corners ≈ 3.7× better than the best reference</li>
 <li><a href="sota_scoreboard_20261003/">SOTA scoreboard checkpoint (2026-10-03)</a> — <code>main</code> <code>a6199d4</code>, opt-in decode-first candidate (37/88) vs <code>standard</code> (32/88), 1T and 8T latency</li>
 <li><a href="sota_scoreboard_20261002/">SOTA scoreboard baseline (2026-10-02)</a> — <code>standard</code> vs the best OpenCV / aruco_nano operating point on every compatible dataset; <code>cargo xtask sota scoreboard</code></li>
 <li><a href="liu4k_euroc_sota_20261001/">Real-image competitiveness: Liu4K + EuRoC (2026-10-01)</a> — reproduce with <code>cargo xtask sota</code> (<code>xtask/README.md</code>)</li>
-<li><a href="render_tag_sota_20260713/">Render-tag 1080p SOTA (current, v0.7.0-refreshed)</a></li>
+<li><a href="render_tag_sota_20260713/">Render-tag 1080p SOTA (2026-07-13, v0.7.0-refreshed)</a> — single-tag pose percentiles; predates decode-first, 4-connectivity and the corner stage</li>
 <li><a href="render_tag_2160p_20260425/">Render-tag 2160p recall lift (2026-04-25)</a></li>
 <li><a href="render_tag_sota_20260425/">Render-tag 1080p SOTA pursuit (2026-04-25)</a></li>
 <li><a href="release_performance_20260418/">Release Performance Report (2026-04-18)</a></li>
@@ -2940,9 +3343,7 @@ cargo<span class="w"> </span>bench<span class="w"> </span>--bench<span class="w"
 <h2 id="python-developer-cli">Python Developer CLI</h2>
 <p><code>tools/cli.py</code> is the central entry point for high-level evaluations and development tasks.</p>
 <h3 id="data-preparation">Data Preparation</h3>
-<p>Downloads ICRA 2020 scenarios and auto-discovers/syncs all Hub dataset subsets to <code>tests/data/hub_cache/</code>:
-<div class="highlight"><pre><span></span><code><span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>prepare
-</code></pre></div></p>
+<p>Use <code>cargo xtask data fetch …</code> (see <a href="#dataset-provisioning">Dataset provisioning</a>). <code>tools/cli.py bench prepare</code> is a thin wrapper over the same pinned manifest (ICRA forward + circle and every Hub config).</p>
 <h3 id="real-world-evaluation-icra-2020">Real-World Evaluation (ICRA 2020)</h3>
 <p>Evaluate performance on the ICRA 2020 dataset scenarios (<code>forward</code>, <code>circle</code>):
 <div class="highlight"><pre><span></span><code><span class="c1"># Basic run on Locus</span>
@@ -2963,20 +3364,25 @@ rule does not apply.</p>
 <span class="c1"># Adds id-aware decode TP/FP/FN, recall, precision, F1 (markers use ARUCO_MIP_36h12)</span>
 <span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--dataset<span class="w"> </span>liu4k<span class="w"> </span>--family<span class="w"> </span>ArUcoMip36h12
 
-<span class="c1"># Best config reachable with shipped options alone (the stronger LocalMean-based candidate needs PR #383; see the real-image competitiveness snapshot)</span>
+<span class="c1"># Variant: sharpening off (the LocalMean (opt-in) threshold variants are analysed in the real-image snapshot)</span>
 <span class="nv">PYTHONPATH</span><span class="o">=</span>.<span class="w"> </span>uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </span>bench<span class="w"> </span>tools/cli.py<span class="w"> </span>bench<span class="w"> </span>real<span class="w"> </span>--dataset<span class="w"> </span>liu4k<span class="w"> </span>--family<span class="w"> </span>ArUcoMip36h12<span class="w"> </span>--no-sharpening
 </code></pre></div>
 <p>The scorer mirrors aruco_nano's <code>testperf.cpp</code>: for each detection, the first unmatched GT marker with
 the same id and a centre distance <code>&lt;= 10 px</code> makes it a TP, otherwise it is a FP; <code>FN = GT - TP</code>. The
 10 px radius is the Liu4K-specific <code>LIU4K_MATCH_THRESHOLD_PX</code> (<code>tools/bench/liu4k.py</code>); the repo-wide
-<code>MATCH_DISTANCE_THRESHOLD_PX</code> is untouched. The GT corner winding is opposite to Locus/OpenCV, so any
-future corner-error metric must remap it (0,3,2,1). Results and analysis:
+<code>MATCH_DISTANCE_THRESHOLD_PX</code> is untouched. Results and analysis:
 <a href="liu4k_euroc_sota_20261001/">real-image competitiveness snapshot</a>.</p>
-<p>The first run downloads <code>liu4k.zip</code> (about 4 GB) from Zenodo into <code>tests/data/liu4k/</code>
-(gitignored), verifies its md5 (<code>e8fafe5444a9e346f25123151ef1a699</code>, from the Zenodo record),
-extracts it and deletes the archive. The data is never committed, never packaged in wheels or
-sdist, and never republished in converted form. Corner error is not reported: without a decoded id
-the corner order is unknown, and corner error must stay order-preserving.</p>
+<p><strong>Corner error.</strong> <code>bench real --dataset liu4k</code> does not report it. <code>cargo xtask sota run liu4k</code>
+does: detections are paired with GT markers by id, the GT corner winding (opposite to
+Locus/OpenCV) is remapped by one fixed relabelling, the error stays order-preserving, and the
+judged cell is the <strong>debiased</strong> median on tags every detector found (each detector's mean radial
+offset is removed and reported separately). Current numbers:
+<a href="sota_scoreboard_20261004/">2026-10-04 scoreboard</a>.</p>
+<p><code>cargo xtask data fetch liu4k</code> downloads <code>liu4k.zip</code> (about 4 GB) from Zenodo into
+<code>tests/data/liu4k/</code> (gitignored), verifies its md5 (<code>e8fafe5444a9e346f25123151ef1a699</code>, from the
+Zenodo record), extracts it and deletes the archive; the bench CLI fetches it the same way on
+first use. The data is never committed, never packaged in wheels or sdist, and never republished
+in converted form.</p>
 <p><strong>Attribution and license.</strong> Dataset: Muñoz-Salinas, R., <em>Liu4K dataset employed for Aruco_Nano
 paper</em>, Zenodo, 2026, <a href="https://doi.org/10.5281/zenodo.18667018">doi:10.5281/zenodo.18667018</a>,
 licensed <a href="https://creativecommons.org/licenses/by/4.0/legalcode">CC BY 4.0</a>. Locus reads the
