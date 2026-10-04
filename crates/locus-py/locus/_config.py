@@ -276,9 +276,12 @@ class DecoderConfig(BaseModel):
     """Largest fraction of the black border ring that may read bright for a decoded
     candidate to be accepted. ``1.0`` disables the check."""
     corner_subpix: bool = True
-    """Gradient-orthogonality corner refinement (the ``cv::cornerSubPix`` model) of every
-    decoded marker, after ``refinement_mode``. The window is sized from the marker's cell
-    size, not configured. Undistorted cameras only."""
+    """Sub-pixel corner stage for every decoded marker, after ``refinement_mode``. Each
+    corner is the gradient-orthogonality junction (the ``cv::cornerSubPix`` model) fused
+    with the intersection of the marker's whole-edge lines. The corners are then calibrated
+    against the marker's own bit edges, which removes the tone-curve inset that every
+    gradient corner estimator has on gamma-encoded images. Windows and weights come from
+    the image; nothing is configured. Undistorted cameras only."""
 
 
 class PoseConfig(BaseModel):

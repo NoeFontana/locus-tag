@@ -372,11 +372,13 @@ const SUBPIX_EPS: f64 = 0.005;
 /// At an L-corner the two estimates are combined by inverse covariance when they agree
 /// ([`fuse_corner`]); both covariances are statistically calibrated. At an X-junction
 /// ([`junction_is_x`]: AprilGrid connectors) the edge lines carry the photometric edge offset
-/// and the junction point does not, so the junction estimate stands alone.
+/// and the junction point does not, so the junction estimate stands alone. Fusion needs a
+/// `rectified` image: under lens distortion the edges are curves.
 pub(crate) fn subpix_marker_corners(
     img: &ImageView,
     seed: [[f64; 2]; 4],
     cells: usize,
+    rectified: bool,
 ) -> ([[f64; 2]; 4], u8) {
     let side = (0..4)
         .map(|j| {
@@ -422,13 +424,17 @@ pub(crate) fn subpix_marker_corners(
             picks[j] = Some(*pick);
         }
     }
-    // Fuse each L-corner with the intersection of its two whole-edge lines.
+    // Fuse each L-corner with the intersection of its two whole-edge lines. Under lens
+    // distortion the marker's edges are curves, not lines.
+    if !rectified {
+        return (out, refined_bits);
+    }
     let cell = side / cells.max(1) as f64;
-    let half = (0.5 * cell).max(2.0);
+    // The band spans the blur and the refined corners' error, and stays within half a cell.
+    let half = (0.5 * cell).clamp(2.0, EDGE_MAX_HALF_PX);
     // Edges between the locally refined corners: their directions are already corrected.
     let anchors = out;
-    let edges: [Option<EdgeLine>; 4] =
-        core::array::from_fn(|e| fit_marker_edge(img, anchors[e], anchors[(e + 1) % 4], half));
+    let edges: [Option<EdgeLine>; 4] = edge_lines(img, &anchors, half);
     // All four corners or none: a marker whose corners mix the two estimators (they differ by
     // the junction model's apex bias) is no longer a consistent square, which the pose turns
     // into rotation error.
@@ -501,11 +507,14 @@ const LINE_CORNER_MAX_MOVE_PX: f64 = 3.0;
 /// neighbouring edge and the junction blur the profile.
 const EDGE_END_MARGIN: f64 = 0.15;
 /// Spacing (px) of the edge-normal samples of one station.
-const EDGE_PROFILE_STEP: f64 = 0.25;
-/// Profile samples on each side of the central difference: 2 × 0.25 px, a 1 px baseline.
-const EDGE_DERIVATIVE_TAPS: usize = 2;
-/// Profile buffer size: the widest band (half = 0.5 cell, under 16 px) plus the taps.
-const EDGE_MAX_PROFILE: usize = 160;
+const EDGE_PROFILE_STEP: f64 = 0.5;
+/// Profile samples on each side of the central difference: 1 × 0.5 px, a 1 px baseline.
+const EDGE_DERIVATIVE_TAPS: usize = 1;
+/// Widest band half-width (px): the blur measured on the benchmarks plus the refined corners'
+/// error. A wider band only adds samples and clutter.
+const EDGE_MAX_HALF_PX: f64 = 4.0;
+/// Profile buffer size: the widest band plus the taps.
+const EDGE_MAX_PROFILE: usize = 2 * (8 + EDGE_DERIVATIVE_TAPS) + 1;
 /// Stations per pixel of edge length. Half of 0.7 measured equal on ICRA, ChArUco and
 /// render-tag, at 15 % less latency on dense frames.
 const EDGE_STATION_DENSITY: f64 = 0.35;
@@ -537,7 +546,44 @@ struct EdgeLine {
 /// `Var(angle) = s²/Σt²`. Bit edges crossing the band, lens curvature or clutter scatter the
 /// stations and so inflate the line's own uncertainty, which is what keeps a contaminated edge
 /// from dominating a fusion.
-fn fit_marker_edge(img: &ImageView, p0: [f64; 2], p1: [f64; 2], half: f64) -> Option<EdgeLine> {
+/// [`fit_marker_edge`] for the four sides of `quad`. When every profile sample is inside the
+/// image, as for nearly every marker, the samples skip the per-sample bounds check.
+fn edge_lines(img: &ImageView, quad: &[[f64; 2]; 4], half: f64) -> [Option<EdgeLine>; 4] {
+    // Profiles stay within `half` plus the derivative taps of the sides.
+    let reach = half + EDGE_PROFILE_STEP * EDGE_DERIVATIVE_TAPS as f64 + 1.0;
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for p in quad {
+        for k in 0..2 {
+            lo[k] = lo[k].min(p[k] - reach);
+            hi[k] = hi[k].max(p[k] + reach);
+        }
+    }
+    #[allow(clippy::cast_precision_loss)]
+    let inside = lo[0] >= 1.0
+        && lo[1] >= 1.0
+        && hi[0] <= img.width as f64 - 2.0
+        && hi[1] <= img.height as f64 - 2.0;
+    if inside {
+        #[allow(
+            unsafe_code,
+            reason = "the bounds of every sample are checked once per marker above, so the per-sample checks of the safe sampler are redundant on this hot path"
+        )]
+        // SAFETY: every sample point lies in `[1, width − 2] × [1, height − 2]` (bounded above),
+        // so after the sampler's −0.5 shift both bilinear taps are valid pixel indices.
+        let sample = |x: f64, y: f64| unsafe { img.sample_bilinear_unchecked(x, y) };
+        core::array::from_fn(|e| fit_marker_edge(&sample, quad[e], quad[(e + 1) % 4], half))
+    } else {
+        let sample = |x: f64, y: f64| img.sample_bilinear(x, y);
+        core::array::from_fn(|e| fit_marker_edge(&sample, quad[e], quad[(e + 1) % 4], half))
+    }
+}
+
+fn fit_marker_edge(
+    sample: &impl Fn(f64, f64) -> f64,
+    p0: [f64; 2],
+    p1: [f64; 2],
+    half: f64,
+) -> Option<EdgeLine> {
     let (dx, dy) = (p1[0] - p0[0], p1[1] - p0[1]);
     let len = dx.hypot(dy);
     if len < 8.0 {
@@ -563,7 +609,7 @@ fn fit_marker_edge(img: &ImageView, p0: [f64; 2], p1: [f64; 2], half: f64) -> Op
         let (cx, cy) = (p0[0] + t * dx, p0[1] + t * dy);
         for (idx, slot) in profile[..samples].iter_mut().enumerate() {
             let o = (idx as f64 - reach as f64) * EDGE_PROFILE_STEP;
-            *slot = img.sample_bilinear(cx + o * nx, cy + o * ny);
+            *slot = sample(cx + o * nx, cy + o * ny);
         }
         // Gradient magnitude across the edge as a 1 px central difference of the profile.
         let (mut sum_w, mut sum_wo) = (0.0, 0.0);
@@ -1040,7 +1086,8 @@ mod subpix_tests {
             origin[0] + 20.0 * dir[0] + off[0],
             origin[1] + 20.0 * dir[1] + off[1],
         ];
-        let line = fit_marker_edge(&img, p0, p1, 2.0).expect("edge fits");
+        let sample = |x: f64, y: f64| img.sample_bilinear(x, y);
+        let line = fit_marker_edge(&sample, p0, p1, 2.0).expect("edge fits");
         let dist = (origin[0] - line.point[0]) * line.normal[0]
             + (origin[1] - line.point[1]) * line.normal[1];
         assert!(dist.abs() < 0.05, "line {dist:.3} px off the edge");

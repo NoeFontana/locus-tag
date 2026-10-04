@@ -519,13 +519,17 @@ fn run_detection_pipeline<'ctx>(
             );
         },
         _ => {
-            // No distortion or no intrinsics — use the existing SIMD path with PinholeModel.
-            crate::decoder::decode_batch_soa(
+            // No distortion model in this build, or no intrinsics — the SIMD path with
+            // PinholeModel. Distortion it does not model disables the corner calibration.
+            let rectified =
+                intrinsics.is_none_or(|k| k.distortion == crate::pose::DistortionCoeffs::None);
+            crate::decoder::decode_batch_soa_generic(
                 &mut state.batch,
                 n,
                 &refinement_img,
                 decoders,
                 config,
+                rectified,
             );
         },
     }

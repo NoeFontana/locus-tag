@@ -311,13 +311,19 @@ pub struct DetectorConfig {
     /// for small dictionaries (tag16h5) where textured candidates decode by chance. Partial
     /// occlusion of the border consumes the budget.
     pub decoder_max_border_error_rate: f32,
-    /// Gradient-orthogonality corner refinement of every decoded marker (default: on).
+    /// Sub-pixel corner stage of every decoded marker (default: on).
     ///
-    /// Each corner `c` moves to the minimiser of `Σ w·(∇I(p)·(c − p))²` over a Gaussian-weighted
-    /// window around it, iterated (the `cv::cornerSubPix` model). It runs after the configured
-    /// [`CornerRefinementMode`] on candidates that decoded, and the homography is recomputed
-    /// from the moved corners. The window is sized from the marker's cell size, not
-    /// configured. Applies to undistorted cameras.
+    /// Runs after the configured [`CornerRefinementMode`] on candidates that decoded, and the
+    /// homography is recomputed from the moved corners. Three steps, none configured:
+    /// 1. Each corner `c` moves to the minimiser of `Σ w·(∇I(p)·(c − p))²` over a
+    ///    Gaussian-weighted window sized from the marker's cell (the `cv::cornerSubPix`
+    ///    model).
+    /// 2. It is fused, by inverse covariance, with the intersection of the marker's two
+    ///    whole-edge lines.
+    /// 3. The corners are calibrated against the marker's own bit edges, which removes the
+    ///    tone-curve inset every gradient estimator has on gamma-encoded images.
+    ///
+    /// Applies to undistorted cameras.
     pub decoder_corner_subpix: bool,
     /// Strategy for refining corner positions (default: Edge).
     pub refinement_mode: CornerRefinementMode,
