@@ -34,12 +34,6 @@ struct ComputedDictionary {
     dimension: usize,
     minimum_hamming_distance: u32,
     dictionary_size: usize,
-    mih_chunks: usize,
-    mih_buckets: usize,
-    mih_bits_per_chunk: u32,
-    mih_last_chunk_bits: u32,
-    mih_offsets: Vec<usize>,
-    mih_data: Vec<u64>,
     codes: Vec<u64>,
     canonical_sampling_points: Vec<[f64; 2]>,
 }
@@ -100,97 +94,6 @@ fn compute_rotations(base_code: u64, payload_length: u32, points: &[[f64; 2]]) -
     result
 }
 
-// Compute MIH exactly as TagDictionary::new() used to do
-fn compute_mih(
-    codes: &[u64],
-    payload_length: u32,
-    min_hamming: u32,
-) -> (usize, usize, u32, u32, Vec<usize>, Vec<u64>) {
-    let chunks = ((min_hamming as usize - 1) / 2) + 1;
-    #[allow(clippy::cast_sign_loss)]
-    let bits_per_chunk = (payload_length as f32 / chunks as f32).ceil() as u32;
-    let last_chunk_bits = payload_length - (chunks as u32 - 1) * bits_per_chunk;
-
-    let mut buckets = vec![0; chunks];
-    for (chunk_idx, mask_bits) in (0..chunks).map(|i| {
-        let bits = if i == chunks - 1 {
-            last_chunk_bits
-        } else {
-            bits_per_chunk
-        };
-        (i, bits)
-    }) {
-        buckets[chunk_idx] = 1 << mask_bits;
-    }
-
-    let total_buckets: usize = buckets.iter().sum();
-    let mut bucket_counts = vec![0; total_buckets];
-
-    let get_bucket_global_idx = |chunk_idx: usize, val: usize| -> usize {
-        let offset: usize = buckets.iter().take(chunk_idx).sum();
-        offset + val
-    };
-
-    // First pass: count sizes
-    for &code in codes {
-        for chunk_idx in 0..chunks {
-            let chunk_bits = if chunk_idx == chunks - 1 {
-                last_chunk_bits
-            } else {
-                bits_per_chunk
-            };
-            let shift = chunk_idx as u32 * bits_per_chunk;
-            let mask = (1 << chunk_bits) - 1;
-            let val = ((code >> shift) & mask) as usize;
-
-            let global_idx = get_bucket_global_idx(chunk_idx, val);
-            bucket_counts[global_idx] += 1;
-        }
-    }
-
-    // Prefix sums
-    let mut mih_offsets = vec![0; total_buckets + 1];
-    for i in 0..total_buckets {
-        mih_offsets[i + 1] = mih_offsets[i] + bucket_counts[i];
-    }
-
-    // Second pass: fill data
-    let mut mih_data = vec![0u64; mih_offsets[total_buckets]];
-    let mut current_offsets = mih_offsets.clone();
-
-    for (i, &code) in codes.iter().enumerate() {
-        for chunk_idx in 0..chunks {
-            let chunk_bits = if chunk_idx == chunks - 1 {
-                last_chunk_bits
-            } else {
-                bits_per_chunk
-            };
-            let shift = chunk_idx as u32 * bits_per_chunk;
-            let mask = (1 << chunk_bits) - 1;
-            let val = ((code >> shift) & mask) as usize;
-
-            let global_idx = get_bucket_global_idx(chunk_idx, val);
-            let pos = current_offsets[global_idx];
-
-            // Encode the index into u64. We keep the upper 32 bits for the candidate original value if needed?
-            // TagDictionary stores `index as u32`. Wait, actually the original TagDictionary `mih_data` stores `u32` or `u64`?
-            // If u32, let's just pack it as u64 and downstream casts. We'll generate as u32 to be safe if `TagDictionary` uses `Vec<u32>`.
-            // Wait, TagDictionary has `mih_data: Vec<u32>`.
-            mih_data[pos] = i as u64; // We'll render as `u32` in template
-            current_offsets[global_idx] += 1;
-        }
-    }
-
-    (
-        chunks,
-        1 << bits_per_chunk,
-        bits_per_chunk,
-        last_chunk_bits,
-        mih_offsets,
-        mih_data,
-    )
-}
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("cargo:rerun-if-changed=data/dictionaries");
     println!("cargo:rerun-if-changed=templates/dictionaries.rs.j2");
@@ -224,27 +127,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             all_codes.len()
         );
 
-        let (
-            mih_chunks,
-            mih_buckets,
-            mih_bits_per_chunk,
-            mih_last_chunk_bits,
-            mih_offsets,
-            mih_data,
-        ) = compute_mih(&all_codes, ir.payload_length, ir.minimum_hamming_distance);
-
         computed_dicts.push(ComputedDictionary {
             enum_name: enum_name.to_string(),
             payload_length: ir.payload_length,
             dimension: dim,
             minimum_hamming_distance: ir.minimum_hamming_distance,
             dictionary_size: ir.dictionary_size,
-            mih_chunks,
-            mih_buckets,
-            mih_bits_per_chunk,
-            mih_last_chunk_bits,
-            mih_offsets,
-            mih_data,
             codes: all_codes,
             canonical_sampling_points: ir.canonical_sampling_points,
         });

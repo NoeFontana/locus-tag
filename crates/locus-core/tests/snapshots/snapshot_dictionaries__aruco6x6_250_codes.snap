@@ -1,0 +1,9 @@
+---
+source: crates/locus-core/tests/snapshot_dictionaries.rs
+expression: "snapshot_dict(TagFamily::ArUco6x6_250)"
+---
+(
+    36,
+    1000,
+    "6289f5a4cd632da7",
+)

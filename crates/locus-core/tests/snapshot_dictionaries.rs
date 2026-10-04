@@ -15,8 +15,8 @@ use insta::assert_debug_snapshot;
 use locus_core::TagFamily;
 use locus_core::bench_api::*;
 
-/// Stable FNV-1a 64-bit hash for byte-for-byte parity checks
-fn fnv1a_hash_usize(slice: &[usize]) -> String {
+/// Stable FNV-1a 64-bit hash for byte-for-byte parity checks of the rotated code tables.
+fn fnv1a_hash_u64(slice: &[u64]) -> String {
     let mut hash = 0xcbf2_9ce4_8422_2325;
     for &val in slice {
         for b in val.to_le_bytes() {
@@ -27,38 +27,24 @@ fn fnv1a_hash_usize(slice: &[usize]) -> String {
     format!("{hash:016x}")
 }
 
-fn fnv1a_hash_u32_data(slice: &[u32]) -> String {
-    let mut hash = 0xcbf2_9ce4_8422_2325;
-    for &val in slice {
-        for b in val.to_le_bytes() {
-            hash ^= u64::from(b);
-            hash = hash.wrapping_mul(0x100_0000_01b3);
-        }
-    }
-    format!("{hash:016x}")
-}
-
-fn snapshot_dict(family: TagFamily) -> (usize, String, usize, String) {
+fn snapshot_dict(family: TagFamily) -> (u32, usize, String) {
     let dict = get_dictionary(family);
     (
-        dict.mih_offsets.len(),
-        fnv1a_hash_usize(dict.mih_offsets),
-        dict.mih_data.len(),
-        fnv1a_hash_u32_data(dict.mih_data),
+        dict.payload_length,
+        dict.codes.len(),
+        fnv1a_hash_u64(dict.codes),
     )
 }
 
 #[test]
 fn test_dictionary_snapshots() {
-    assert_debug_snapshot!("tag16h5_parity", snapshot_dict(TagFamily::AprilTag16h5));
-    assert_debug_snapshot!("tag36h11_parity", snapshot_dict(TagFamily::AprilTag36h11));
-    assert_debug_snapshot!("aruco4x4_50_parity", snapshot_dict(TagFamily::ArUco4x4_50));
+    assert_debug_snapshot!("tag16h5_codes", snapshot_dict(TagFamily::AprilTag16h5));
+    assert_debug_snapshot!("tag36h11_codes", snapshot_dict(TagFamily::AprilTag36h11));
+    assert_debug_snapshot!("aruco4x4_50_codes", snapshot_dict(TagFamily::ArUco4x4_50));
+    assert_debug_snapshot!("aruco4x4_100_codes", snapshot_dict(TagFamily::ArUco4x4_100));
+    assert_debug_snapshot!("aruco6x6_250_codes", snapshot_dict(TagFamily::ArUco6x6_250));
     assert_debug_snapshot!(
-        "aruco4x4_100_parity",
-        snapshot_dict(TagFamily::ArUco4x4_100)
-    );
-    assert_debug_snapshot!(
-        "aruco_mip_36h12_parity",
+        "aruco_mip_36h12_codes",
         snapshot_dict(TagFamily::ArUcoMip36h12)
     );
 }

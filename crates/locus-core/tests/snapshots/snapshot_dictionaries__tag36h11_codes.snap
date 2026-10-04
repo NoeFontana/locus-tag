@@ -3,8 +3,7 @@ source: crates/locus-core/tests/snapshot_dictionaries.rs
 expression: "snapshot_dict(TagFamily::AprilTag36h11)"
 ---
 (
-    385,
-    "9cf6140e2ed196a5",
-    14088,
-    "19d9f7da753d4271",
+    36,
+    2348,
+    "91656978a7f4a82e",
 )

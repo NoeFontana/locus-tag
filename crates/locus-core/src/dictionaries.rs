@@ -9,7 +9,7 @@
 ///
 /// `dimension`, `min_hamming`, and `num_codes_per_rotation` document the
 /// family's shape for downstream consumers reading `pub` fields directly; the
-/// Rust hot-path decoder uses `payload_length`, `codes`, and the MIH tables.
+/// Rust hot-path decoder uses `payload_length` and `codes`.
 #[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct TagDictionary {
@@ -23,18 +23,6 @@ pub struct TagDictionary {
     pub num_codes_per_rotation: usize,
     /// Raw code table (N * 4 rotations).
     pub codes: &'static [u64],
-    /// MIH Chunk Length.
-    pub mih_chunks: usize,
-    /// Multi-Index Hashing offsets: (k * MIH_BUCKETS + 1) entries.
-    pub mih_offsets: &'static [usize],
-    /// Multi-Index Hashing data: N * k entries, flat array.
-    pub mih_data: &'static [u32],
-    /// MIH bucket array size per chunk (max 1 << bits_per_chunk).
-    pub mih_buckets: usize,
-    /// MIH bits per chunk.
-    pub mih_bits_per_chunk: u32,
-    /// MIH last chunk bits.
-    pub mih_last_chunk_bits: u32,
 }
 
 impl TagDictionary {
@@ -68,9 +56,6 @@ impl TagDictionary {
             u64::MAX
         };
         let bits = bits & mask;
-        if max_hamming > 0 && self.payload_length > 36 {
-            return self.decode_indexed(bits, max_hamming);
-        }
         // One branch-free pass (vectorised popcount and min) over `hamming << 16 | index`
         // keys: the minimum is the nearest code, lowest index on ties.
         let key = nearest_key(self.codes, bits)?;
@@ -79,51 +64,6 @@ impl TagDictionary {
             return None;
         }
         Some(((idx / 4) as u16, hamming, (idx % 4) as u8))
-    }
-
-    fn decode_indexed(&self, bits: u64, max_hamming: u32) -> Option<(u16, u32, u8)> {
-        let mut best: Option<(u16, u32, u8)> = None;
-        for c in 0..self.mih_chunks {
-            let chunk = self.extract_mih_chunk(bits, c) as usize;
-            let bucket_idx = c * self.mih_buckets + chunk;
-            let offset_start = self.mih_offsets[bucket_idx];
-            let offset_end = self.mih_offsets[bucket_idx + 1];
-
-            for i in offset_start..offset_end {
-                let packed = self.mih_data[i];
-                if let Some(&target_code) = self.codes.get(packed as usize) {
-                    let hamming = (bits ^ target_code).count_ones();
-                    if hamming <= max_hamming {
-                        let id = (packed >> 2) as u16;
-                        let rot = (packed & 0x3) as u8;
-                        if let Some((_, b_h, _)) = best {
-                            if hamming < b_h {
-                                best = Some((id, hamming, rot));
-                            }
-                        } else {
-                            best = Some((id, hamming, rot));
-                        }
-                        if hamming == 0 {
-                            return best;
-                        }
-                    }
-                }
-            }
-        }
-        best
-    }
-
-    /// Internal method to extract a specific chunk for Multi-Index Hashing.
-    fn extract_mih_chunk(&self, bits: u64, chunk_idx: usize) -> u16 {
-        let chunk_size = self.mih_bits_per_chunk;
-        let last_size = self.mih_last_chunk_bits;
-        let start = chunk_idx as u32 * chunk_size;
-        let len = if chunk_idx == self.mih_chunks - 1 {
-            last_size
-        } else {
-            chunk_size
-        };
-        ((bits >> start) & ((1u64 << len) - 1)) as u16
     }
 }
 
