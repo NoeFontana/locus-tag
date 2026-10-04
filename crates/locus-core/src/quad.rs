@@ -427,7 +427,6 @@ fn extract_single_quad(
                 refinement_img,
                 quad_pts,
                 gn_covs,
-                route_extraction,
                 route_refinement,
                 config.subpixel_refinement_sigma,
                 decimation,
@@ -824,7 +823,6 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     let (corners, out_covs) = if route_refinement == crate::config::CornerRefinementMode::None {
         (quad_pts, [[0.0_f32; 4]; 4])
     } else if C::IS_RECTIFIED {
-        let use_erf = route_refinement == crate::config::CornerRefinementMode::Erf;
         (
             refine_all_quad_corners(
                 arena,
@@ -832,7 +830,6 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
                 quad_pts,
                 config.subpixel_refinement_sigma,
                 decimation,
-                use_erf,
             ),
             [[0.0_f32; 4]; 4],
         )
@@ -1401,88 +1398,6 @@ fn polygon_area(points: &[Point]) -> f64 {
     area * 0.5
 }
 
-/// Fit a line (a*x + b*y + c = 0) to an edge by sampling gradient peaks.
-pub(crate) fn fit_edge_line(
-    img: &ImageView,
-    p1: Point,
-    p2: Point,
-    decimation: usize,
-) -> Option<(f64, f64, f64)> {
-    let dx = p2.x - p1.x;
-    let dy = p2.y - p1.y;
-    let len = (dx * dx + dy * dy).sqrt();
-    if len < 4.0 {
-        return None;
-    }
-
-    let nx = dy / len;
-    let ny = -dx / len;
-
-    let mut sum_d = 0.0;
-    let mut count = 0;
-
-    let n_samples = (len as usize).clamp(5, 15);
-    // Original search range was 3 pixels
-    let r = if decimation > 1 {
-        (decimation as i32) + 1
-    } else {
-        3
-    };
-
-    for i in 1..=n_samples {
-        let t = i as f64 / (n_samples + 1) as f64;
-        let px = p1.x + dx * t;
-        let py = p1.y + dy * t;
-
-        let mut best_px = px;
-        let mut best_py = py;
-        let mut best_mag = 0.0;
-
-        for step in -r..=r {
-            let sx = px + nx * f64::from(step);
-            let sy = py + ny * f64::from(step);
-
-            let g = img.sample_gradient_bilinear(sx, sy);
-            let mag = g[0] * g[0] + g[1] * g[1];
-            if mag > best_mag {
-                best_mag = mag;
-                best_px = sx;
-                best_py = sy;
-            }
-        }
-
-        if best_mag > 10.0 {
-            let mut mags = [0.0f64; 3];
-            for (j, offset) in [-1.0, 0.0, 1.0].iter().enumerate() {
-                let sx = best_px + nx * offset;
-                let sy = best_py + ny * offset;
-                let g = img.sample_gradient_bilinear(sx, sy);
-                mags[j] = g[0] * g[0] + g[1] * g[1];
-            }
-
-            let num = mags[2] - mags[0];
-            let den = 2.0 * (mags[0] + mags[2] - 2.0 * mags[1]);
-            let sub_offset = if den.abs() > 1e-6 {
-                (-num / den).clamp(-0.5, 0.5)
-            } else {
-                0.0
-            };
-
-            let refined_x = best_px + nx * sub_offset;
-            let refined_y = best_py + ny * sub_offset;
-
-            sum_d += -(nx * refined_x + ny * refined_y);
-            count += 1;
-        }
-    }
-
-    if count < 3 {
-        return None;
-    }
-
-    Some((nx, ny, sum_d / f64::from(count)))
-}
-
 /// Refine edge position using the unified ERF intensity model and return
 /// the line coefficients `(nx, ny, d)` for the corner intersection in
 /// [`crate::refinement::refine_all_quad_corners`].
@@ -1603,7 +1518,7 @@ fn fit_edge_line_curved<C: crate::camera::CameraModel>(
     let fx_over_fy = fx / fy;
     let fy_over_fx = fy / fx;
 
-    let mut moments = crate::gwlf::MomentAccumulator::new();
+    let mut moments = crate::moments::MomentAccumulator::new();
 
     for i in 1..=n_samples {
         let t = i as f64 / (n_samples + 1) as f64;
@@ -1692,8 +1607,8 @@ fn fit_edge_line_curved<C: crate::camera::CameraModel>(
     // is curved, so a pixel-space TLS picks up a systematic inward bias.
     let centroid = moments.centroid()?;
     let cov = moments.covariance()?;
-    let eig = crate::gwlf::solve_2x2_symmetric(cov[(0, 0)], cov[(0, 1)], cov[(1, 1)]);
-    let n_vec = eig.v_min;
+    let n_vec =
+        crate::moments::min_eigenvector_2x2_symmetric(cov[(0, 0)], cov[(0, 1)], cov[(1, 1)]);
     let c = -(n_vec.x * centroid.x + n_vec.y * centroid.y);
     Some((n_vec.x, n_vec.y, c))
 }
@@ -2640,7 +2555,7 @@ mod tests {
                 y: true_y.round(),
             };
 
-            let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1, true);
+            let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1);
 
             let error_x = (refined.x - true_x).abs();
             let error_y = (refined.y - true_y).abs();
@@ -2688,7 +2603,7 @@ mod tests {
             y: corner_y,
         };
 
-        let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1, true);
+        let refined = refine_corner(&arena, &img, init_p, p_prev, p_next, sigma, 1);
 
         // The x-coordinate should be refined to near the true edge position
         // y-coordinate depends on the horizontal edge (which doesn't exist in this test)

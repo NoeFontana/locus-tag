@@ -22,17 +22,12 @@ use locus_core::config::{
 /// Fields that *all three* shipped profiles carry at the current repo defaults.
 fn assert_shared_defaults(cfg: &DetectorConfig) {
     let d = DetectorConfig::default();
-    assert_eq!(cfg.threshold_min_range, d.threshold_min_range);
     // Every shipped profile keeps the historical tile thresholder; the
     // local-mean mode is opt-in only.
     assert_eq!(cfg.threshold_mode, ThresholdMode::TileMidExtreme);
     assert_eq!(
         cfg.threshold_local_mean_radius,
         d.threshold_local_mean_radius
-    );
-    assert_eq!(
-        cfg.adaptive_threshold_constant,
-        d.adaptive_threshold_constant
     );
     assert_eq!(cfg.threshold_noise_k, d.threshold_noise_k);
     // `quad_min_area` is profile-specific (clean-render profiles raise it to
@@ -43,7 +38,6 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
     assert_eq!(cfg.quad_max_fill_ratio, d.quad_max_fill_ratio);
     assert_eq!(cfg.quad_min_edge_length, d.quad_min_edge_length);
     assert_eq!(cfg.subpixel_refinement_sigma, d.subpixel_refinement_sigma);
-    assert_eq!(cfg.gwlf_transversal_alpha, d.gwlf_transversal_alpha);
     assert_eq!(cfg.huber_delta_px, d.huber_delta_px);
     assert_eq!(cfg.tikhonov_alpha_max, d.tikhonov_alpha_max);
     assert_eq!(cfg.sigma_n_sq, d.sigma_n_sq);
@@ -55,12 +49,11 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
 }
 
 #[test]
-fn standard_profile_matches_former_builder() {
+fn standard_profile_values() {
     let cfg = DetectorConfig::from_profile("standard");
 
     // Standard-specific overrides.
     assert_eq!(cfg.decoder_corner_subpix, true);
-    assert_eq!(cfg.quad_refine_before_decode, false);
     assert_eq!(cfg.decoder_max_border_error_rate, None);
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, true);
@@ -86,10 +79,9 @@ fn standard_profile_matches_former_builder() {
 }
 
 #[test]
-fn grid_profile_matches_former_builder() {
+fn grid_profile_values() {
     let cfg = DetectorConfig::from_profile("grid");
     assert_eq!(cfg.decoder_corner_subpix, true);
-    assert_eq!(cfg.quad_refine_before_decode, false);
     assert_eq!(cfg.decoder_max_border_error_rate, None);
 
     // Grid-specific overrides.
@@ -122,7 +114,6 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     // High-accuracy overrides. EdLines' whole-edge corners stay unrefined until a fused
     // corner estimator replaces them.
     assert_eq!(cfg.decoder_corner_subpix, false);
-    assert_eq!(cfg.quad_refine_before_decode, true);
     assert_eq!(cfg.decoder_max_border_error_rate, Some(1.0));
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
@@ -195,11 +186,9 @@ fn to_profile_json_round_trips_every_field() {
     let cfg = DetectorConfig {
         // Threshold
         threshold_tile_size: 12,
-        threshold_min_range: 5,
         enable_sharpening: false,
         threshold_mode: ThresholdMode::LocalMean,
         threshold_local_mean_radius: 9,
-        adaptive_threshold_constant: 4,
         threshold_noise_k: 3.5,
         // Quad
         quad_min_area: 25,
@@ -218,9 +207,9 @@ fn to_profile_json_round_trips_every_field() {
         decoder_min_contrast: 12.5,
         decoder_max_border_error_rate: Some(0.25),
         decoder_corner_subpix: true,
-        refinement_mode: CornerRefinementMode::Erf,
+        // `AdaptivePpb` (below) requires the static mode to be `None`.
+        refinement_mode: CornerRefinementMode::None,
         max_hamming_error: Some(2),
-        gwlf_transversal_alpha: 0.03,
         // Pose
         huber_delta_px: 1.75,
         tikhonov_alpha_max: 0.3,
@@ -228,7 +217,6 @@ fn to_profile_json_round_trips_every_field() {
         structure_tensor_radius: 4,
         pose_consistency_fpr: 1e-3,
         pose_consistency_gate_sigma_px: 0.75,
-        pose_consistency_min_decisive_ratio: 7.5,
         outlier_drop_d2_threshold: 25.0,
         // Segmentation
         segmentation_connectivity: SegmentationConnectivity::Four,
@@ -240,7 +228,6 @@ fn to_profile_json_round_trips_every_field() {
             low_refinement: CornerRefinementMode::Erf,
             high_refinement: CornerRefinementMode::None,
         }),
-        quad_refine_before_decode: true,
         // `decimation` / `nthreads` are per-call orchestration, not profile
         // fields — left at default (they are intentionally not round-tripped).
         ..DetectorConfig::default()
@@ -248,29 +235,5 @@ fn to_profile_json_round_trips_every_field() {
 
     let json = cfg.to_profile_json().expect("serialize config");
     let round_tripped = DetectorConfig::from_profile_json(&json).expect("re-parse config");
-    assert_eq!(round_tripped, cfg);
-}
-
-#[test]
-fn to_profile_json_round_trips_infinite_decisive_ratio() {
-    // `f64::INFINITY` is the documented value that disables the χ² escape
-    // clause. JSON has no number form for it, so it must round-trip as `null`
-    // (matching Pydantic's inf↔null handling) rather than breaking the boundary.
-    let cfg = DetectorConfig {
-        pose_consistency_min_decisive_ratio: f64::INFINITY,
-        ..DetectorConfig::default()
-    };
-
-    let json = cfg.to_profile_json().expect("serialize config");
-    assert!(
-        json.contains("\"pose_consistency_min_decisive_ratio\":null"),
-        "infinite ratio must serialize as JSON null; got: {json}"
-    );
-
-    let round_tripped = DetectorConfig::from_profile_json(&json).expect("re-parse config");
-    assert_eq!(
-        round_tripped.pose_consistency_min_decisive_ratio,
-        f64::INFINITY
-    );
     assert_eq!(round_tripped, cfg);
 }

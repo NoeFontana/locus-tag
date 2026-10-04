@@ -30,11 +30,11 @@ fn run(data: &[u8], upscale: usize, decimation: usize, pose: bool) -> Run {
     let mut det = DetectorBuilder::new()
         .with_config(DetectorConfig {
             decoder_corner_subpix: false,
+            upscale_factor: upscale,
             ..DetectorConfig::default()
         })
         .with_family(FAMILY)
         .with_decimation(decimation)
-        .with_upscale_factor(upscale)
         .build();
     let intr = CameraIntrinsics::new(800.0, 800.0, 320.0, 320.0);
     let out = if pose {

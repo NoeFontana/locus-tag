@@ -1,13 +1,10 @@
 {
   "name": "icra_grid",
-  "extends": null,
   "threshold": {
     "tile_size": 8,
-    "min_range": 10,
     "enable_sharpening": false,
     "mode": "TileMidExtreme",
-    "local_mean_radius": 24,
-    "constant": 0
+    "local_mean_radius": 24
   },
   "quad": {
     "min_area": 16,
@@ -25,7 +22,7 @@
   "decoder": {
     "min_contrast": 5.0,
     "refinement_mode": "Erf",
-    "gwlf_transversal_alpha": 0.01
+    "corner_subpix": false
   },
   "pose": {
     "huber_delta_px": 1.5,

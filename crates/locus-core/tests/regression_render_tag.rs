@@ -86,26 +86,6 @@ mod accuracy_baseline {
     }
 }
 
-mod refinement_variants {
-    use super::common;
-    use common::hub::{RenderTagOpts, run_render_tag_test};
-    use locus_core::{TagFamily, config::CornerRefinementMode};
-
-    #[test]
-    fn regression_hub_tag36h11_1080p_gwlf() {
-        let _g = common::telemetry::init("regression_hub_tag36h11_1080p_gwlf");
-        run_render_tag_test(
-            "locus_v1_tag36h11_1920x1080",
-            TagFamily::AprilTag36h11,
-            RenderTagOpts {
-                snapshot_suffix: "_gwlf",
-                refinement: Some(CornerRefinementMode::Gwlf),
-                ..Default::default()
-            },
-        );
-    }
-}
-
 mod quad_extraction_variants {
     use super::common;
     use common::hub::{RenderTagOpts, run_render_tag_test};
@@ -123,21 +103,6 @@ mod quad_extraction_variants {
             RenderTagOpts {
                 snapshot_suffix: "_edlines_none",
                 refinement: Some(CornerRefinementMode::None),
-                quad_mode: Some(QuadExtractionMode::EdLines),
-                ..Default::default()
-            },
-        );
-    }
-
-    #[test]
-    fn regression_hub_tag36h11_720p_edlines_gwlf() {
-        let _g = common::telemetry::init("regression_hub_tag36h11_720p_edlines_gwlf");
-        run_render_tag_test(
-            "locus_v1_tag36h11_1280x720",
-            TagFamily::AprilTag36h11,
-            RenderTagOpts {
-                snapshot_suffix: "_edlines_gwlf",
-                refinement: Some(CornerRefinementMode::Gwlf),
                 quad_mode: Some(QuadExtractionMode::EdLines),
                 ..Default::default()
             },

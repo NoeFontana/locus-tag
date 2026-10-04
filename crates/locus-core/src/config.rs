@@ -1,8 +1,9 @@
 //! Configuration types for the detector pipeline.
 //!
-//! This module provides two configuration types:
-//! - [`DetectorConfig`]: Pipeline-level configuration (immutable after construction)
-//! - [`DetectOptions`]: Per-call options (e.g., which tag families to decode)
+//! [`DetectorConfig`] is the pipeline-level configuration, immutable after the detector is
+//! constructed. Build one with struct-update syntax over [`DetectorConfig::default`] (the
+//! `standard` profile) or load a profile with `DetectorConfig::from_profile` /
+//! `DetectorConfig::from_profile_json`.
 
 /// Segmentation connectivity mode.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -35,14 +36,15 @@ pub enum ThresholdMode {
     /// than the midpoint between a marker's black border and a nearby highlight
     /// becomes foreground and fuses with the marker.
     TileMidExtreme,
-    /// Per-pixel local mean over a `(2r+1)^2` window minus
-    /// [`DetectorConfig::adaptive_threshold_constant`], where `r` is
-    /// [`DetectorConfig::threshold_local_mean_radius`]. Computed with a sliding
-    /// column-sum accumulator, not an integral image.
+    /// Per-pixel local mean over a `(2r+1)^2` window minus a noise-calibrated offset
+    /// `clamp(round(k · σ̂ₙ), 2, 20)`, where `r` is
+    /// [`DetectorConfig::threshold_local_mean_radius`] and `k` is
+    /// [`DetectorConfig::threshold_noise_k`]. Computed with a sliding column-sum
+    /// accumulator, not an integral image.
     ///
     /// The threshold tracks the local *background level* instead of the local
     /// extremes, which is what keeps a dark textured background from fusing
-    /// with a marker; the constant is what keeps sensor noise in a uniform
+    /// with a marker; the offset is what keeps sensor noise in a uniform
     /// region below the threshold. Opt-in: it changes detector output on every
     /// frame.
     LocalMean,
@@ -60,10 +62,6 @@ pub enum CornerRefinementMode {
     /// PSF-blurred step function fit via Gauss-Newton on the gradient
     /// profile. Default for `ContourRdp`.
     Erf,
-    /// Gradient-Weighted Line Fitting: fit each edge as a 3-DoF
-    /// projective line under gradient-magnitude weights, then
-    /// intersect. Produces calibrated 2×2 corner covariances.
-    Gwlf,
 }
 
 /// Quad extraction algorithm.
@@ -86,11 +84,8 @@ pub enum QuadExtractionMode {
 /// extremals); when disabled the AXIS partition is kept (which is what
 /// distortion-suite aprilgrid sub-tags need — they can legitimately
 /// produce min-arc 8–15 % without being collapsed).
-///
-/// The legacy boolean form is still accepted on the JSON / Python
-/// boundary for backward compatibility.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum EdLinesImbalanceGatePolicy {
     /// Gate is off — keep the AXIS 4-arc partition unconditionally.
     #[default]
@@ -109,42 +104,13 @@ impl EdLinesImbalanceGatePolicy {
     }
 }
 
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for EdLinesImbalanceGatePolicy {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        // Accept legacy `true` / `false` alongside the tagged-string form.
-        #[derive(serde::Deserialize)]
-        #[serde(untagged)]
-        enum Raw {
-            Bool(bool),
-            Str(String),
-        }
-        match Raw::deserialize(deserializer)? {
-            Raw::Bool(true) => Ok(Self::Enabled),
-            Raw::Bool(false) => Ok(Self::Disabled),
-            Raw::Str(s) => match s.as_str() {
-                "Enabled" => Ok(Self::Enabled),
-                "Disabled" => Ok(Self::Disabled),
-                other => Err(serde::de::Error::custom(format!(
-                    "EdLinesImbalanceGatePolicy: {other:?} is not a valid \
-                     variant (allowed: \"Disabled\", \"Enabled\", or boolean \
-                     true/false)"
-                ))),
-            },
-        }
-    }
-}
-
 /// Per-candidate routing config for [`QuadExtractionPolicy::AdaptivePpb`].
 ///
 /// A pixels-per-bit (PPB) estimate is computed per candidate from its
 /// segmentation bounding box and the minimum tag outer dimension across
 /// configured decoders. Candidates with `ppb < threshold` take the `low_*`
 /// route (typically ContourRdp + Erf for small/blurry tags); candidates with
-/// `ppb >= threshold` take the `high_*` route (typically EdLines + None/Gwlf
+/// `ppb >= threshold` take the `high_*` route (typically EdLines + None
 /// for metrology-grade accuracy). When `ppb == threshold` exactly, the low
 /// route wins (deterministic tie-break for snapshot stability).
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -176,10 +142,12 @@ impl Default for AdaptivePpbConfig {
 
 /// Per-frame dispatch strategy for quad extraction.
 ///
-/// `Static` (default) preserves existing behavior: every candidate runs
+/// `Static` (default): every candidate runs
 /// `DetectorConfig::quad_extraction_mode` + `DetectorConfig::refinement_mode`.
 /// `AdaptivePpb(...)` routes each candidate to one of two configurations
-/// based on an on-the-fly pixels-per-bit estimate.
+/// based on an on-the-fly pixels-per-bit estimate; it requires
+/// `DetectorConfig::refinement_mode == None`, since the routes carry their own
+/// refinement modes.
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum QuadExtractionPolicy {
@@ -194,33 +162,17 @@ pub enum QuadExtractionPolicy {
 /// Pipeline-level configuration for the detector.
 ///
 /// These settings affect the fundamental behavior of the detection pipeline
-/// and are immutable after the `Detector` is constructed. Use the builder
-/// pattern for ergonomic construction.
+/// and are immutable after the `Detector` is constructed. Construct one with
+/// struct-update syntax over [`DetectorConfig::default`], e.g.
+/// `DetectorConfig { quad_min_area: 400, ..DetectorConfig::default() }`, or load
+/// a JSON profile.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[allow(
-    clippy::struct_excessive_bools,
-    reason = "flat hot-path mirror of the profile; the bools shrink as alternative paths are removed (`quad_refine_before_decode` goes when decode-first becomes the only order)"
-)]
 pub struct DetectorConfig {
     // Threshold parameters
-    /// Tile size for adaptive thresholding (default: 4).
+    /// Tile size for adaptive thresholding (default: 8).
     /// Larger tiles are faster but less adaptive to local contrast.
     pub threshold_tile_size: usize,
-    /// Minimum intensity range in a 3×3-tile neighbourhood for the centre tile
-    /// to be marked *valid* (default: 10).
-    ///
-    /// **Telemetry-scoped.** This gate is applied only while writing the
-    /// binarized debug map: pixels in a low-range (flat) tile are forced to
-    /// background in `telemetry.binarized`. The per-pixel `threshold_map` that
-    /// segmentation actually consumes is written unconditionally, so changing
-    /// this value changes `telemetry.binarized` and nothing else — detections
-    /// are bit-identical. See `ThresholdEngine::apply_threshold_with_map`.
-    ///
-    /// The tile-validity *propagation* pass that would have made this affect
-    /// detection was disabled in 996e782 and is still commented out there; do
-    /// not assume this knob hardens the detector against flat regions.
-    pub threshold_min_range: u8,
 
     /// Enable Laplacian sharpening to enhance edges for small tags (default: true).
     pub enable_sharpening: bool,
@@ -228,41 +180,37 @@ pub struct DetectorConfig {
     /// How the per-pixel foreground threshold is built (default:
     /// [`ThresholdMode::TileMidExtreme`], the historical behaviour).
     pub threshold_mode: ThresholdMode,
-    /// Window radius, in pixels, of the local-mean thresholder (default: 24).
+    /// Window radius, in pixels, of the local-mean thresholder (default: 7).
     /// Only read by [`ThresholdMode::LocalMean`]; the window is `(2r+1)^2`.
     pub threshold_local_mean_radius: usize,
-    /// Constant subtracted from the local mean by [`ThresholdMode::LocalMean`]
-    /// (default: 15). Larger values require a pixel to sit further below its
-    /// local mean before it counts as foreground, which suppresses the
-    /// sensor-noise speckle a bare local-mean threshold produces in uniform
-    /// regions. Ignored by [`ThresholdMode::TileMidExtreme`].
-    pub adaptive_threshold_constant: i16,
-    /// Noise-calibrated offset for [`ThresholdMode::LocalMean`] (default: 0.0, off).
+    /// Noise-calibrated offset `k` of [`ThresholdMode::LocalMean`] (default: 4.0; must be
+    /// finite and positive).
     ///
-    /// When positive, the local-mean constant is chosen per frame as
+    /// The offset subtracted from the local mean is chosen per frame as
     /// `clamp(round(k · σ̂ₙ), 2, 20)` grey levels, where `σ̂ₙ` is the sensor-noise standard
     /// deviation of the thresholded image (Immerkær estimate on the raw frame, scaled by the
-    /// pre-filter white-noise gain), and
-    /// [`Self::adaptive_threshold_constant`] is ignored. A flat background pixel then becomes
-    /// foreground with probability ≈ Φ(−k), whatever the camera's noise level — one
-    /// physical parameter instead of a per-camera grey-level constant. Ignored by
+    /// pre-filter white-noise gain). A flat background pixel then becomes foreground with
+    /// probability ≈ Φ(−k), whatever the camera's noise level — one physical parameter
+    /// instead of a per-camera grey-level constant. Ignored by
     /// [`ThresholdMode::TileMidExtreme`].
     pub threshold_noise_k: f32,
 
     // Quad filtering parameters
-    /// Minimum quad area in pixels (default: 16).
+    /// Minimum quad area in pixels (default: 36).
     pub quad_min_area: u32,
-    /// Maximum aspect ratio of bounding box (default: 3.0).
+    /// Maximum aspect ratio of bounding box (default: 10.0).
     pub quad_max_aspect_ratio: f32,
     /// Minimum fill ratio (pixel count / bbox area); 0.0 (the default) disables it.
     pub quad_min_fill_ratio: f32,
-    /// Maximum fill ratio (default: 0.95).
+    /// Maximum fill ratio (default: 0.98).
     pub quad_max_fill_ratio: f32,
     /// Minimum edge length in pixels (default: 4.0).
     pub quad_min_edge_length: f64,
-    /// Minimum edge alignment score (0.0 to 1.0)
+    /// Edge-contrast floor of the quad edge gate (default: 4.0): the minimum mean gradient
+    /// contrast, in grey levels, across each candidate edge. Not a normalised 0..1 score;
+    /// `0.0` disables the gate.
     pub quad_min_edge_score: f64,
-    /// PSF blur factor for subpixel refinement (e.g., 0.6)
+    /// PSF blur factor for subpixel refinement (default: 0.6).
     pub subpixel_refinement_sigma: f64,
     /// Segmentation connectivity of dark regions (default: 4-way).
     ///
@@ -331,15 +279,19 @@ pub struct DetectorConfig {
     /// 3. The corners are calibrated against the marker's own bit edges, which removes the
     ///    tone-curve inset every gradient estimator has on gamma-encoded images.
     ///
-    /// Applies to undistorted cameras.
+    /// Applies to undistorted cameras, and skips markers whose cells are under ~3.3 px (their
+    /// seed corners are kept).
     pub decoder_corner_subpix: bool,
-    /// Strategy for refining corner positions (default: Edge).
+    /// Strategy for refining corner positions (default: [`CornerRefinementMode::Erf`]).
+    ///
+    /// Read only under [`QuadExtractionPolicy::Static`]; `AdaptivePpb` requires `None` here
+    /// and takes its per-route modes from the policy.
     pub refinement_mode: CornerRefinementMode,
     /// Maximum number of Hamming errors allowed for tag decoding.
     ///
     /// `None` (the default) defers to each registered family's
     /// `TagDecoder::default_max_hamming` — tighter on dense codebooks
-    /// (e.g. 16h5 = 1, 4x4_* = 1) and looser on sparse ones
+    /// (e.g. 16h5 = 0, 4x4_* = 1) and looser on sparse ones
     /// (e.g. 36h11 = 2, 6x6_250 = 2). `Some(n)` is an explicit override
     /// applied uniformly to every family.
     pub max_hamming_error: Option<u32>,
@@ -379,9 +331,8 @@ pub struct DetectorConfig {
     /// `χ²(2)` for the aggregate Mahalanobis distance `d² = rᵀ Σ⁻¹ r` over
     /// the four corners (8 obs − 6 DOF) and `χ²(1)` for each per-corner
     /// residual; both must pass or the pose is rejected (`Detection.pose`
-    /// becomes `None`). Σ is sourced from GWLF covariances (when present),
-    /// the Structure Tensor (Accurate mode), or `Σ = sigma_n_sq · I` (Fast
-    /// mode, isotropic fallback). Enabling the gate also activates
+    /// becomes `None`). Σ is sourced from the Structure Tensor (Accurate
+    /// mode) or `Σ = sigma_n_sq · I` (Fast mode, isotropic fallback). Enabling the gate also activates
     /// observed-space Mahalanobis IPPE branch selection with branch swap.
     ///
     /// Recommended starting values: `1e-3` (good FPR/recall trade-off for
@@ -394,7 +345,7 @@ pub struct DetectorConfig {
     /// post-LM residuals are 2-D Gaussian with covariance σ²·I. To keep
     /// that calibration valid, the gate uses isotropic info matrices
     /// `Σ⁻¹ = (1/σ²)·I` independent of the LM's per-corner weighting
-    /// (which can be anisotropic / structure-tensor / GWLF-derived).
+    /// (which can be anisotropic / structure-tensor-derived).
     ///
     /// Decoupled from `sigma_n_sq` because the LM and the gate serve
     /// different roles: the LM weights real Gaussian sensor noise (σ_n
@@ -404,27 +355,6 @@ pub struct DetectorConfig {
     /// residuals that the looser LM noise model would let through.
     /// Default: 1.0 px.
     pub pose_consistency_gate_sigma_px: f64,
-
-    /// Branch-ratio escape clause for the pose-consistency gate.
-    ///
-    /// `alternate_d2 / primary_d2` from the IPPE branch selector. When
-    /// this ratio exceeds the configured value the chosen branch is
-    /// considered decisive and the χ² gate is bypassed even when the
-    /// post-LM aggregate / per-corner d² exceeds the threshold.
-    ///
-    /// The χ² gate's job is to catch IPPE branch ambiguity: cases where
-    /// the chosen branch was a coin-flip and the LM converged to a
-    /// geometrically-wrong solution. When the IPPE selector had
-    /// overwhelming evidence (alternate ≫ primary), a high post-LM
-    /// residual is more likely to reflect scene-specific noise (PSF
-    /// artefacts, lighting gradients) than a wrong branch — and the
-    /// pose should not be discarded. A spurious-corner false positive
-    /// has *both* IPPE candidates with high d² *and* similar magnitudes,
-    /// so its ratio stays near 1 and the gate still catches it.
-    ///
-    /// Default: 5.0 (alternate ≥ 5× primary). Set to `f64::INFINITY` to
-    /// disable the escape clause and use only the χ² test.
-    pub pose_consistency_min_decisive_ratio: f64,
 
     /// Outlier-aware corner-drop trigger threshold (squared Mahalanobis).
     ///
@@ -456,10 +386,6 @@ pub struct DetectorConfig {
     /// production byte-identical for profiles that have not opted in.
     pub pose_edge_refinement_enabled: bool,
 
-    /// Alpha parameter for GWLF adaptive transversal windowing.
-    /// The search band is set to +/- max(2, alpha * edge_length).
-    pub gwlf_transversal_alpha: f64,
-
     /// Maximum elongation (λ_max / λ_min) allowed for a component before contour tracing.
     /// 0.0 = disabled (the default).
     ///
@@ -490,36 +416,21 @@ pub struct DetectorConfig {
     /// snapshot-review campaign: every downstream test that constructs a
     /// default config would silently exercise new code.
     pub quad_extraction_policy: QuadExtractionPolicy,
-    /// Refine every candidate's corners during quad extraction, before decoding (default:
-    /// false, decode-first; `high_accuracy` keeps the historical refine-first order).
-    ///
-    /// When false (decode-first), candidates are decoded from their contour corners and only
-    /// the ones that decode, or miss the Hamming budget by a few bits, are refined: the
-    /// decoder runs the skipped quad-stage refinement and its edge-contrast gate, then its ERF
-    /// pass, and keeps the match only if the refined quad decodes the same id within budget
-    /// (and passes `decoder.max_border_error_rate`). A marker that decodes under both orders
-    /// gets the same corners. Real images produce hundreds of candidates per marker, so this
-    /// removes most of the quad stage's refinement work. A match that fails that verification
-    /// is rejected. Applies to the ERF route on undistorted cameras without upscaling; other
-    /// refinement modes, upscaled grids and the distortion-aware path always refine first.
-    pub quad_refine_before_decode: bool,
 }
 
 impl Default for DetectorConfig {
     /// Must stay field-for-field identical to `profiles/standard.json`
-    /// (`config::tests::default_matches_standard_profile` enforces this) —
+    /// (`config::schema_parity_tests::default_matches_standard_profile` enforces this) —
     /// `standard` is documented as the implicit default (`Detector()` /
     /// `Detector::new()`), so a silent drift here is a silent behavior
     /// change for every caller that doesn't pass a profile.
     fn default() -> Self {
         Self {
             threshold_tile_size: 8,
-            threshold_min_range: 10,
             enable_sharpening: true,
             threshold_mode: ThresholdMode::TileMidExtreme,
-            threshold_local_mean_radius: 24,
-            adaptive_threshold_constant: 15,
-            threshold_noise_k: 0.0,
+            threshold_local_mean_radius: 7,
+            threshold_noise_k: 4.0,
             // 1 PPB on the smallest supported family's outer grid (6×6 cells:
             // AprilTag16h5, ArUco4x4) — below 36 px² a quad cannot represent
             // 1 pixel per bit on any family, so the decoder cannot succeed.
@@ -548,29 +459,20 @@ impl Default for DetectorConfig {
             tikhonov_alpha_max: 0.25,
             sigma_n_sq: 4.0,
             structure_tensor_radius: 2,
-            gwlf_transversal_alpha: 0.01,
             quad_max_elongation: 0.0,
             quad_min_density: 0.0,
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
             edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
             pose_consistency_fpr: 0.0,
             pose_consistency_gate_sigma_px: 1.0,
-            pose_consistency_min_decisive_ratio: 5.0,
             outlier_drop_d2_threshold: 0.0,
             pose_edge_refinement_enabled: false,
             quad_extraction_policy: QuadExtractionPolicy::Static,
-            quad_refine_before_decode: false,
         }
     }
 }
 
 impl DetectorConfig {
-    /// Create a new builder for `DetectorConfig`.
-    #[must_use]
-    pub fn builder() -> DetectorConfigBuilder {
-        DetectorConfigBuilder::default()
-    }
-
     /// Validate the configuration, returning an error if any parameter is out of range.
     ///
     /// # Errors
@@ -594,7 +496,7 @@ impl DetectorConfig {
         {
             return Err(ConfigError::InvalidBorderErrorRate(rate));
         }
-        if !(self.threshold_noise_k.is_finite() && self.threshold_noise_k >= 0.0) {
+        if !(self.threshold_noise_k.is_finite() && self.threshold_noise_k > 0.0) {
             return Err(ConfigError::InvalidNoiseK(self.threshold_noise_k));
         }
         if self.decimation < 1 {
@@ -615,7 +517,7 @@ impl DetectorConfig {
         if self.quad_min_edge_length <= 0.0 {
             return Err(ConfigError::InvalidEdgeLength(self.quad_min_edge_length));
         }
-        if self.structure_tensor_radius > 8 {
+        if !(1..=8).contains(&self.structure_tensor_radius) {
             return Err(ConfigError::InvalidStructureTensorRadius(
                 self.structure_tensor_radius,
             ));
@@ -623,13 +525,6 @@ impl DetectorConfig {
         if !(0.0..1.0).contains(&self.pose_consistency_fpr) || self.pose_consistency_fpr.is_nan() {
             return Err(ConfigError::InvalidPoseConsistencyFpr(
                 self.pose_consistency_fpr,
-            ));
-        }
-        if self.pose_consistency_min_decisive_ratio < 1.0
-            || self.pose_consistency_min_decisive_ratio.is_nan()
-        {
-            return Err(ConfigError::InvalidPoseConsistencyMinDecisiveRatio(
-                self.pose_consistency_min_decisive_ratio,
             ));
         }
         if !self.outlier_drop_d2_threshold.is_finite() || self.outlier_drop_d2_threshold < 0.0 {
@@ -643,6 +538,11 @@ impl DetectorConfig {
             return Err(ConfigError::EdLinesIncompatibleWithErf);
         }
         if let QuadExtractionPolicy::AdaptivePpb(ref p) = self.quad_extraction_policy {
+            if self.refinement_mode != CornerRefinementMode::None {
+                return Err(ConfigError::AdaptivePolicyStaticRefinement(
+                    self.refinement_mode,
+                ));
+            }
             if p.low_extraction == p.high_extraction {
                 return Err(ConfigError::AdaptivePolicyDegenerate);
             }
@@ -663,13 +563,15 @@ impl DetectorConfig {
 
     /// Whether decode-first ordering applies: candidates reach the decoder with their contour
     /// corners and only those that decode (or nearly do) are refined. It needs the decoder's
-    /// ERF refinement, and the refinement grid must be the input image: an upscaled grid would
-    /// be refined at one resolution by the quad stage and another by the decoder.
+    /// ERF refinement on every candidate (the `Static` policy with `Erf`), and the refinement
+    /// grid must be the input image: an upscaled grid would be refined at one resolution by the
+    /// quad stage and another by the decoder. Every other configuration refines during quad
+    /// extraction, before decoding.
     #[must_use]
     pub(crate) fn decode_first(&self) -> bool {
-        !self.quad_refine_before_decode
-            && self.refinement_mode == CornerRefinementMode::Erf
+        self.refinement_mode == CornerRefinementMode::Erf
             && self.upscale_factor <= 1
+            && matches!(self.quad_extraction_policy, QuadExtractionPolicy::Static)
     }
 
     /// Returns `true` if the **static** extraction mode selects `EdLines`.
@@ -699,357 +601,6 @@ impl DetectorConfig {
                     || cfg.high_extraction == QuadExtractionMode::EdLines
             },
         }
-    }
-}
-
-/// Builder for [`DetectorConfig`].
-#[derive(Default)]
-pub struct DetectorConfigBuilder {
-    threshold_tile_size: Option<usize>,
-    threshold_min_range: Option<u8>,
-    enable_sharpening: Option<bool>,
-    threshold_mode: Option<ThresholdMode>,
-    threshold_local_mean_radius: Option<usize>,
-    adaptive_threshold_constant: Option<i16>,
-    threshold_noise_k: Option<f32>,
-    quad_min_area: Option<u32>,
-    quad_max_aspect_ratio: Option<f32>,
-    quad_min_fill_ratio: Option<f32>,
-    quad_max_fill_ratio: Option<f32>,
-    quad_min_edge_length: Option<f64>,
-    /// Minimum gradient magnitude along edges (rejects weak candidates).
-    pub quad_min_edge_score: Option<f64>,
-    /// Sigma for Gaussian in subpixel refinement.
-    pub subpixel_refinement_sigma: Option<f64>,
-    /// Connectivity mode for segmentation (4 or 8).
-    pub segmentation_connectivity: Option<SegmentationConnectivity>,
-    /// Upscale factor for low-res images (1 = no upscale).
-    pub upscale_factor: Option<usize>,
-    /// Minimum contrast for decoder to accept a tag.
-    pub decoder_min_contrast: Option<f64>,
-    /// Border-ring error budget.
-    pub decoder_max_border_error_rate: Option<f32>,
-    /// Corner sub-pixel refinement of decoded markers.
-    pub decoder_corner_subpix: Option<bool>,
-    /// Refinement mode.
-    pub refinement_mode: Option<CornerRefinementMode>,
-    /// Maximum Hamming errors.
-    pub max_hamming_error: Option<u32>,
-    /// GWLF transversal alpha.
-    pub gwlf_transversal_alpha: Option<f64>,
-    /// Maximum elongation for the moments culling gate.
-    pub quad_max_elongation: Option<f64>,
-    /// Minimum density for the moments culling gate.
-    pub quad_min_density: Option<f64>,
-    /// Quad extraction mode.
-    pub quad_extraction_mode: Option<QuadExtractionMode>,
-    /// Quad extraction policy (Static or AdaptivePpb).
-    pub quad_extraction_policy: Option<QuadExtractionPolicy>,
-    /// Refine corners before decoding.
-    pub quad_refine_before_decode: Option<bool>,
-    /// Huber delta for LM reprojection (pixels).
-    pub huber_delta_px: Option<f64>,
-    /// Maximum Tikhonov regularisation alpha for Accurate mode.
-    pub tikhonov_alpha_max: Option<f64>,
-    /// Pixel noise variance for Structure Tensor covariance model.
-    pub sigma_n_sq: Option<f64>,
-    /// Radius of the Structure Tensor window in Accurate mode.
-    pub structure_tensor_radius: Option<u8>,
-}
-
-impl DetectorConfigBuilder {
-    /// Set the tile size for adaptive thresholding.
-    #[must_use]
-    pub fn threshold_tile_size(mut self, size: usize) -> Self {
-        self.threshold_tile_size = Some(size);
-        self
-    }
-
-    /// Set the minimum intensity range for valid tiles.
-    #[must_use]
-    pub fn threshold_min_range(mut self, range: u8) -> Self {
-        self.threshold_min_range = Some(range);
-        self
-    }
-
-    /// Set the minimum quad area.
-    #[must_use]
-    pub fn quad_min_area(mut self, area: u32) -> Self {
-        self.quad_min_area = Some(area);
-        self
-    }
-
-    /// Set the maximum aspect ratio.
-    #[must_use]
-    pub fn quad_max_aspect_ratio(mut self, ratio: f32) -> Self {
-        self.quad_max_aspect_ratio = Some(ratio);
-        self
-    }
-
-    /// Set the minimum fill ratio.
-    #[must_use]
-    pub fn quad_min_fill_ratio(mut self, ratio: f32) -> Self {
-        self.quad_min_fill_ratio = Some(ratio);
-        self
-    }
-
-    /// Set the maximum fill ratio.
-    #[must_use]
-    pub fn quad_max_fill_ratio(mut self, ratio: f32) -> Self {
-        self.quad_max_fill_ratio = Some(ratio);
-        self
-    }
-
-    /// Set the minimum edge length.
-    #[must_use]
-    pub fn quad_min_edge_length(mut self, length: f64) -> Self {
-        self.quad_min_edge_length = Some(length);
-        self
-    }
-
-    /// Set the minimum edge gradient score.
-    #[must_use]
-    pub fn quad_min_edge_score(mut self, score: f64) -> Self {
-        self.quad_min_edge_score = Some(score);
-        self
-    }
-
-    /// Enable or disable Laplacian sharpening.
-    #[must_use]
-    pub fn enable_sharpening(mut self, enable: bool) -> Self {
-        self.enable_sharpening = Some(enable);
-        self
-    }
-
-    /// Select how the per-pixel foreground threshold is built.
-    #[must_use]
-    pub fn threshold_mode(mut self, mode: ThresholdMode) -> Self {
-        self.threshold_mode = Some(mode);
-        self
-    }
-
-    /// Set the local-mean window radius (pixels) used by [`ThresholdMode::LocalMean`].
-    #[must_use]
-    pub fn threshold_local_mean_radius(mut self, radius: usize) -> Self {
-        self.threshold_local_mean_radius = Some(radius);
-        self
-    }
-
-    /// Set the constant subtracted from the local mean by [`ThresholdMode::LocalMean`].
-    #[must_use]
-    pub fn adaptive_threshold_constant(mut self, c: i16) -> Self {
-        self.adaptive_threshold_constant = Some(c);
-        self
-    }
-
-    /// Set the noise-calibrated local-mean offset `k` (see
-    /// [`DetectorConfig::threshold_noise_k`]; `0.0` disables it).
-    #[must_use]
-    pub fn threshold_noise_k(mut self, k: f32) -> Self {
-        self.threshold_noise_k = Some(k);
-        self
-    }
-
-    /// Build the configuration, using defaults for unset fields.
-    #[must_use]
-    pub fn build(self) -> DetectorConfig {
-        let d = DetectorConfig::default();
-        DetectorConfig {
-            threshold_tile_size: self.threshold_tile_size.unwrap_or(d.threshold_tile_size),
-            threshold_min_range: self.threshold_min_range.unwrap_or(d.threshold_min_range),
-            enable_sharpening: self.enable_sharpening.unwrap_or(d.enable_sharpening),
-            threshold_mode: self.threshold_mode.unwrap_or(d.threshold_mode),
-            threshold_local_mean_radius: self
-                .threshold_local_mean_radius
-                .unwrap_or(d.threshold_local_mean_radius),
-            adaptive_threshold_constant: self
-                .adaptive_threshold_constant
-                .unwrap_or(d.adaptive_threshold_constant),
-            threshold_noise_k: self.threshold_noise_k.unwrap_or(d.threshold_noise_k),
-            quad_min_area: self.quad_min_area.unwrap_or(d.quad_min_area),
-            quad_max_aspect_ratio: self
-                .quad_max_aspect_ratio
-                .unwrap_or(d.quad_max_aspect_ratio),
-            quad_min_fill_ratio: self.quad_min_fill_ratio.unwrap_or(d.quad_min_fill_ratio),
-            quad_max_fill_ratio: self.quad_max_fill_ratio.unwrap_or(d.quad_max_fill_ratio),
-            quad_min_edge_length: self.quad_min_edge_length.unwrap_or(d.quad_min_edge_length),
-            quad_min_edge_score: self.quad_min_edge_score.unwrap_or(d.quad_min_edge_score),
-            subpixel_refinement_sigma: self
-                .subpixel_refinement_sigma
-                .unwrap_or(d.subpixel_refinement_sigma),
-            segmentation_connectivity: self
-                .segmentation_connectivity
-                .unwrap_or(d.segmentation_connectivity),
-            upscale_factor: self.upscale_factor.unwrap_or(d.upscale_factor),
-            decimation: 1, // Default to 1, as it's typically set via builder
-            nthreads: 0,   // Default to 0
-            decoder_min_contrast: self.decoder_min_contrast.unwrap_or(d.decoder_min_contrast),
-            decoder_max_border_error_rate: self
-                .decoder_max_border_error_rate
-                .or(d.decoder_max_border_error_rate),
-            decoder_corner_subpix: self
-                .decoder_corner_subpix
-                .unwrap_or(d.decoder_corner_subpix),
-            refinement_mode: self.refinement_mode.unwrap_or(d.refinement_mode),
-            max_hamming_error: self.max_hamming_error.or(d.max_hamming_error),
-            huber_delta_px: self.huber_delta_px.unwrap_or(d.huber_delta_px),
-            tikhonov_alpha_max: self.tikhonov_alpha_max.unwrap_or(d.tikhonov_alpha_max),
-            sigma_n_sq: self.sigma_n_sq.unwrap_or(d.sigma_n_sq),
-            structure_tensor_radius: self
-                .structure_tensor_radius
-                .unwrap_or(d.structure_tensor_radius),
-            gwlf_transversal_alpha: self
-                .gwlf_transversal_alpha
-                .unwrap_or(d.gwlf_transversal_alpha),
-            quad_max_elongation: self.quad_max_elongation.unwrap_or(d.quad_max_elongation),
-            quad_min_density: self.quad_min_density.unwrap_or(d.quad_min_density),
-            quad_extraction_mode: self.quad_extraction_mode.unwrap_or(d.quad_extraction_mode),
-            edlines_imbalance_gate: d.edlines_imbalance_gate,
-            pose_consistency_fpr: d.pose_consistency_fpr,
-            pose_consistency_gate_sigma_px: d.pose_consistency_gate_sigma_px,
-            pose_consistency_min_decisive_ratio: d.pose_consistency_min_decisive_ratio,
-            outlier_drop_d2_threshold: d.outlier_drop_d2_threshold,
-            pose_edge_refinement_enabled: d.pose_edge_refinement_enabled,
-            quad_extraction_policy: self
-                .quad_extraction_policy
-                .unwrap_or(d.quad_extraction_policy),
-            quad_refine_before_decode: self
-                .quad_refine_before_decode
-                .unwrap_or(d.quad_refine_before_decode),
-        }
-    }
-
-    /// Build the configuration and validate all parameter ranges.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`crate::error::ConfigError`] if any parameter is out of its valid range.
-    pub fn validated_build(self) -> Result<DetectorConfig, crate::error::ConfigError> {
-        let config = self.build();
-        config.validate()?;
-        Ok(config)
-    }
-
-    /// Set the segmentation connectivity.
-    #[must_use]
-    pub fn segmentation_connectivity(mut self, connectivity: SegmentationConnectivity) -> Self {
-        self.segmentation_connectivity = Some(connectivity);
-        self
-    }
-
-    /// Set the upscale factor (1 = no upscaling, 2 = 2x, etc.).
-    #[must_use]
-    pub fn upscale_factor(mut self, factor: usize) -> Self {
-        self.upscale_factor = Some(factor);
-        self
-    }
-
-    /// Set the minimum contrast for decoder bit classification.
-    /// Lower values (e.g., 10.0) improve recall on small/blurry checkerboard tags.
-    #[must_use]
-    pub fn decoder_min_contrast(mut self, contrast: f64) -> Self {
-        self.decoder_min_contrast = Some(contrast);
-        self
-    }
-
-    /// Set the border-ring error budget (see
-    /// [`DetectorConfig::decoder_max_border_error_rate`]; `1.0` disables the check).
-    #[must_use]
-    pub fn decoder_max_border_error_rate(mut self, rate: f32) -> Self {
-        self.decoder_max_border_error_rate = Some(rate);
-        self
-    }
-
-    /// Enable or disable corner sub-pixel refinement of decoded markers (see
-    /// [`DetectorConfig::decoder_corner_subpix`]).
-    #[must_use]
-    pub fn decoder_corner_subpix(mut self, enable: bool) -> Self {
-        self.decoder_corner_subpix = Some(enable);
-        self
-    }
-
-    /// Set the corner refinement mode.
-    #[must_use]
-    pub fn refinement_mode(mut self, mode: CornerRefinementMode) -> Self {
-        self.refinement_mode = Some(mode);
-        self
-    }
-
-    /// Set the maximum number of Hamming errors allowed.
-    #[must_use]
-    pub fn max_hamming_error(mut self, errors: u32) -> Self {
-        self.max_hamming_error = Some(errors);
-        self
-    }
-
-    /// Set the GWLF transversal alpha.
-    #[must_use]
-    pub fn gwlf_transversal_alpha(mut self, alpha: f64) -> Self {
-        self.gwlf_transversal_alpha = Some(alpha);
-        self
-    }
-
-    /// Set the maximum elongation for the moments-based culling gate.
-    /// Set to 0.0 to disable (default). Recommended: 15.0.
-    #[must_use]
-    pub fn quad_max_elongation(mut self, max_elongation: f64) -> Self {
-        self.quad_max_elongation = Some(max_elongation);
-        self
-    }
-
-    /// Set the minimum density for the moments-based culling gate.
-    /// Set to 0.0 to disable (default). Recommended: 0.2.
-    #[must_use]
-    pub fn quad_min_density(mut self, min_density: f64) -> Self {
-        self.quad_min_density = Some(min_density);
-        self
-    }
-
-    /// Set the quad extraction mode (ContourRdp or EdLines).
-    ///
-    /// Read only when `quad_extraction_policy == Static`. Under
-    /// `AdaptivePpb(...)` this field is ignored in favor of the policy's
-    /// per-route modes.
-    #[must_use]
-    pub fn quad_extraction_mode(mut self, mode: QuadExtractionMode) -> Self {
-        self.quad_extraction_mode = Some(mode);
-        self
-    }
-
-    /// Set the quad extraction policy (Static or AdaptivePpb).
-    #[must_use]
-    pub fn quad_extraction_policy(mut self, policy: QuadExtractionPolicy) -> Self {
-        self.quad_extraction_policy = Some(policy);
-        self
-    }
-
-    /// Set the Huber delta for LM reprojection (pixels).
-    #[must_use]
-    pub fn huber_delta_px(mut self, delta: f64) -> Self {
-        self.huber_delta_px = Some(delta);
-        self
-    }
-
-    /// Set the maximum Tikhonov regularisation alpha for Accurate pose mode.
-    #[must_use]
-    pub fn tikhonov_alpha_max(mut self, alpha: f64) -> Self {
-        self.tikhonov_alpha_max = Some(alpha);
-        self
-    }
-
-    /// Set the pixel noise variance for the Structure Tensor covariance model.
-    #[must_use]
-    pub fn sigma_n_sq(mut self, sigma_n_sq: f64) -> Self {
-        self.sigma_n_sq = Some(sigma_n_sq);
-        self
-    }
-
-    /// Set the Structure Tensor window radius for Accurate pose mode.
-    /// Valid range: `0..=8`.
-    #[must_use]
-    pub fn structure_tensor_radius(mut self, radius: u8) -> Self {
-        self.structure_tensor_radius = Some(radius);
-        self
     }
 }
 
@@ -1096,179 +647,44 @@ impl TagFamily {
     }
 }
 
-/// Per-call detection options.
-///
-/// These allow customizing which tag families to decode for a specific call,
-/// enabling performance optimization when you know which tags to expect.
-#[derive(Clone, Debug, PartialEq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct DetectOptions {
-    /// Tag families to attempt decoding. Empty means use detector defaults.
-    pub families: Vec<TagFamily>,
-    /// Camera intrinsics for 3D pose estimation. If None, pose is not computed.
-    pub intrinsics: Option<crate::pose::CameraIntrinsics>,
-    /// Physical size of the tag in world units (e.g. meters) for 3D pose estimation.
-    pub tag_size: Option<f64>,
-    /// Decimation factor for preprocessing (1 = no decimation).
-    /// Preprocessing and segmentation operate on a downsampled image of size (W/D, H/D).
-    pub decimation: usize,
-}
-
-impl Default for DetectOptions {
-    fn default() -> Self {
-        Self {
-            families: Vec::new(),
-            intrinsics: None,
-            tag_size: None,
-            decimation: 1,
-        }
-    }
-}
-
-impl DetectOptions {
-    /// Create a new builder for `DetectOptions`.
-    #[must_use]
-    pub fn builder() -> DetectOptionsBuilder {
-        DetectOptionsBuilder::default()
-    }
-    /// Create options that decode only the specified tag families.
-    #[must_use]
-    pub fn with_families(families: &[TagFamily]) -> Self {
-        Self {
-            families: families.to_vec(),
-            intrinsics: None,
-            tag_size: None,
-            decimation: 1,
-        }
-    }
-
-    /// Create options that decode all known tag families.
-    #[must_use]
-    pub fn all_families() -> Self {
-        Self {
-            families: TagFamily::all().to_vec(),
-            intrinsics: None,
-            tag_size: None,
-            decimation: 1,
-        }
-    }
-}
-
-/// Builder for [`DetectOptions`].
-pub struct DetectOptionsBuilder {
-    families: Vec<TagFamily>,
-    intrinsics: Option<crate::pose::CameraIntrinsics>,
-    tag_size: Option<f64>,
-    decimation: usize,
-}
-
-impl Default for DetectOptionsBuilder {
-    fn default() -> Self {
-        Self {
-            families: Vec::new(),
-            intrinsics: None,
-            tag_size: None,
-            decimation: 1,
-        }
-    }
-}
-
-impl DetectOptionsBuilder {
-    /// Set the tag families to decode.
-    #[must_use]
-    pub fn families(mut self, families: &[TagFamily]) -> Self {
-        self.families = families.to_vec();
-        self
-    }
-
-    /// Set camera intrinsics for pose estimation.
-    #[must_use]
-    pub fn intrinsics(mut self, fx: f64, fy: f64, cx: f64, cy: f64) -> Self {
-        self.intrinsics = Some(crate::pose::CameraIntrinsics::new(fx, fy, cx, cy));
-        self
-    }
-
-    /// Set physical tag size for pose estimation.
-    #[must_use]
-    pub fn tag_size(mut self, size: f64) -> Self {
-        self.tag_size = Some(size);
-        self
-    }
-
-    /// Set the decimation factor (1 = no decimation).
-    #[must_use]
-    pub fn decimation(mut self, decimation: usize) -> Self {
-        self.decimation = decimation.max(1);
-        self
-    }
-
-    /// Build the options.
-    #[must_use]
-    pub fn build(self) -> DetectOptions {
-        DetectOptions {
-            families: self.families,
-            intrinsics: self.intrinsics,
-            tag_size: self.tag_size,
-            decimation: self.decimation,
-        }
-    }
-}
-
 // The three shipped JSON profiles live in `crates/locus-core/profiles/`
 // and are embedded into Rust via `include_str!`; the Python wheel reads the
 // exact same bytes through the `_shipped_profile_json` FFI hook. If the
 // Rust defaults here and the JSON ever disagree, the JSON wins. The grouping
 // below exists only at this serde boundary — `DetectorConfig` stays flat for
 // hot-path access.
+//
+// Every nested group is `#[serde(default)]` at the container level, and its
+// `Default` projects `DetectorConfig::default()`: a key omitted from a profile
+// takes the canonical default, the same value the Pydantic model fills in.
 #[cfg(feature = "profiles")]
 mod profile_json {
     use super::{
         CornerRefinementMode, DetectorConfig, EdLinesImbalanceGatePolicy, QuadExtractionMode,
-        SegmentationConnectivity, ThresholdMode,
+        QuadExtractionPolicy, SegmentationConnectivity, ThresholdMode,
     };
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Default, Deserialize, Serialize)]
-    #[serde(deny_unknown_fields)]
+    #[serde(default, deny_unknown_fields)]
     pub(super) struct ProfileJson {
-        #[allow(dead_code)]
-        #[serde(default)]
+        /// Profile label; metadata only, not a detector setting.
         pub name: Option<String>,
-        #[serde(default)]
-        pub extends: Option<String>,
-        #[serde(default)]
         pub threshold: ThresholdJson,
-        #[serde(default)]
         pub quad: QuadJson,
-        #[serde(default)]
         pub decoder: DecoderJson,
-        #[serde(default)]
         pub pose: PoseJson,
-        #[serde(default)]
         pub segmentation: SegmentationJson,
     }
 
     #[derive(Debug, Deserialize, Serialize)]
-    #[serde(deny_unknown_fields)]
+    #[serde(default, deny_unknown_fields)]
     pub(super) struct ThresholdJson {
         pub tile_size: usize,
-        pub min_range: u8,
         pub enable_sharpening: bool,
-        #[serde(default = "default_threshold_mode")]
         pub mode: ThresholdMode,
-        #[serde(default = "default_local_mean_radius")]
         pub local_mean_radius: usize,
-        pub constant: i16,
-        #[serde(default)]
         pub noise_k: f32,
-    }
-
-    fn default_threshold_mode() -> ThresholdMode {
-        DetectorConfig::default().threshold_mode
-    }
-
-    fn default_local_mean_radius() -> usize {
-        DetectorConfig::default().threshold_local_mean_radius
     }
 
     impl ThresholdJson {
@@ -1278,11 +694,9 @@ mod profile_json {
         fn from_config(c: &DetectorConfig) -> Self {
             Self {
                 tile_size: c.threshold_tile_size,
-                min_range: c.threshold_min_range,
                 enable_sharpening: c.enable_sharpening,
                 mode: c.threshold_mode,
                 local_mean_radius: c.threshold_local_mean_radius,
-                constant: c.adaptive_threshold_constant,
                 noise_k: c.threshold_noise_k,
             }
         }
@@ -1295,7 +709,7 @@ mod profile_json {
     }
 
     #[derive(Debug, Deserialize, Serialize)]
-    #[serde(deny_unknown_fields)]
+    #[serde(default, deny_unknown_fields)]
     pub(super) struct QuadJson {
         pub min_area: u32,
         pub max_aspect_ratio: f32,
@@ -1308,16 +722,8 @@ mod profile_json {
         pub max_elongation: f64,
         pub min_density: f64,
         pub extraction_mode: QuadExtractionMode,
-        #[serde(default)]
         pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
-        #[serde(default)]
-        pub extraction_policy: super::QuadExtractionPolicy,
-        #[serde(default = "default_refine_before_decode")]
-        pub refine_before_decode: bool,
-    }
-
-    fn default_refine_before_decode() -> bool {
-        DetectorConfig::default().quad_refine_before_decode
+        pub extraction_policy: QuadExtractionPolicy,
     }
 
     impl QuadJson {
@@ -1336,7 +742,6 @@ mod profile_json {
                 extraction_mode: c.quad_extraction_mode,
                 edlines_imbalance_gate: c.edlines_imbalance_gate,
                 extraction_policy: c.quad_extraction_policy,
-                refine_before_decode: c.quad_refine_before_decode,
             }
         }
     }
@@ -1348,16 +753,12 @@ mod profile_json {
     }
 
     #[derive(Debug, Deserialize, Serialize)]
-    #[serde(deny_unknown_fields)]
+    #[serde(default, deny_unknown_fields)]
     pub(super) struct DecoderJson {
         pub min_contrast: f64,
         pub refinement_mode: CornerRefinementMode,
-        #[serde(default)]
         pub max_hamming_error: Option<u32>,
-        pub gwlf_transversal_alpha: f64,
-        #[serde(default)]
         pub max_border_error_rate: Option<f32>,
-        #[serde(default)]
         pub corner_subpix: bool,
     }
 
@@ -1367,7 +768,6 @@ mod profile_json {
                 min_contrast: c.decoder_min_contrast,
                 refinement_mode: c.refinement_mode,
                 max_hamming_error: c.max_hamming_error,
-                gwlf_transversal_alpha: c.gwlf_transversal_alpha,
                 max_border_error_rate: c.decoder_max_border_error_rate,
                 corner_subpix: c.decoder_corner_subpix,
             }
@@ -1381,79 +781,16 @@ mod profile_json {
     }
 
     #[derive(Debug, Deserialize, Serialize)]
-    #[serde(deny_unknown_fields)]
+    #[serde(default, deny_unknown_fields)]
     pub(super) struct PoseJson {
         pub huber_delta_px: f64,
         pub tikhonov_alpha_max: f64,
         pub sigma_n_sq: f64,
         pub structure_tensor_radius: u8,
-        // Optional so existing profile JSONs (and any third-party files
-        // shipped before this field existed) deserialize unchanged. Missing
-        // → 0.0 → gate disabled, identical to today's behavior.
-        #[serde(default)]
         pub pose_consistency_fpr: f64,
-        // Optional pixel σ for the χ² consistency gate (independent of
-        // `sigma_n_sq` so the gate's null distribution stays calibrated
-        // against Gaussian noise even when LM uses anisotropic info
-        // matrices). Missing → 1.0 px (default).
-        #[serde(default = "default_gate_sigma_px")]
         pub pose_consistency_gate_sigma_px: f64,
-        // Branch-ratio escape clause for the χ² gate. Missing → 5.0
-        // (alternate IPPE d² ≥ 5× primary IPPE d² bypasses the gate).
-        // `f64::INFINITY` (the documented value that disables the escape
-        // clause) has no JSON number form, so it round-trips as `null` in
-        // both directions — matching Pydantic, which serializes `math.inf`
-        // to `null` and parses `null` back to `math.inf` for this field.
-        #[serde(
-            default = "default_min_decisive_ratio",
-            serialize_with = "serialize_ratio_inf_as_null",
-            deserialize_with = "deserialize_ratio_null_as_inf"
-        )]
-        pub pose_consistency_min_decisive_ratio: f64,
-        // Outlier-aware corner-drop trigger threshold. Missing → 0.0
-        // (disabled), preserving byte-identity for profiles that have not
-        // opted in.
-        #[serde(default)]
         pub outlier_drop_d2_threshold: f64,
-        // Opt-in model-edge pose refinement. Missing → false (disabled),
-        // preserving byte-identity for profiles that have not opted in.
-        #[serde(default)]
         pub pose_edge_refinement_enabled: bool,
-    }
-
-    // Serde `default` fns source their values from `DetectorConfig::default()`
-    // so the "missing key" fallback cannot drift from the canonical default.
-    fn default_gate_sigma_px() -> f64 {
-        DetectorConfig::default().pose_consistency_gate_sigma_px
-    }
-
-    fn default_min_decisive_ratio() -> f64 {
-        DetectorConfig::default().pose_consistency_min_decisive_ratio
-    }
-
-    /// Serialize the escape-clause ratio, emitting JSON `null` for the
-    /// non-finite disable sentinel (`f64::INFINITY`) that JSON numbers cannot
-    /// represent. Finite values serialize as numbers.
-    // `&f64` is required by serde's `serialize_with` signature.
-    #[allow(clippy::trivially_copy_pass_by_ref)]
-    fn serialize_ratio_inf_as_null<S: serde::Serializer>(
-        value: &f64,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error> {
-        if value.is_finite() {
-            serializer.serialize_f64(*value)
-        } else {
-            serializer.serialize_none()
-        }
-    }
-
-    /// Deserialize the escape-clause ratio, mapping JSON `null` back to
-    /// `f64::INFINITY` (disabled). A present number deserializes as itself; an
-    /// absent key is handled by the field's `default` and never reaches here.
-    fn deserialize_ratio_null_as_inf<'de, D: serde::Deserializer<'de>>(
-        deserializer: D,
-    ) -> Result<f64, D::Error> {
-        Ok(Option::<f64>::deserialize(deserializer)?.unwrap_or(f64::INFINITY))
     }
 
     impl PoseJson {
@@ -1465,7 +802,6 @@ mod profile_json {
                 structure_tensor_radius: c.structure_tensor_radius,
                 pose_consistency_fpr: c.pose_consistency_fpr,
                 pose_consistency_gate_sigma_px: c.pose_consistency_gate_sigma_px,
-                pose_consistency_min_decisive_ratio: c.pose_consistency_min_decisive_ratio,
                 outlier_drop_d2_threshold: c.outlier_drop_d2_threshold,
                 pose_edge_refinement_enabled: c.pose_edge_refinement_enabled,
             }
@@ -1479,7 +815,7 @@ mod profile_json {
     }
 
     #[derive(Debug, Deserialize, Serialize)]
-    #[serde(deny_unknown_fields)]
+    #[serde(default, deny_unknown_fields)]
     pub(super) struct SegmentationJson {
         pub connectivity: SegmentationConnectivity,
     }
@@ -1505,12 +841,10 @@ mod profile_json {
             let d = DetectorConfig::default();
             DetectorConfig {
                 threshold_tile_size: p.threshold.tile_size,
-                threshold_min_range: p.threshold.min_range,
                 enable_sharpening: p.threshold.enable_sharpening,
                 threshold_mode: p.threshold.mode,
                 threshold_local_mean_radius: p.threshold.local_mean_radius,
                 threshold_noise_k: p.threshold.noise_k,
-                adaptive_threshold_constant: p.threshold.constant,
                 quad_min_area: p.quad.min_area,
                 quad_max_aspect_ratio: p.quad.max_aspect_ratio,
                 quad_min_fill_ratio: p.quad.min_fill_ratio,
@@ -1531,18 +865,15 @@ mod profile_json {
                 tikhonov_alpha_max: p.pose.tikhonov_alpha_max,
                 sigma_n_sq: p.pose.sigma_n_sq,
                 structure_tensor_radius: p.pose.structure_tensor_radius,
-                gwlf_transversal_alpha: p.decoder.gwlf_transversal_alpha,
                 quad_max_elongation: p.quad.max_elongation,
                 quad_min_density: p.quad.min_density,
                 quad_extraction_mode: p.quad.extraction_mode,
                 edlines_imbalance_gate: p.quad.edlines_imbalance_gate,
                 pose_consistency_fpr: p.pose.pose_consistency_fpr,
                 pose_consistency_gate_sigma_px: p.pose.pose_consistency_gate_sigma_px,
-                pose_consistency_min_decisive_ratio: p.pose.pose_consistency_min_decisive_ratio,
                 outlier_drop_d2_threshold: p.pose.outlier_drop_d2_threshold,
                 pose_edge_refinement_enabled: p.pose.pose_edge_refinement_enabled,
                 quad_extraction_policy: p.quad.extraction_policy,
-                quad_refine_before_decode: p.quad.refine_before_decode,
             }
         }
     }
@@ -1556,7 +887,6 @@ mod profile_json {
         fn from(c: &DetectorConfig) -> Self {
             ProfileJson {
                 name: None,
-                extends: None,
                 threshold: ThresholdJson::from_config(c),
                 quad: QuadJson::from_config(c),
                 decoder: DecoderJson::from_config(c),
@@ -1595,7 +925,8 @@ impl DetectorConfig {
     /// Returns [`crate::error::ConfigError::ProfileParse`] for malformed JSON or unknown
     /// fields (the serde deserializer rejects unknown keys), and any
     /// validation error from [`DetectorConfig::validate`] for configurations
-    /// that fail cross-group compatibility checks (e.g. EdLines + Erf).
+    /// that fail cross-group compatibility checks (e.g. EdLines + Erf). Keys
+    /// omitted from the document take their [`DetectorConfig::default`] value.
     ///
     /// # Errors
     ///
@@ -1604,12 +935,6 @@ impl DetectorConfig {
         use crate::error::ConfigError;
         let parsed: profile_json::ProfileJson =
             serde_json::from_str(json).map_err(|e| ConfigError::ProfileParse(e.to_string()))?;
-        if let Some(name) = parsed.extends.as_deref() {
-            return Err(ConfigError::ProfileParse(format!(
-                "profile inheritance (extends={name:?}) is declared in the schema but \
-                 not yet resolved by the Rust loader; inline the parent profile's values"
-            )));
-        }
         let config: DetectorConfig = parsed.into();
         config.validate()?;
         Ok(config)
@@ -1620,9 +945,8 @@ impl DetectorConfig {
     /// The inverse of [`DetectorConfig::from_profile_json`]. This is the format
     /// that crosses the Python FFI boundary for `Detector.config()` readback:
     /// Python re-parses it into the Pydantic model, so the round-trip is total
-    /// over every profile field (unlike the former field-by-field FFI struct
-    /// copy, which silently dropped knobs). `decimation` / `nthreads` are
-    /// per-call orchestration and are not part of the profile document.
+    /// over every profile field. `decimation` / `nthreads` are per-call
+    /// orchestration and are not part of the profile document.
     ///
     /// # Errors
     ///
@@ -1650,14 +974,11 @@ impl DetectorConfig {
         reason = "closed set of compile-time-embedded profiles; an unknown name is a programming error"
     )]
     pub fn from_profile(name: &str) -> Self {
-        let json = match name {
-            "standard" => STANDARD_JSON,
-            "grid" => GRID_JSON,
-            "high_accuracy" => HIGH_ACCURACY_JSON,
-            other => panic!(
-                "Unknown shipped profile {other:?}; expected one of \
+        let Some(json) = shipped_profile_json(name) else {
+            panic!(
+                "Unknown shipped profile {name:?}; expected one of \
                  [\"standard\", \"grid\", \"high_accuracy\"]"
-            ),
+            )
         };
         Self::from_profile_json(json).unwrap_or_else(|e| {
             panic!("shipped profile {name:?} failed to load: {e}; this is a build bug")
@@ -1669,51 +990,6 @@ impl DetectorConfig {
 #[allow(clippy::expect_used, clippy::unwrap_used)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_builder_overrides_only_named_fields() {
-        let config = DetectorConfig::builder()
-            .threshold_tile_size(16)
-            .quad_min_area(1000)
-            .build();
-
-        // The two named fields take the builder values.
-        assert_eq!(config.threshold_tile_size, 16);
-        assert_eq!(config.quad_min_area, 1000);
-
-        // Every OTHER field must be left exactly at `Default`. Patching just the
-        // two overrides into a fresh default and asserting full-struct equality
-        // proves the builder neither clobbers nor silently mutates untouched
-        // fields — the real builder-isolation contract. This is also robust to
-        // default-value changes (unlike hardcoding `threshold_min_range == 10`),
-        // and the authoritative default values themselves are locked down by
-        // `tests/profile_loading.rs` against the shipped JSON profiles.
-        let expected = DetectorConfig {
-            threshold_tile_size: 16,
-            quad_min_area: 1000,
-            ..DetectorConfig::default()
-        };
-        assert_eq!(config, expected);
-    }
-
-    #[test]
-    fn test_detect_options_families() {
-        let opt = DetectOptions::with_families(&[TagFamily::AprilTag36h11]);
-        assert_eq!(opt.families.len(), 1);
-        assert_eq!(opt.families[0], TagFamily::AprilTag36h11);
-    }
-
-    #[test]
-    fn test_detect_options_default_empty() {
-        let opt = DetectOptions::default();
-        assert!(opt.families.is_empty());
-    }
-
-    #[test]
-    fn test_all_families() {
-        let opt = DetectOptions::all_families();
-        assert_eq!(opt.families.len(), 6);
-    }
 
     #[test]
     fn test_default_config_is_valid() {
@@ -1750,20 +1026,37 @@ mod tests {
     }
 
     #[test]
-    fn test_validation_rejects_large_structure_tensor_radius() {
-        let config = DetectorConfig {
-            structure_tensor_radius: 9,
-            ..DetectorConfig::default()
-        };
-        assert!(config.validate().is_err());
+    fn test_validation_rejects_out_of_range_structure_tensor_radius() {
+        for radius in [0, 9] {
+            let config = DetectorConfig {
+                structure_tensor_radius: radius,
+                ..DetectorConfig::default()
+            };
+            assert!(
+                matches!(
+                    config.validate(),
+                    Err(crate::error::ConfigError::InvalidStructureTensorRadius(r)) if r == radius
+                ),
+                "structure_tensor_radius {radius} should be rejected"
+            );
+        }
     }
 
     #[test]
-    fn test_validated_build_catches_errors() {
-        let result = DetectorConfig::builder()
-            .threshold_tile_size(0)
-            .validated_build();
-        assert!(result.is_err());
+    fn test_validation_rejects_non_positive_noise_k() {
+        for k in [0.0_f32, -1.0, f32::NAN, f32::INFINITY] {
+            let config = DetectorConfig {
+                threshold_noise_k: k,
+                ..DetectorConfig::default()
+            };
+            assert!(
+                matches!(
+                    config.validate(),
+                    Err(crate::error::ConfigError::InvalidNoiseK(_))
+                ),
+                "threshold_noise_k {k} should be rejected"
+            );
+        }
     }
 
     #[cfg(feature = "serde")]
@@ -1780,11 +1073,9 @@ mod tests {
         }
 
         #[test]
-        fn deserializes_legacy_bool_form() {
-            let enabled: EdLinesImbalanceGatePolicy = serde_json::from_str("true").unwrap();
-            let disabled: EdLinesImbalanceGatePolicy = serde_json::from_str("false").unwrap();
-            assert_eq!(enabled, EdLinesImbalanceGatePolicy::Enabled);
-            assert_eq!(disabled, EdLinesImbalanceGatePolicy::Disabled);
+        fn rejects_legacy_bool_form() {
+            assert!(serde_json::from_str::<EdLinesImbalanceGatePolicy>("true").is_err());
+            assert!(serde_json::from_str::<EdLinesImbalanceGatePolicy>("false").is_err());
         }
 
         #[test]
@@ -1793,6 +1084,7 @@ mod tests {
                 serde_json::from_str::<EdLinesImbalanceGatePolicy>("\"AutoMagic\"").unwrap_err();
             let msg = err.to_string();
             assert!(msg.contains("AutoMagic"), "error message: {msg}");
+            assert!(msg.contains("Enabled"), "error message: {msg}");
         }
 
         #[test]
@@ -1803,8 +1095,6 @@ mod tests {
             for (input, expected) in [
                 ("\"Enabled\"", EdLinesImbalanceGatePolicy::Enabled),
                 ("\"Disabled\"", EdLinesImbalanceGatePolicy::Disabled),
-                ("true", EdLinesImbalanceGatePolicy::Enabled),
-                ("false", EdLinesImbalanceGatePolicy::Disabled),
             ] {
                 let mut value: serde_json::Value = serde_json::from_str(template).unwrap();
                 value["quad"]["edlines_imbalance_gate"] = serde_json::from_str(input).unwrap();
@@ -1818,25 +1108,44 @@ mod tests {
         }
     }
 
+    /// An `AdaptivePpb` config over the default, with the static refinement mode at `None`
+    /// as validation requires.
+    fn adaptive(policy: AdaptivePpbConfig) -> DetectorConfig {
+        DetectorConfig {
+            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(policy),
+            refinement_mode: CornerRefinementMode::None,
+            ..DetectorConfig::default()
+        }
+    }
+
     #[test]
     fn test_adaptive_ppb_default_valid() {
+        assert!(adaptive(AdaptivePpbConfig::default()).validate().is_ok());
+    }
+
+    #[test]
+    fn test_adaptive_ppb_rejects_static_refinement() {
         let config = DetectorConfig {
-            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig::default()),
-            ..DetectorConfig::default()
+            refinement_mode: CornerRefinementMode::Erf,
+            ..adaptive(AdaptivePpbConfig::default())
         };
-        assert!(config.validate().is_ok());
+        assert!(matches!(
+            config.validate(),
+            Err(crate::error::ConfigError::AdaptivePolicyStaticRefinement(
+                CornerRefinementMode::Erf
+            ))
+        ));
+        // AdaptivePpb never takes the decode-first path.
+        assert!(!config.decode_first());
     }
 
     #[test]
     fn test_adaptive_ppb_rejects_degenerate() {
-        let config = DetectorConfig {
-            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
-                low_extraction: QuadExtractionMode::ContourRdp,
-                high_extraction: QuadExtractionMode::ContourRdp,
-                ..AdaptivePpbConfig::default()
-            }),
-            ..DetectorConfig::default()
-        };
+        let config = adaptive(AdaptivePpbConfig {
+            low_extraction: QuadExtractionMode::ContourRdp,
+            high_extraction: QuadExtractionMode::ContourRdp,
+            ..AdaptivePpbConfig::default()
+        });
         assert!(matches!(
             config.validate(),
             Err(crate::error::ConfigError::AdaptivePolicyDegenerate)
@@ -1846,13 +1155,10 @@ mod tests {
     #[test]
     fn test_adaptive_ppb_rejects_threshold_out_of_range() {
         for bad in [0.5_f32, 1.0, 5.0, 10.0] {
-            let config = DetectorConfig {
-                quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
-                    threshold: bad,
-                    ..AdaptivePpbConfig::default()
-                }),
-                ..DetectorConfig::default()
-            };
+            let config = adaptive(AdaptivePpbConfig {
+                threshold: bad,
+                ..AdaptivePpbConfig::default()
+            });
             assert!(
                 matches!(
                     config.validate(),
@@ -1865,16 +1171,13 @@ mod tests {
 
     #[test]
     fn test_adaptive_ppb_per_route_edlines_erf_rejected() {
-        let config = DetectorConfig {
-            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
-                low_extraction: QuadExtractionMode::ContourRdp,
-                high_extraction: QuadExtractionMode::EdLines,
-                low_refinement: CornerRefinementMode::None,
-                high_refinement: CornerRefinementMode::Erf,
-                threshold: 2.5,
-            }),
-            ..DetectorConfig::default()
-        };
+        let config = adaptive(AdaptivePpbConfig {
+            low_extraction: QuadExtractionMode::ContourRdp,
+            high_extraction: QuadExtractionMode::EdLines,
+            low_refinement: CornerRefinementMode::None,
+            high_refinement: CornerRefinementMode::Erf,
+            threshold: 2.5,
+        });
         assert!(matches!(
             config.validate(),
             Err(crate::error::ConfigError::EdLinesIncompatibleWithErf)
@@ -1896,10 +1199,7 @@ mod tests {
         // AdaptivePpb with EdLines on a route is NOT a static-EdLines config —
         // the distortion gate doesn't fire on it because the AdaptivePpb path
         // gracefully degrades to ContourRdp on distorted frames.
-        let adaptive_with_edlines = DetectorConfig {
-            quad_extraction_policy: QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig::default()),
-            ..DetectorConfig::default()
-        };
+        let adaptive_with_edlines = adaptive(AdaptivePpbConfig::default());
         assert!(!adaptive_with_edlines.static_uses_edlines());
     }
 }
@@ -2063,6 +1363,35 @@ mod schema_parity_tests {
     /// field-for-field or that promise silently breaks. Caught this drifting
     /// on three fields (`enable_sharpening`, `quad_max_elongation`,
     /// `quad_min_density`) before this test existed.
+    /// Every key of a profile is optional: an omitted key takes its
+    /// `DetectorConfig::default()` value, the same value the Pydantic model fills in
+    /// (`test_profile_values.py` pins the Python side of the same documents).
+    #[test]
+    fn omitted_keys_take_the_default() {
+        let default = super::DetectorConfig::default();
+        for json in [
+            "{}",
+            r#"{"name": "x"}"#,
+            r#"{"threshold": {}, "quad": {}, "decoder": {}, "pose": {}, "segmentation": {}}"#,
+        ] {
+            let parsed = super::DetectorConfig::from_profile_json(json).expect("parse");
+            assert_eq!(parsed, default, "{json}");
+        }
+        let partial = super::DetectorConfig::from_profile_json(
+            r#"{"decoder": {"min_contrast": 12.0}, "quad": {"min_area": 100}}"#,
+        )
+        .expect("parse");
+        assert_eq!(
+            partial,
+            super::DetectorConfig {
+                decoder_min_contrast: 12.0,
+                quad_min_area: 100,
+                ..default
+            }
+        );
+        assert!(partial.decoder_corner_subpix);
+    }
+
     #[test]
     fn default_matches_standard_profile() {
         let default = super::DetectorConfig::default();

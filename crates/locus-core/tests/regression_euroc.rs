@@ -671,7 +671,6 @@ fn euroc_pinhole_funnel_diagnostic() {
     let mut rejected_sampling = 0u64; // FunnelStatus::RejectedSampling — currently dead in the pipeline (no write site), kept distinct in case that changes
     let mut rejected_unclassified = 0u64; // FunnelStatus::None on a rejected slot — unexpected here
     let mut valid = 0u64;
-    let mut gwlf_fallback_total = 0u64;
     let mut worst_frame = (String::new(), 0i64); // (filename, rejects - valid), for pointing the rerun visualizer at a representative frame
 
     // Bucket frames by quad-candidate count `n` — a cheap proxy for "is the
@@ -721,7 +720,6 @@ fn euroc_pinhole_funnel_diagnostic() {
             zero_quad_frames += 1;
         }
         valid += dets.len() as u64;
-        gwlf_fallback_total += telemetry.gwlf_fallback_count as u64;
 
         let b = &mut buckets[bucket_of(n)];
         b.0 += 1;
@@ -817,11 +815,6 @@ fn euroc_pinhole_funnel_diagnostic() {
     println!(
         "  -> decoded successfully (final):                {valid:>6} ({:.1}%)",
         pct(valid)
-    );
-    println!(
-        "GWLF corner-refinement fallback-to-coarse count: {gwlf_fallback_total} \
-         ({:.1}% of extracted quads)",
-        pct(gwlf_fallback_total)
     );
     println!(
         "Worst-offender frame (most rejects - most decode failures), for visual debugging: \

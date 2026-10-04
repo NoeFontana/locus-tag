@@ -366,46 +366,6 @@ fn contract_refine_poses_soa_zero_alloc_steady_state() {
     });
 }
 
-/// Companion contract for `refine_poses_soa_with_config` on the **GWLF**
-/// route. The default test above leaves `corner_covariances` at zero so
-/// `compute_one`'s GWLF branch (`config.refinement_mode == Gwlf` →
-/// unpack `covs_row[j*4..j*4+3]` row-major into a `Matrix2`) is never
-/// touched. This test forces the GWLF route by setting
-/// `refinement_mode = Gwlf` and seeding identity per-corner covariances
-/// so the branch's slice-indexing arithmetic is actually exercised.
-#[test]
-fn contract_refine_poses_soa_zero_alloc_gwlf_route() {
-    let _serial = CONTRACT_SERIAL
-        .lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner);
-    pin_rayon_to_one_thread();
-    let mut batch = build_pose_fixture();
-    let v: usize = 50;
-    let intrinsics = CameraIntrinsics::new(800.0, 800.0, 400.0, 300.0);
-    let tag_size = 0.16;
-
-    // Seed identity per-corner covariances. Layout matches `compute_one`'s
-    // unpack `Matrix2::new(covs_row[j*4], covs_row[j*4+1], covs_row[j*4+2],
-    // covs_row[j*4+3])` per corner j ∈ 0..4.
-    for i in 0..v {
-        for j in 0..4 {
-            batch.corner_covariances[i][j * 4] = 1.0; // xx
-            batch.corner_covariances[i][j * 4 + 1] = 0.0; // xy
-            batch.corner_covariances[i][j * 4 + 2] = 0.0; // yx
-            batch.corner_covariances[i][j * 4 + 3] = 1.0; // yy
-        }
-    }
-
-    let config = DetectorConfig {
-        refinement_mode: locus_core::CornerRefinementMode::Gwlf,
-        ..DetectorConfig::default()
-    };
-
-    assert_zero_alloc("refine_poses_soa_with_config (GWLF route)", || {
-        refine_poses_soa_with_config(&mut batch, v, &intrinsics, tag_size, None, &config, None);
-    });
-}
-
 /// Companion contract for `decode_batch_soa_with_camera` on the non-rectified
 /// inner path (Brown-Conrady model with mild distortion forces the inner
 /// path; the rectified `PinholeModel` would short-circuit to

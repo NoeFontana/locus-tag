@@ -711,7 +711,7 @@ pub fn estimate_tag_pose_with_config(
 ) -> (Option<Pose>, Option<[[f64; 6]; 6]>) {
     let thresholds = ConsistencyThresholds::from_fpr(
         config.pose_consistency_fpr,
-        config.pose_consistency_min_decisive_ratio,
+        POSE_CONSISTENCY_MIN_DECISIVE_RATIO,
     );
     let (pose, cov, _diag) = estimate_tag_pose_with_diagnostics(
         intrinsics,
@@ -759,6 +759,12 @@ impl PoseDiagnostics {
         }
     }
 }
+
+/// Branch-ratio escape clause of the pose-consistency gate:
+/// `alternate_d2 / primary_d2` from the IPPE branch selector at or above which
+/// the chosen branch is decisive and the χ² gate is bypassed (see
+/// [`ConsistencyThresholds::min_decisive_ratio`]).
+pub(crate) const POSE_CONSISTENCY_MIN_DECISIVE_RATIO: f64 = 5.0;
 
 /// Precomputed χ² critical thresholds for one frame's worth of consistency
 /// checks. `None` ⇒ gate disabled (zero overhead path).
@@ -837,7 +843,7 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         return (None, None, PoseDiagnostics::empty());
     };
 
-    // LM weighting (Some when GWLF/structure-tensor input is available).
+    // LM weighting (Some when external or structure-tensor input is available).
     let covariances =
         build_lm_covariances(config, img, &ideal_corners, &h_poly, external_covariances);
 
@@ -1040,8 +1046,8 @@ fn maybe_drop_outlier_corner(
     }
 }
 
-/// Per-corner covariances for the weighted LM solver. Priority: external
-/// (GWLF) → image-derived structure tensor → `None`. The χ² gate and IPPE
+/// Per-corner covariances for the weighted LM solver. Priority: caller-supplied
+/// external covariances → image-derived structure tensor → `None`. The χ² gate and IPPE
 /// branch selector use their own isotropic info matrices
 /// ([`isotropic_info_matrices`]) so we don't materialize an inverted
 /// info-matrix array on the hot path.
@@ -1882,11 +1888,10 @@ pub fn refine_poses_soa_with_config(
     use rayon::prelude::*;
 
     // Hoist χ² thresholds out of the per-tag inner loop — they depend only
-    // on `pose_consistency_fpr` and `pose_consistency_min_decisive_ratio`
-    // and are constant for the frame.
+    // on `pose_consistency_fpr` and are constant for the frame.
     let thresholds = ConsistencyThresholds::from_fpr(
         config.pose_consistency_fpr,
-        config.pose_consistency_min_decisive_ratio,
+        POSE_CONSISTENCY_MIN_DECISIVE_RATIO,
     );
 
     // Per-candidate work; takes plain references and returns a Copy tuple
@@ -1900,10 +1905,6 @@ pub fn refine_poses_soa_with_config(
         clippy::inline_always,
         reason = "the measured per-candidate overhead documented above is exactly what forcing the inline removes"
     )]
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "per-candidate pose kernel threads camera, tag size, image, config, thresholds, the edge-refinement dimension and the two SoA input rows; grouping adds indirection on the hot path"
-    )]
     #[inline(always)]
     fn compute_one(
         intrinsics: &CameraIntrinsics,
@@ -1913,7 +1914,6 @@ pub fn refine_poses_soa_with_config(
         thresholds: Option<ConsistencyThresholds>,
         edge_refine_dim: Option<usize>,
         corners_row: &[Point2f; 4],
-        covs_row: &[f32; 16],
     ) -> (Option<[f32; 7]>, PoseDiagnostics) {
         let corners = [
             [f64::from(corners_row[0].x), f64::from(corners_row[0].y)],
@@ -1922,35 +1922,11 @@ pub fn refine_poses_soa_with_config(
             [f64::from(corners_row[3].x), f64::from(corners_row[3].y)],
         ];
 
-        // Only GWLF writes covariances calibrated as image-noise
-        // variances; other extractors (EdLines, Erf) leave per-corner
-        // GN-residual uncertainties in `batch.corner_covariances` that
-        // are far tighter than σ_n and would mis-feed the LM solver.
-        let ext_covs_opt: Option<[Matrix2<f64>; 4]> =
-            if config.refinement_mode == crate::config::CornerRefinementMode::Gwlf {
-                let covs: [Matrix2<f64>; 4] = core::array::from_fn(|j| {
-                    Matrix2::new(
-                        f64::from(covs_row[j * 4]),
-                        f64::from(covs_row[j * 4 + 1]),
-                        f64::from(covs_row[j * 4 + 2]),
-                        f64::from(covs_row[j * 4 + 3]),
-                    )
-                });
-                covs.iter()
-                    .any(|c| c.norm_squared() > 1e-12)
-                    .then_some(covs)
-            } else {
-                None
-            };
-
+        // The quad-stage covariances in `batch.corner_covariances` are per-corner
+        // GN-residual uncertainties, far tighter than σ_n; the LM takes its weights
+        // from the image (structure tensor) instead.
         let (pose_opt, _, mut diag) = estimate_tag_pose_with_diagnostics(
-            intrinsics,
-            &corners,
-            tag_size,
-            img,
-            config,
-            ext_covs_opt.as_ref(),
-            thresholds,
+            intrinsics, &corners, tag_size, img, config, None, thresholds,
         );
 
         let pose_data = if let Some(mut pose) = pose_opt {
@@ -2006,13 +1982,11 @@ pub fn refine_poses_soa_with_config(
     // can write its target SoA cells directly (rayon's `Zip` proves the
     // per-index disjointness statically), eliminating the previous
     // per-frame `Vec<TupleN>` heap allocation that was drained sequentially
-    // after the parallel map. Read-only inputs (`corners`,
-    // `corner_covariances`) and write-only outputs (`poses`, bench
-    // diagnostics) live on disjoint fields of `DetectionBatch`, so the
+    // after the parallel map. Read-only inputs (`corners`) and write-only
+    // outputs (`poses`, bench diagnostics) live on disjoint fields of `DetectionBatch`, so the
     // simultaneous shared/mutable borrows are sound under Rust's
     // disjoint-field rule.
     let corners_in = &batch.corners[..v];
-    let covs_in = &batch.corner_covariances[..v];
     let poses_out = &mut batch.poses[..v];
     #[cfg(feature = "bench-internals")]
     let d2_out = &mut batch.pose_consistency_d2[..v];
@@ -2029,7 +2003,6 @@ pub fn refine_poses_soa_with_config(
     // explicitly. Cheap: a few `debug_assert_eq!`s, only in debug builds.
     debug_assert_eq!(poses_out.len(), v);
     debug_assert_eq!(corners_in.len(), v);
-    debug_assert_eq!(covs_in.len(), v);
     #[cfg(feature = "bench-internals")]
     {
         debug_assert_eq!(d2_out.len(), v);
@@ -2047,12 +2020,8 @@ pub fn refine_poses_soa_with_config(
             .zip(branch_ratio_out.par_iter_mut())
             .zip(outlier_idx_out.par_iter_mut())
             .zip(corners_in.par_iter())
-            .zip(covs_in.par_iter())
             .for_each(
-                |(
-                    (((((pose_slot, d2_slot), d2_max_slot), branch_slot), outlier_slot), c_row),
-                    cov_row,
-                )| {
+                |(((((pose_slot, d2_slot), d2_max_slot), branch_slot), outlier_slot), c_row)| {
                     let (pose_data, diag) = compute_one(
                         intrinsics,
                         tag_size,
@@ -2061,7 +2030,6 @@ pub fn refine_poses_soa_with_config(
                         thresholds,
                         edge_refine_dim,
                         c_row,
-                        cov_row,
                     );
                     *pose_slot = if let Some(data) = pose_data {
                         Pose6D { data, padding: 0.0 }
@@ -2083,8 +2051,7 @@ pub fn refine_poses_soa_with_config(
         poses_out
             .par_iter_mut()
             .zip(corners_in.par_iter())
-            .zip(covs_in.par_iter())
-            .for_each(|((pose_slot, c_row), cov_row)| {
+            .for_each(|(pose_slot, c_row)| {
                 let (pose_data, _diag) = compute_one(
                     intrinsics,
                     tag_size,
@@ -2093,7 +2060,6 @@ pub fn refine_poses_soa_with_config(
                     thresholds,
                     edge_refine_dim,
                     c_row,
-                    cov_row,
                 );
                 *pose_slot = if let Some(data) = pose_data {
                     Pose6D { data, padding: 0.0 }

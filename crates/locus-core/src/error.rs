@@ -11,8 +11,8 @@ pub enum ConfigError {
     /// Local-mean window radius must be in `[1, 127]` (`threshold::MAX_LOCAL_MEAN_RADIUS`).
     #[error("threshold_local_mean_radius must be in [1, 127], got {0}")]
     InvalidLocalMeanRadius(usize),
-    /// Noise-calibrated threshold offset must be finite and >= 0.
-    #[error("threshold_noise_k must be finite and >= 0, got {0}")]
+    /// Noise-calibrated threshold offset must be finite and > 0.
+    #[error("threshold_noise_k must be finite and > 0, got {0}")]
     InvalidNoiseK(f32),
     /// Border-ring error budget must lie in [0, 1].
     #[error("decoder_max_border_error_rate must be in [0, 1], got {0}")]
@@ -34,8 +34,9 @@ pub enum ConfigError {
     /// Minimum edge length must be positive.
     #[error("quad_min_edge_length must be positive, got {0}")]
     InvalidEdgeLength(f64),
-    /// Structure tensor radius must stay within the supported kernel bound.
-    #[error("structure_tensor_radius must be <= 8, got {0}")]
+    /// Structure tensor radius must be in `[1, 8]` (a non-empty window within the
+    /// supported kernel bound).
+    #[error("structure_tensor_radius must be in [1, 8], got {0}")]
     InvalidStructureTensorRadius(u8),
     /// Pose consistency FPR must be in `[0.0, 1.0)`.
     ///
@@ -45,16 +46,6 @@ pub enum ConfigError {
     /// and are explicitly rejected to surface configuration mistakes.
     #[error("pose_consistency_fpr must be in [0.0, 1.0), got {0}")]
     InvalidPoseConsistencyFpr(f64),
-    /// Pose consistency min decisive ratio must be `>= 1.0`.
-    ///
-    /// The IPPE branch selector enforces `alternate_d2 / primary_d2 >= 1`
-    /// by construction (the smaller of the two candidate d²s is chosen as
-    /// the primary). A value below 1.0 would let the gate accept genuine
-    /// branch ambiguities, which is the exact failure mode the gate exists
-    /// to catch. Use a large value (e.g. f64::INFINITY) to disable the
-    /// branch-ratio escape clause and keep only the χ² test.
-    #[error("pose_consistency_min_decisive_ratio must be >= 1.0, got {0}")]
-    InvalidPoseConsistencyMinDecisiveRatio(f64),
     /// Outlier-drop d² threshold must be `>= 0.0` and finite.
     ///
     /// `0.0` disables the mechanism. Positive finite values are interpreted
@@ -69,8 +60,7 @@ pub enum ConfigError {
     /// planarity constraint established by the joint Gauss-Newton solver in
     /// the EdLines pipeline, degrading corner RMSE from ~0.17 px to ~0.59 px.
     #[error(
-        "EdLines + Erf refinement are incompatible: use CornerRefinementMode::None or \
-         CornerRefinementMode::Gwlf with EdLines"
+        "EdLines + Erf refinement are incompatible: use CornerRefinementMode::None with EdLines"
     )]
     EdLinesIncompatibleWithErf,
     /// EdLines is geometrically incompatible with distorted cameras.
@@ -93,6 +83,15 @@ pub enum ConfigError {
          use QuadExtractionPolicy::Static for single-mode operation"
     )]
     AdaptivePolicyDegenerate,
+    /// `AdaptivePpb` policy combined with a static `refinement_mode` other than `None`.
+    ///
+    /// The adaptive routes carry their own refinement modes; a static mode alongside them
+    /// would be silently read by the stages that are not route-aware, so it must be `None`.
+    #[error(
+        "AdaptivePpb policy requires refinement_mode = None (the routes carry their own \
+         refinement modes), got {0:?}"
+    )]
+    AdaptivePolicyStaticRefinement(crate::config::CornerRefinementMode),
     /// `AdaptivePpb` policy threshold fell outside the valid open interval.
     ///
     /// The PPB threshold must lie strictly inside `(1.0, 5.0)`. Values at or

@@ -31,8 +31,8 @@ use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
 
 use crate::Point;
-use crate::gwlf::MomentAccumulator;
 use crate::image::ImageView;
+use crate::moments::MomentAccumulator;
 use crate::segmentation::ComponentStats;
 
 // ── Configuration ─────────────────────────────────────────────────────────────

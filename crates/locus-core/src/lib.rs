@@ -39,21 +39,21 @@ pub(crate) mod filter;
 pub(crate) mod funnel;
 /// Gradient computation for edge refinement.
 pub(crate) mod gradient;
-/// Gradient-Weighted Line Fitting (GWLF).
-pub(crate) mod gwlf;
 /// Image buffer abstractions.
 pub mod image;
 /// Photometric calibration of decoded marker corners from their bit edges.
 pub(crate) mod marker_inset;
 /// Model-based edge pose refinement (opt-in Accurate-mode post-decode stage).
 pub(crate) mod model_edge;
+/// Gradient-weighted spatial moments and the 2×2 symmetric eigendecomposition.
+pub(crate) mod moments;
 /// 3D Pose Estimation (PnP).
 pub mod pose;
 /// Weighted pose estimation logic.
 pub(crate) mod pose_weighted;
 /// Quad extraction and geometric primitives.
 pub(crate) mod quad;
-/// Corner refinement dispatch (per-candidate + detector-level GWLF).
+/// Corner refinement dispatch (quad-stage refinement and the decoded-marker sub-pixel pass).
 pub(crate) mod refinement;
 /// Connected components labeling using Union-Find.
 pub(crate) mod segmentation;
@@ -78,8 +78,7 @@ pub use crate::board::{AprilGridTopology, BoardConfigError, CharucoTopology};
 pub use crate::camera::{BrownConradyModel, KannalaBrandtModel};
 pub use crate::camera::{CameraModel, PinholeModel};
 pub use crate::config::{
-    CornerRefinementMode, DetectOptions, DetectorConfig, QuadExtractionMode, TagFamily,
-    ThresholdMode,
+    CornerRefinementMode, DetectorConfig, QuadExtractionMode, TagFamily, ThresholdMode,
 };
 pub use crate::detector::{Detector, DetectorBuilder, FrameContext, LocusEngine};
 pub use crate::error::{ConfigError, DetectorError};
@@ -98,7 +97,6 @@ pub mod bench_api {
     pub use crate::edge_refinement::*;
     pub use crate::filter::*;
     pub use crate::funnel::*;
-    pub use crate::gwlf::*;
     pub use crate::pose::*;
     pub use crate::pose_weighted::bench_compute_corner_covariance;
     pub use crate::quad::*;

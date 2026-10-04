@@ -1,14 +1,11 @@
 {
   "name": "standard",
-  "extends": null,
   "threshold": {
     "tile_size": 8,
-    "min_range": 10,
     "enable_sharpening": true,
     "mode": "TileMidExtreme",
-    "local_mean_radius": 24,
-    "constant": 15,
-    "noise_k": 0.0
+    "local_mean_radius": 7,
+    "noise_k": 4.0
   },
   "quad": {
     "min_area": 36,
@@ -23,13 +20,11 @@
     "min_density": 0.0,
     "extraction_mode": "ContourRdp",
     "edlines_imbalance_gate": "Disabled",
-    "extraction_policy": "Static",
-    "refine_before_decode": false
+    "extraction_policy": "Static"
   },
   "decoder": {
     "min_contrast": 20.0,
     "refinement_mode": "Erf",
-    "gwlf_transversal_alpha": 0.01,
     "corner_subpix": true
   },
   "pose": {
