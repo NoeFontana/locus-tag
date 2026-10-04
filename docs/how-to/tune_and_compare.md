@@ -10,9 +10,22 @@ detector wrappers, the Tier-1 `ObservationRecord` records, and the 5-axis
 stratification. It does **not** touch the Rust core or the insta regression
 snapshots.
 
+!!! note "Which tool when"
+    - **Published comparisons** ("Locus vs OpenCV / aruco_nano" numbers in reports, READMEs or
+      PRs): `cargo xtask sota`. It builds **pinned** references (OpenCV `aruco` 4.10.0 with its
+      three corner refiners, aruco_nano `961b18b`), runs them as published, scores
+      order-preserving debiased corner error, and records verified hardware. See
+      [Benchmarking](../engineering/benchmarking.md#comparative-tier-cargo-xtask-sota-published-comparisons).
+    - **Exploration** (which knob moves which metric, tuned-vs-tuned frontiers): this harness
+      (`bench sweep` / `tune` / `compare-report`) and the
+      [per-instance comparison](per_instance_comparison.md). They drive OpenCV through the
+      `opencv-python-headless` wheel of the `bench` group, which is **not pinned**
+      (`>=4.0.0`), so their competitor numbers can drift with the installed version. Re-check
+      any finding with `cargo xtask sota` before publishing it.
+
 ## Prerequisites
 
-- A synced hub dataset (see `.agent/skills/testing/SKILL.md`), e.g.
+- A synced hub dataset (`cargo xtask data fetch hub`), e.g.
   `tests/data/hub_cache/locus_v1_tag36h11_1920x1080/`.
 - The `bench` dependency group: prefix commands with `uv run --group bench`.
 

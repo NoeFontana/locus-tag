@@ -95,7 +95,7 @@ classDiagram
 3.  **Arena Allocation**: A per-frame `bumpalo` arena handles all ephemeral scratch memory, resulting in zero `malloc`/`free` calls in the detection hot-path.
 4.  **Structure of Arrays (SoA)**: Internal state is stored in parallel arrays (`DetectionBatch`) to maximize L1 cache hits and enable SIMD-aligned loads.
 5.  **Runtime SIMD Dispatch**: Mathematical kernels (bilinear sampling, DDA, thresholding) are specialized for AVX2, AVX-512, or NEON at runtime.
-6.  **Fast-Path Rejection**: A multi-stage funnel rejects 70-80% of false-positive candidates using O(1) photometric gates before expensive bit-sampling.
+6.  **Fast-Path Rejection**: Cheap gates — component and contour pre-rejects, the O(1) contrast funnel, the edge-contrast gate — drop most false candidates before bit sampling; the border-ring check and the codeword budget judge the rest.
 7.  **Immutable Topology**: Board geometries (AprilGrid, ChAruco) are immutable structs shared across threads via `Arc`, with strict validation at construction.
 8.  **Zero-Overhead Telemetry**: Performance tracing is compiled out in release builds unless explicitly requested via `debug_telemetry=True`.
 
@@ -118,15 +118,16 @@ Locus includes built-in instrumentation for performance profiling and visual deb
 
 Targets a **low latency** budget for high-resolution frames on modern CPUs.
 
-| Stage | Complexity | Latency (50 Tags, 720p) | Notes |
-| :--- | :--- | :--- | :--- |
-| **Preprocessing** | $O(N)$ | ~0.9 ms | Adaptive thresholding + Integral Image. |
-| **Segmentation** | $O(N)$ | ~0.5 ms | SIMD Fused RLE + Light-Speed Labeling (LSL). |
-| **Quad Extraction** | $O(K \cdot M)$ | ~1.5 ms | Massive gain from SoA extraction. |
-| **Decoding (Hard)** | $O(Q)$ | ~10.0 ms | SoA math pass; SIMD bilinear sampling. |
-| **Pose Refinement** | $O(V)$ | ~0.2 ms | Partitioned solver (Valid tags only). |
+| Stage | Complexity | Notes |
+| :--- | :--- | :--- |
+| **Preprocessing** | $O(N)$ | Optional sharpening, tile statistics, threshold map. No integral image. |
+| **Segmentation** | $O(N)$ | SIMD run extraction + Light-Speed Labeling (LSL). |
+| **Quad Extraction** | $O(K \cdot M)$ | Per-component gates, run-based trace, 4-vertex reduction. |
+| **Decoding** | $O(Q)$ | SIMD bilinear sampling, popcount nearest-codeword scan, ring check, decode-first verification. |
+| **Corner stage** | $O(V)$ | Junction/edge fusion and inset calibration on decoded markers (`standard`, `grid`). |
+| **Pose Refinement** | $O(V)$ | Partitioned solver (valid tags only). |
 
-*Note: Total latency ~14.5ms for 50 tags (720p) on a modern desktop CPU (e.g., Zen 4).*
+Current end-to-end latency per benchmark (1 thread, verified hardware) is in the [2026-10-04 EuRoC report](../engineering/benchmarking/euroc_sota_20261004.md#latency). An April 2026 per-stage estimate (~14.5 ms for 50 tags at 720p) predates decode-first ordering and the corner stage; it is kept in the [pipeline page](pipeline.md#latency) for context only.
 
 ## Extensibility
 
@@ -137,7 +138,7 @@ Locus is designed to support new fiducial marker systems without modifying the c
 The `TagDecoder` trait serves as the extension point. To add a new family (e.g., `STag` or a custom ArUco dictionary):
 
 1.  **Implement `TagDecoder`**: Define the grid dimension and bit extraction logic.
-2.  **Define `TagDictionary`**: Provide the hamming distance lookup table.
+2.  **Define `TagDictionary`**: Provide the code table (all four rotations of each codeword; decoding scans it for the nearest code).
 3.  **Register**: Pass the new decoder to the detector (typically via the Rust `DetectorBuilder`).
 
 ```rust
@@ -181,17 +182,22 @@ The `locus-core` crate is organized into logical modules mirroring the pipeline 
 | Module | Description | Key Structs |
 | :--- | :--- | :--- |
 | `image` | Zero-copy image views and pixel access. | `ImageView` |
-| `threshold` | Adaptive thresholding and integral images. | `ThresholdEngine` |
+| `threshold` | Tile min/max (`TileMidExtreme`) and sliding-window `LocalMean` threshold maps. | `ThresholdEngine` |
 | `segmentation` | Connected components labeling. | `UnionFind` |
-| `simd_ccl_fusion` | SIMD Fused RLE & LSL. | `extract_rle_segments` |
-| `quad` | Contour tracing and quad fitting. | `extract_quads` |
-| `gwlf` | Gradient-Weighted Line Fitting. | `refine_quad_gwlf` |
-| `homography` | Projective geometry primitives (DLT, DDA). | `Homography`, `HomographyDda` |
-| `decoder` | Bit extraction and hamming decoding. | `TagDecoder` |
+| `simd_ccl_fusion` | SIMD run extraction & LSL. | `extract_rle_segments`, `label_components_lsl` |
+| `quad` | Component gates, run-based contour tracing, 4-vertex reduction, edge-contrast gate. | `extract_quads_soa` |
+| `edlines` | EdLines quad extraction (arc boundary, IRLS lines, joint Gauss-Newton corners). | `extract_quad_edlines` |
+| `refinement` | Corner-refinement dispatch; gradient-orthogonality junction corners, whole-edge fusion and gross-corner repair (`decoder.corner_subpix`). | `refine_quad_corners`, `subpix_marker_corners` |
+| `marker_inset` | Per-marker photometric inset calibration from the decoded bit edges. | `calibrate_marker_corners` |
+| `gwlf` | Gradient-Weighted Line Fitting (legacy refinement mode; moment accumulator shared with EdLines). | `refine_quad_gwlf` |
+| `decoder` | Homography (DLT, DDA), bit sampling, ring evidence, decode-first verification, near-miss recovery. | `TagDecoder`, `Homography`, `HomographyDda` |
+| `dictionaries` | Embedded family code tables and the nearest-codeword scan. | `TagDictionary` |
+| `strategy` | Hard-decision bit packing against per-cell thresholds. | `bits_from_intensities` |
 | `funnel` | Fast-path rejection gate (O(1) contrast). | `apply_funnel_gate` |
-| `pose` | 3D pose estimation (PnP). | `Pose`, `CameraIntrinsics` |
-| `pose_weighted` | Structure Tensor & Weighted LM. | `refine_pose_lm_weighted` |
-| `gradient` | Image gradients & Sub-pixel windows. | `compute_structure_tensor` |
+| `pose` | 3D pose estimation (IPPE-Square + LM). | `Pose`, `CameraIntrinsics` |
+| `pose_weighted` | Structure-tensor corner covariances & weighted LM. | `refine_pose_lm_weighted` |
+| `model_edge` | Model-edge pose refinement against the decoded bit-grid edges (`high_accuracy`). | `refine_pose_model_edges` |
+| `gradient` | Image gradients, noise estimation. | `compute_sobel`, `estimate_noise_sigma` |
 | `filter` | Pre-processing filters (Sharpen). | `laplacian_sharpen` |
 | `edge_refinement` | Unified ERF sub-pixel refinement. | `ErfEdgeFitter` |
 | `simd::math` | Centralized math kernels (erf, rcp). | `erf_approx`, `erf_approx_v4` |

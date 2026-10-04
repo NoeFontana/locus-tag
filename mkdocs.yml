@@ -105,6 +105,12 @@ nav:
       - engineering/rust-style.md
       - engineering/python-style.md
       - engineering/general-style.md
+      - Lessons:
+          - engineering/lessons/README.md
+          - engineering/lessons/recall-quad-icra.md
+          - engineering/lessons/rotation-tail-and-edge-refinement.md
+          - engineering/lessons/edlines-segmentation.md
+          - engineering/lessons/pose-covariance.md
       - Benchmarking:
           - engineering/benchmarking.md
           - engineering/benchmarking/lessons.md
@@ -120,6 +126,10 @@ nav:
           - engineering/benchmarking/refine_variants_20260714.md
           - engineering/benchmarking/model_edge_refinement_20260715.md
           - engineering/benchmarking/render_tag_2160p_20260425.md
+      - Historical:
+          - engineering/track2_precision_threshold.md
+          - engineering/latency_audit_2160p_segmentation_addendum_2026-05-03.md
+          - engineering/erf-simd-attempt-postmortem.md
   - Migration:
       - migration/config-refactor.md
 

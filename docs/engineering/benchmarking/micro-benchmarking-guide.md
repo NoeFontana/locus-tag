@@ -1,6 +1,6 @@
 # Micro-Benchmarking Guide
 
-Detail on Tier 3 (Divan) of the [3-tier tooling stack](../benchmarking.md#the-3-tier-tooling-stack);
+Detail on Tier 3 (Divan) of the [3-tier tooling stack](../benchmarking.md#the-tooling-stack);
 a micro-optimization must also survive Tier 2 (Tracy) and Tier 1 (`bench real`)
 as described there before it's considered real.
 

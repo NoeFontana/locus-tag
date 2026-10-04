@@ -44,9 +44,12 @@ The ICRA 2020 regression tests validate detector accuracy against golden master 
 
 ### Prerequisites
 
-Download the ICRA 2020 dataset and set the environment variable:
+Fetch the pinned datasets into `tests/data/` (the tests find them there; the
+`LOCUS_*_DATASET_DIR` variables only relocate them):
 ```bash
-export LOCUS_ICRA_DATASET_DIR=/path/to/icra2020
+cargo xtask data fetch icra2020-forward          # + icra2020-circle icra2020-random for the extended suite
+cargo xtask data fetch hub --subsets all         # render-tag + board suites (Hugging Face)
+cargo xtask data list                            # every dataset, its pin and licence
 ```
 
 ### Running Tests
@@ -63,6 +66,22 @@ LOCUS_EXTENDED_REGRESSION=1 cargo test --release --test regression_icra2020 --fe
 # 3. Run fixture-based smoke test (no dataset required)
 cargo test --release --test regression_icra2020 regression_fixtures --features bench-internals
 ```
+
+## 🏁 Comparing Against Other Detectors
+
+Published comparisons (OpenCV, aruco_nano, AprilTag 3) come from
+`cargo xtask sota`, which builds pinned references (OpenCV 4.10.0, aruco_nano
+`961b18b`) and scores every compatible dataset — see `xtask/README.md`:
+
+```bash
+cargo xtask sota setup            # once: build OpenCV + aruco_nano + runner
+cargo xtask sota all liu4k        # fetch, run, score, report
+cargo xtask sota scoreboard       # win table over every scored benchmark
+```
+
+Any PR that claims an accuracy or latency change against the references should
+cite a `cargo xtask sota` run (with `lscpu` hardware metadata, build profile and
+thread count, per `docs/engineering/constraints.md` §6).
 
 ## 📸 Golden Master Snapshots
 
@@ -113,8 +132,10 @@ Individual recipes are also available — see `just --list`.
 |------|-------------|
 | `crates/locus-core/` | High-performance Rust detection engine |
 | `crates/locus-py/` | PyO3 Python bindings |
-| `tests/` | Integration tests and evaluation scripts |
-| `benchmarks/` | Criterion-based performance benchmarks |
+| `crates/locus-core/benches/` | Divan micro-benchmarks |
+| `tests/` | Python tests; `tests/data/` holds fetched datasets |
+| `tools/` | Bench CLI (`tools/cli.py`), tuning and comparison harnesses |
+| `xtask/` | `cargo xtask data` (pinned datasets) and `cargo xtask sota` (comparative benchmarks) |
 | `docs/` | MkDocs documentation source |
 
 ## 📚 Building Documentation

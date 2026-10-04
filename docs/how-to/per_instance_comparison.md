@@ -9,11 +9,19 @@ structured report, embeddable SVG figures, and a scrubbable rerun deep-dive.
 It reuses the Tier-1 record substrate, the tuning wrappers, and stratification.
 The analysis layer is [polars](https://pola.rs); figures are matplotlib → SVG.
 
+!!! note "Which tool when"
+    Use this tool to find *where* Locus trails, image by image. For published
+    "Locus vs X" numbers use `cargo xtask sota`, which runs pinned references (OpenCV
+    `aruco` 4.10.0, aruco_nano `961b18b`) as published; this tool, like the
+    [tuning harness](tune_and_compare.md), uses the unpinned `opencv-python-headless`
+    wheel from the `bench` group. See
+    [Benchmarking](../engineering/benchmarking.md#comparative-tier-cargo-xtask-sota-published-comparisons).
+
 ## Prerequisites
 
 - A `bench tune` output directory with `pareto/<library>.json` for locus,
   opencv_aruco, and apriltag (see `how-to/tune_and_compare.md`).
-- Synced render-tag hub datasets under `tests/data/hub_cache/`.
+- Synced render-tag hub datasets under `tests/data/hub_cache/` (`cargo xtask data fetch hub`).
 - The `bench` dependency group: prefix commands with `uv run --group bench`.
 
 ## One-shot

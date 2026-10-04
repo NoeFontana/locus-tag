@@ -50,19 +50,27 @@ cargo bench --bench comprehensive -- "bench_thresholding"
 ```
 
 ### System-Level Verification
+
+Datasets are pinned in `xtask/datasets.toml` and fetched into `tests/data/`
+(where the tests and loaders look by default):
+
+```bash
+cargo xtask data fetch icra2020-forward icra2020-circle icra2020-random euroc
+cargo xtask data fetch hub --subsets all
+```
+
 ```bash
 # 1. Forward Evaluation — ICRA 2020 (Accuracy & Yield)
 uv run --group bench tools/cli.py bench real --compare
 
 # 2. Hub Dataset Evaluation — Python CLI (Recall + Pose RMSE)
-# Requires hub_cache to be populated via `bench prepare` first.
 PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config locus_v1_tag36h11_1920x1080
 PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config aprilgrid_golden_v1_1920x1080
 PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config charuco_golden_v1_1920x1080
 
 # 3. Rust Regression Testing (Sequential for accurate latency)
-# Requires LOCUS_ICRA_DATASET_DIR to be set.
-TRACY_NO_INVARIANT_CHECK=1 LOCUS_ICRA_DATASET_DIR=tests/data/icra2020 cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
+# Reads tests/data/icra2020 by default; LOCUS_ICRA_DATASET_DIR relocates it.
+TRACY_NO_INVARIANT_CHECK=1 cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
 
 # 4. Snapshot Verification & Update
 # Runs all regression suites (ICRA, Hub tag-level, Hub board-level, distortion)
@@ -80,12 +88,29 @@ LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
 cargo insta test --release --all-features --features bench-internals --review
 
 # 5. EuRoC MAV Real-Data Regression (Optional)
-# Download once: cargo xtask data fetch euroc
+# Reads tests/data/euroc (cargo xtask data fetch euroc)
 TRACY_NO_INVARIANT_CHECK=1 \
-LOCUS_EUROC_DATASET_DIR=tests/data/euroc \
 cargo test --release --features bench-internals,non_rectified \
   --test regression_euroc -- --test-threads=1
 ```
+
+### Comparative Verification (`cargo xtask sota`)
+
+The regression suites guard against Locus getting worse than itself. Claims
+about Locus *relative to other detectors* — and any change expected to move the
+scoreboard — are checked with `cargo xtask sota` against the pinned references
+(OpenCV 4.10.0, aruco_nano `961b18b`); see `xtask/README.md`.
+
+```bash
+cargo xtask sota setup                                # once
+cargo xtask sota run euroc --jobs 4 --stride 2        # quick accuracy-only pass
+cargo xtask sota all liu4k                            # fetch, run, score, report
+cargo xtask sota scoreboard                           # win table over every scored benchmark
+```
+
+Accuracy runs may use `--jobs > 1`; latency is publishable only from `--jobs 1`
+runs on an idle machine, reported with `lscpu` metadata, build profile and
+thread count ([Constraints §6](constraints.md)).
 
 ## 3. Documentation Quality
 

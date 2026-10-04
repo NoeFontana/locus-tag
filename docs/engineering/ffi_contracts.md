@@ -10,32 +10,33 @@ Entry points covered:
 - `BoardEstimator.estimate`
 - `CharucoRefiner.estimate`
 - `CameraIntrinsics.__new__`
-- `create_detector` (implicit constructor behind `Detector.__init__`)
+- `_create_detector_from_config` (implicit constructor behind `Detector.__init__`)
 
 Each section is organised as `{Invariant | Enforcement point | Error type | Notes}`.
-"Enforcement point" is the file and line where the check actually runs —
-not where the argument is declared.
+"Enforcement point" is the function where the check actually runs — not where
+the argument is declared. Functions are named rather than line-numbered so the
+table does not go stale; `crates/locus-py/src/lib.rs` is abbreviated `lib.rs`.
 
 ---
 
 ## 1. Image buffer invariants
 
 All four detection entry points accept a 2-D `uint8` NumPy array and route it
-through `prepare_image_view` at `crates/locus-py/src/lib.rs:1631`.
+through `prepare_image_view` in `crates/locus-py/src/lib.rs`.
 
 | Invariant | Enforcement point | Error type |
 | --- | --- | --- |
-| `dtype == np.uint8` (single-frame) | `crates/locus-py/locus/__init__.py:268` | `ValueError` (Python-side) |
-| `dtype == np.uint8` (per frame in concurrent path) | `crates/locus-py/locus/__init__.py:325` | `ValueError` (Python-side) |
-| Shape is 2-D `(H, W)` | `PyReadonlyArray2<'_, u8>` signature at `lib.rs:593` (`BoardEstimator::estimate`), `lib.rs:758` (`CharucoRefiner::estimate`), `lib.rs:1097` (`Detector::detect`) | `TypeError` (PyO3 built-in) |
+| `dtype == np.uint8` (single-frame) | `Detector.detect` in `crates/locus-py/locus/__init__.py` | `ValueError` (Python-side) |
+| `dtype == np.uint8` (per frame in concurrent path) | `Detector.detect_concurrent` in `crates/locus-py/locus/__init__.py` | `ValueError` (Python-side) |
+| Shape is 2-D `(H, W)` | `PyReadonlyArray2<'_, u8>` signature of `BoardEstimator::estimate`, `CharucoRefiner::estimate`, `Detector::detect` and `Detector::detect_concurrent` (`lib.rs`) | `TypeError` (PyO3 built-in) |
 | `stride_x == 1` (row-major, C-contiguous along the last axis) | `lib.rs` in `prepare_image_view` | `PyValueError` — `"Array must be C-contiguous. Call np.ascontiguousarray(image) first."` |
 | `strides[0] >= width` (rejects reverse-axis views with negative row stride) | `lib.rs` in `prepare_image_view` | `PyValueError` — `"Array row stride (<value>) must be >= width (<value>); negative strides…"` |
-| `stride_y >= width` and buffer length fits `(height - 1) * stride + width` | `crates/locus-core/src/image.rs:26-46` (`ImageView::new`) | `PyRuntimeError` (wrapped from `String`) |
+| `stride_y >= width` and buffer length fits `(height - 1) * stride + width` | `ImageView::new` (`crates/locus-core/src/image.rs`) | `PyRuntimeError` (wrapped from `String`) |
 | `has_simd_padding()` — ≥3 trailing bytes past the last logical pixel | `lib.rs` in `prepare_image_view` (silently satisfied via internal copy fallback when missing) | n/a — accepted via copy into padded scratch |
 
 ### SIMD padding (A1.2 — enforced via internal copy fallback)
 
-`ImageView::has_simd_padding()` at `image.rs:55-67` returns whether the buffer
+`ImageView::has_simd_padding()` (`image.rs`) returns whether the buffer
 has ≥3 bytes past the last logical pixel — the slack that AVX2 `gather`
 instructions (e.g. `sample_bilinear_v8` in `decoder.rs`) may touch when
 loading 32-bit words on 8-bit data. **`prepare_image_view` is responsible for
@@ -89,7 +90,7 @@ calibration concern, not a correctness concern.
 
 ## 2. `CameraIntrinsics` construction
 
-Defined at `crates/locus-py/src/lib.rs:214-264`.
+Defined by `CameraIntrinsics::new` in `crates/locus-py/src/lib.rs`.
 
 | Invariant | Enforcement point | Error type |
 | --- | --- | --- |
@@ -107,22 +108,30 @@ Principal-point bounds `(cx, cy)` ∈ image are checked at
 
 ## 3. `DetectorConfig` validation
 
-All configuration validation happens in `DetectorConfig::validate()` at
-`crates/locus-core/src/config.rs:234-272`, invoked by
-`DetectorBuilder::validated_build()`. Every `ConfigError` is mapped to
-`PyValueError` at `crates/locus-py/src/lib.rs:1623-1624`.
+All configuration validation happens in `DetectorConfig::validate()`
+(`crates/locus-core/src/config.rs`), invoked by
+`DetectorBuilder::validated_build()`. `_create_detector_from_config` maps every
+`ConfigError` to `PyValueError`.
 
 | Invariant | Enforcement point | `ConfigError` variant |
 | --- | --- | --- |
-| `threshold_tile_size >= 2` | `config.rs:237-239` | `TileSizeTooSmall` |
-| `decimation >= 1` | `config.rs:240-242` | `InvalidDecimation` |
-| `upscale_factor >= 1` | `config.rs:243-245` | `InvalidUpscaleFactor` |
-| `0.0 <= quad_min_fill_ratio < quad_max_fill_ratio <= 1.0` | `config.rs:246-254` | `InvalidFillRatio { min, max }` |
-| `quad_min_edge_length > 0.0` | `config.rs:255-257` | `InvalidEdgeLength` |
-| `structure_tensor_radius <= 8` | `config.rs:258-262` | `InvalidStructureTensorRadius` |
-| `1 <= threshold_local_mean_radius <= 127` (`threshold::MAX_LOCAL_MEAN_RADIUS`: keeps box sums `< 2²⁴`, exact in the local-mean arithmetic) | `config.rs::validate` | `InvalidLocalMeanRadius` |
-| `threshold_noise_k` finite and `>= 0` | `config.rs::validate` | `InvalidNoiseK` |
-| `quad_extraction_mode == EdLines` ⇒ `refinement_mode != Erf` | `config.rs:263-266` | `EdLinesIncompatibleWithErf` |
+| `threshold_tile_size >= 2` | `DetectorConfig::validate` | `TileSizeTooSmall` |
+| `1 <= threshold_local_mean_radius <= 127` (`threshold::MAX_LOCAL_MEAN_RADIUS`: keeps box sums `< 2²⁴`, exact in the local-mean arithmetic) | `DetectorConfig::validate` | `InvalidLocalMeanRadius` |
+| `decoder_max_border_error_rate`, when set, lies in `[0, 1]` (`None` = the family's `max_hamming / bit_count`; `1.0` disables the ring check) | `DetectorConfig::validate` | `InvalidBorderErrorRate` |
+| `decimation >= 1` | `DetectorConfig::validate` | `InvalidDecimation` |
+| `upscale_factor >= 1` | `DetectorConfig::validate` | `InvalidUpscaleFactor` |
+| `0.0 <= quad_min_fill_ratio < quad_max_fill_ratio <= 1.0` | `DetectorConfig::validate` | `InvalidFillRatio { min, max }` |
+| `quad_min_edge_length > 0.0` | `DetectorConfig::validate` | `InvalidEdgeLength` |
+| `structure_tensor_radius <= 8` | `DetectorConfig::validate` | `InvalidStructureTensorRadius` |
+| `0 <= pose_consistency_fpr < 1` | `DetectorConfig::validate` | `InvalidPoseConsistencyFpr` |
+| `outlier_drop_d2_threshold` finite and `>= 0` | `DetectorConfig::validate` | `InvalidOutlierDropD2Threshold` |
+| `quad_extraction_mode == EdLines` ⇒ `refinement_mode != Erf` (also per `AdaptivePpb` route) | `DetectorConfig::validate` | `EdLinesIncompatibleWithErf` |
+| `AdaptivePpb` low/high extraction modes differ | `DetectorConfig::validate` | `AdaptivePolicyDegenerate` |
+| `AdaptivePpb` threshold in `(1.0, 5.0)` | `DetectorConfig::validate` | `AdaptivePolicyThresholdOutOfRange` |
+
+A further check runs per call: a `Static` `EdLines`
+config with distorted intrinsics fails `detect()` with
+`EdLinesUnsupportedWithDistortion`.
 
 ### Fields with **no** runtime validation
 
@@ -130,18 +139,17 @@ The following fields are passed straight through without range checks, even
 though the Pydantic `DetectorConfig` in `crates/locus-py/locus/_config.py`
 declares explicit ranges:
 
-- `threshold_min_range`, `adaptive_threshold_constant`
 - `quad_min_area`, `quad_max_aspect_ratio`, `quad_min_edge_score`
 - `subpixel_refinement_sigma`
-- `decoder_min_contrast`, `max_hamming_error`, `gwlf_transversal_alpha`
+- `decoder_min_contrast`, `max_hamming_error`
 - `quad_max_elongation`, `quad_min_density`
 - `huber_delta_px`, `tikhonov_alpha_max`, `sigma_n_sq`
 
-Python-side Pydantic catches some of these (e.g. `threshold_min_range: ge=0,
-le=255`), **but only when the user constructs a `DetectorConfig` directly**.
-Values passed through `Detector(**kwargs)` skip the Pydantic model and go
-straight to the Rust builder. A1 should either route all kwargs through
-Pydantic or extend `validate()`.
+The Pydantic model declares ranges for most of these. Every Python
+construction path goes through it: `Detector(profile=…)` and
+`Detector(config=…)` both serialize a validated `DetectorConfig`, and there is
+no keyword path that bypasses it. A config therefore reaches Rust unchecked
+only as a user-authored JSON payload handed to the Rust API directly.
 
 ### Field scope: live, telemetry-only, inert
 
@@ -160,16 +168,15 @@ also fails the test — so neither category can drift silently.
 
 | Field | Scope |
 | --- | --- |
-| `threshold_min_range` | **Telemetry-only.** The tile-validity mask it drives is applied only while writing `telemetry.binarized`; the per-pixel `threshold_map` segmentation consumes is written unconditionally (`ThresholdEngine::apply_threshold_with_map`). Detection output is invariant to it. Not allowlisted — the signature covers telemetry. |
 | `nthreads` | **Live but output-invariant** by design: it picks the scoped Rayon pool (`LocusEngine::run_scoped`). Allowlisted as inert *for output*; `nthreads_selects_the_pipeline_pool` separately proves the pool is installed. |
-| `threshold_local_mean_radius`, `adaptive_threshold_constant`, `threshold_noise_k` | **Live under `threshold_mode = LocalMean` only** (the local-mean window and its offset); ignored by `TileMidExtreme`. Not allowlisted: their cases switch the mode on first. |
+| `threshold_local_mean_radius` and the LocalMean offset | **Live under `threshold_mode = LocalMean` only** (the local-mean window and its offset); ignored by `TileMidExtreme`. Not allowlisted: their cases switch the mode on first. |
 
 ---
 
-## 4. `Detector` constructor (`create_detector`)
+## 4. `Detector` constructor (`_create_detector_from_config`)
 
-Rust entry at `crates/locus-py/src/lib.rs:1314-1422`. Python wrapper at
-`crates/locus-py/locus/__init__.py:159-228`.
+Rust entry: `_create_detector_from_config` in `crates/locus-py/src/lib.rs`.
+Python wrapper: `Detector.__init__` in `crates/locus-py/locus/__init__.py`.
 
 The config crosses the FFI as a **JSON string**, not a typed struct: Python
 passes `config.model_dump_json()` to `_create_detector_from_config(config_json=…)`,
@@ -177,8 +184,8 @@ and Rust parses it with `DetectorConfig::from_profile_json`.
 
 | Invariant | Enforcement point | Error type |
 | --- | --- | --- |
-| `families[i] in {0,1,2,3,4}` (valid `TagFamily` discriminant) | `tag_family_from_i32` in `crates/locus-py/src/lib.rs` | `PyValueError` |
-| Nested config invariants (radius ordering, fill-ratio ordering, cross-group compatibility) | `locus._config.DetectorConfig` model validators | `pydantic.ValidationError` |
+| `families[i] in {0,…,5}` (valid `TagFamily` discriminant: 16h5, 36h11, 4x4_50, 4x4_100, 6x6_250, ArUcoMip36h12) | `tag_family_from_i32` in `lib.rs` (also `set_families`) | `PyValueError` |
+| Nested config invariants (field ranges, fill-ratio ordering, cross-group compatibility) | `locus._config.DetectorConfig` model validators | `pydantic.ValidationError` |
 | `config_json` parses (known keys only, valid enum-variant strings) | `from_profile_json` serde deserialize (`deny_unknown_fields`) | `PyValueError` (wrapped from `ConfigError::ProfileParse`) |
 | Final config passes Rust `DetectorConfig::validate()` | `_create_detector_from_config` → `from_profile_json` → `validated_build()` | `PyValueError` (wrapped from `ConfigError`) |
 
@@ -198,9 +205,9 @@ Both share the image invariants above. Behavioural differences:
 
 | Aspect | `detect()` | `detect_concurrent()` |
 | --- | --- | --- |
-| Frame pool gating | single `FrameContext` | `max_concurrent_frames` pool (`lib.rs:1610-1614`) |
-| Telemetry returned | yes (`PipelineTelemetry`) | no (documented at `__init__.py:313`) |
-| Rejected-corner data returned | yes | no — built from an owned path at `lib.rs:1663 build_detection_result_from_owned` |
+| Frame pool gating | single `FrameContext` | `max_concurrent_frames` pool of `FrameContext`s |
+| Telemetry returned | yes (`PipelineTelemetry`) | no (documented on `Detector.detect_concurrent`) |
+| Rejected-corner data returned | yes | no — empty arrays, built from owned detections by `build_detection_result_from_owned` (`lib.rs`) |
 | GIL released | yes, for the pipeline body | yes, for the entire parallel section |
 
 A1 should document whether callers should rely on the presence of
@@ -211,17 +218,18 @@ converge.
 
 ## 6. Entry-point reference index
 
-| Python entry | Rust entry | Line |
+| Python entry | Rust entry | File |
 | --- | --- | --- |
-| `Detector.__init__` → `_create_detector` | `create_detector` | `lib.rs:1314` |
-| `Detector.detect` | `Detector::detect` | `lib.rs:1097` |
-| `Detector.detect_concurrent` | `Detector::detect_concurrent` | `lib.rs:1236` (doc), body below |
-| `BoardEstimator.estimate` | `BoardEstimator::estimate` | `lib.rs:593` |
-| `CharucoRefiner.estimate` | `CharucoRefiner::estimate` | `lib.rs:758` |
-| `CameraIntrinsics.__new__` | `CameraIntrinsics::new` | `lib.rs:214` |
-| (internal) stride/padding check | `prepare_image_view` | `lib.rs:1631` |
-| (internal) image-view constructor | `ImageView::new` | `crates/locus-core/src/image.rs:26` |
-| (internal) config validator | `DetectorConfig::validate` | `crates/locus-core/src/config.rs:234` |
+| `Detector.__init__` | `_create_detector_from_config` | `lib.rs` |
+| `Detector.detect` | `Detector::detect` | `lib.rs` |
+| `Detector.detect_concurrent` | `Detector::detect_concurrent` | `lib.rs` |
+| `BoardEstimator.estimate` | `BoardEstimator::estimate` | `lib.rs` |
+| `CharucoRefiner.estimate` | `CharucoRefiner::estimate` | `lib.rs` |
+| `CameraIntrinsics.__new__` | `CameraIntrinsics::new` | `lib.rs` |
+| (internal) stride/padding check | `prepare_image_view` | `lib.rs` |
+| (internal) principal-point check | `validate_principal_point` | `lib.rs` |
+| (internal) image-view constructor | `ImageView::new` | `crates/locus-core/src/image.rs` |
+| (internal) config validator | `DetectorConfig::validate` | `crates/locus-core/src/config.rs` |
 
 ---
 
@@ -233,10 +241,9 @@ These feed the Phase A1 test matrix:
   `prepare_image_view` (A1.2, shipped 2026-05-30): `Borrowed` zero-copy
   when the input already has ≥3 trailing bytes/row, else a `Padded`
   owned scratch (see §1). Public API unchanged from pre-PR #287.
-- **Config:** ~18 Rust fields have no range validation. With the JSON-profile
-  refactor, Pydantic `_config.py` is the first-line gate and the
-  `Detector(**kwargs)` escape hatch is gone, so these reach Rust only through
-  user-authored `from_profile_json` payloads — lift range checks into the
-  Pydantic model where they are missing.
+- **Config:** the fields listed in §3 have no Rust range validation. Pydantic
+  `_config.py` is the first-line gate for every Python construction path, so
+  they reach Rust unchecked only through user-authored `from_profile_json`
+  payloads — lift range checks into the Pydantic model where they are missing.
 - **`detect()` vs `detect_concurrent()`:** Telemetry + rejected-corner asymmetry
   is load-bearing for callers; document or converge.
