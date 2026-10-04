@@ -519,17 +519,15 @@ fn run_detection_pipeline<'ctx>(
             );
         },
         _ => {
-            // No distortion model in this build, or no intrinsics — the SIMD path with
-            // PinholeModel. Distortion it does not model disables the corner calibration.
-            let rectified =
-                intrinsics.is_none_or(|k| k.distortion == crate::pose::DistortionCoeffs::None);
-            crate::decoder::decode_batch_soa_generic(
+            // No intrinsics, or intrinsics without distortion: the pinhole SIMD path. The
+            // distorted models are matched above, and without the `non_rectified` feature
+            // `DistortionCoeffs` has no other variant, so this arm never sees lens distortion.
+            crate::decoder::decode_batch_soa(
                 &mut state.batch,
                 n,
                 &refinement_img,
                 decoders,
                 config,
-                rectified,
             );
         },
     }

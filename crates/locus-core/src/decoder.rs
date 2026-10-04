@@ -617,6 +617,19 @@ fn ring_error_rate(config: &crate::config::DetectorConfig, max_h: u32, bits: usi
         .unwrap_or_else(|| max_h as f32 / bits.max(1) as f32)
 }
 
+/// [`Homography::to_dda`] for a decoder's row-major sample grid: it starts at the first sample
+/// and steps one cell along a row (`u`) and one row down (`v`).
+// See `Homography::to_dda` for the dead-code rationale.
+#[allow(dead_code)]
+fn grid_dda(h: &Homography, points: &[(f64, f64)], dim: usize) -> HomographyDda {
+    let (du, dv) = if dim > 1 {
+        (points[1].0 - points[0].0, points[dim].1 - points[0].1)
+    } else {
+        (0.0, 0.0)
+    };
+    h.to_dda(points[0].0, points[0].1, du, dv)
+}
+
 /// Sample values from the image using DDA-based coordinate generation and SIMD bilinear sampling.
 #[multiversion(targets("x86_64+avx2+fma", "aarch64+neon"))]
 fn sample_grid_values_dda_simd(
@@ -626,23 +639,11 @@ fn sample_grid_values_dda_simd(
     decoder: &(impl TagDecoder + ?Sized),
     intensities: &mut [f64],
 ) -> bool {
-    let dim = decoder.dimension();
     let n = decoder.bit_count();
     let points = decoder.sample_points();
     if points.is_empty() {
         return false;
     }
-
-    let _du = if dim > 1 {
-        points[1].0 - points[0].0
-    } else {
-        0.0
-    };
-    let _dv = if dim > 1 {
-        points[dim].1 - points[0].1
-    } else {
-        0.0
-    };
 
     #[cfg(all(
         target_arch = "x86_64",
@@ -676,7 +677,8 @@ fn sample_grid_values_dda_simd(
         use crate::simd::sampler::sample_bilinear_v8;
         use std::arch::x86_64::*;
 
-        let dda = h.to_dda(points[0].0, points[0].1, _du, _dv);
+        let dim = decoder.dimension();
+        let dda = grid_dda(h, points, dim);
 
         let w_limit = _mm256_set1_ps(img.width as f32 - 1.0);
         let h_limit = _mm256_set1_ps(img.height as f32 - 1.0);
@@ -796,7 +798,8 @@ fn sample_grid_values_dda_simd(
         use crate::simd::sampler::sample_bilinear_v8;
         use std::arch::aarch64::*;
 
-        let dda = h.to_dda(points[0].0, points[0].1, _du, _dv);
+        let dim = decoder.dimension();
+        let dda = grid_dda(h, points, dim);
 
         let mut current_nx_row = dda.nx as f32;
         let mut current_ny_row = dda.ny as f32;
@@ -940,17 +943,11 @@ fn sample_grid_values_optimized(
     true
 }
 
-/// Sample the bit grid from the image using the homography and decoder points.
+/// Sample the bit grid of `detection` (its corners' homography) for `decoder`'s points.
 ///
-/// Uses bilinear interpolation for sampling and a spatially adaptive threshold
-/// (based on min/max stats of the grid) to determine bit values.
-///
-/// # Parameters
-/// - `min_contrast`: Minimum contrast range for Otsu-based classification.
-///   Default is 20.0. Lower values (e.g., 10.0) improve recall on small/blurry tags.
-///
-/// This computes the intensities at sample points and the adaptive thresholds,
-/// then delegates to the strategy to produce the code.
+/// Samples bilinearly and classifies each bit against the decoder's adaptive threshold (a
+/// blend of the grid's Otsu split and its quadrant means), as [`sample_grid_soa_precomputed`]
+/// does in the pipeline. `None` when a sample falls outside the image.
 ///
 /// # Panics
 /// Panics if the number of sample points exceeds `MAX_BIT_COUNT`.
@@ -1059,19 +1056,6 @@ fn compute_adaptive_thresholds(intensities: &[f64], points: &[(f64, f64)]) -> [f
         thresholds[i] = 0.7 * global_threshold + 0.3 * quad_avg;
     }
     thresholds
-}
-
-/// Sample the bit grid from the image (Legacy/Hard wrapper).
-#[cfg(any(test, feature = "bench-internals"))]
-#[allow(clippy::cast_sign_loss, clippy::too_many_lines)]
-pub fn sample_grid(
-    img: &crate::image::ImageView,
-    arena: &Bump,
-    detection: &crate::Detection,
-    decoder: &(impl TagDecoder + ?Sized),
-    _min_contrast: f64,
-) -> Option<u64> {
-    sample_grid_generic(img, arena, detection, decoder)
 }
 
 /// Rotate a square bit grid 90 degrees clockwise.
@@ -1223,7 +1207,7 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
     let mut ring_cache = [None::<bool>; MAX_DECODERS];
 
     // Resolve `max_hamming_error` once per registered decoder; see the
-    // matching block in `decode_batch_soa_generic` for rationale.
+    // matching block in `decode_batch_soa` for rationale.
     debug_assert!(
         decoders.len() <= MAX_DECODERS,
         "more decoders than tag families"
@@ -1425,28 +1409,6 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
         );
 }
 
-/// Decode all active candidates in the batch using the Structure of Arrays (SoA) layout.
-///
-/// This phase executes SIMD bilinear interpolation and Hamming error correction.
-/// If a candidate fails decoding, its `status_mask` is flipped to `FailedDecode`.
-///
-/// Assumes a rectified camera. The detector calls the crate-internal generic decoder directly so
-/// it can say otherwise; this entry point serves the distortion dispatch and the bench API.
-#[cfg_attr(
-    not(any(feature = "non_rectified", feature = "bench-internals")),
-    allow(dead_code)
-)]
-#[tracing::instrument(skip_all, name = "pipeline::decoding_pass")]
-pub fn decode_batch_soa(
-    batch: &mut crate::batch::DetectionBatch,
-    n: usize,
-    img: &crate::image::ImageView,
-    decoders: &[Box<dyn TagDecoder + Send + Sync>],
-    config: &crate::config::DetectorConfig,
-) {
-    decode_batch_soa_generic(batch, n, img, decoders, config, true);
-}
-
 /// Distortion-aware entry point for [`decode_batch_soa`].
 ///
 /// When `C::IS_RECTIFIED = true` (i.e., [`PinholeModel`](crate::camera::PinholeModel)),
@@ -1483,23 +1445,24 @@ pub fn decode_batch_soa_with_camera<C: crate::camera::CameraModel>(
     }
 }
 
-/// Pinhole decode of every candidate. `rectified` is false when the camera has lens distortion
-/// that this path does not model: the marker's edges are then not the straight lines of a
-/// homography, so the edge-line corner fusion and the photometric corner calibration, which
-/// rely on that, are skipped.
+/// Decode all active candidates in the batch using the Structure of Arrays (SoA) layout, for a
+/// pinhole camera (no lens distortion).
+///
+/// This phase executes SIMD bilinear interpolation and Hamming error correction, then refines
+/// the accepted corners (sub-pixel pass and photometric calibration). If a candidate fails
+/// decoding, its `status_mask` is flipped to `FailedDecode`.
 #[allow(
     clippy::too_many_lines,
     clippy::cast_possible_wrap,
-    clippy::collapsible_if,
-    unused_assignments
+    clippy::collapsible_if
 )]
-pub(crate) fn decode_batch_soa_generic(
+#[tracing::instrument(skip_all, name = "pipeline::decoding_pass")]
+pub fn decode_batch_soa(
     batch: &mut crate::batch::DetectionBatch,
     n: usize,
     img: &crate::image::ImageView,
     decoders: &[Box<dyn TagDecoder + Send + Sync>],
     config: &crate::config::DetectorConfig,
-    rectified: bool,
 ) {
     use crate::batch::CandidateState;
     use rayon::prelude::*;
@@ -1644,7 +1607,6 @@ pub(crate) fn decode_batch_soa_generic(
                         let mut best_code = None;
                         let mut best_id = 0;
                         let mut best_rot = 0;
-                        let mut best_overall_code = None;
                         // Ring evidence is evaluated on the reported (unscaled) quad, so it
                         // depends only on the decoder: compute it at most once per decoder.
                         let mut ring_cache = [None::<bool>; MAX_DECODERS];
@@ -1718,10 +1680,7 @@ pub(crate) fn decode_batch_soa_generic(
                                 ) {
                                     if let Some((id, hamming, rot)) = decoder.decode_full(code, 255)
                                     {
-                                        if hamming < best_h {
-                                            best_h = hamming;
-                                            best_overall_code = Some(code);
-                                        }
+                                        best_h = best_h.min(hamming);
 
                                         // Lowest Hamming distance wins across decoders.
                                         // Evidence must hold for the geometry that is
@@ -1750,14 +1709,6 @@ pub(crate) fn decode_batch_soa_generic(
                             }
                             if let Some((id, hamming, rot, code, decoder_idx)) = best_match_in_scale
                             {
-                                best_id = id;
-                                best_rot = rot;
-                                // A decode-first match stands only once its refined quad
-                                // verifies it below; until then it must not reach the
-                                // acceptance after the scale loop with its contour corners.
-                                if !config.decode_first() {
-                                    best_code = Some(code);
-                                }
                                 let decoder = decoders[decoder_idx].as_ref();
                                 cells = decoder.dimension() + 2;
 
@@ -1811,7 +1762,16 @@ pub(crate) fn decode_batch_soa_generic(
                                             ref_h_mat.data[j] = *val as f32;
                                         }
                                     } else {
-                                        // Degenerate refinement, reject
+                                        // Degenerate refinement. Refine-first ordering keeps
+                                        // the unrefined match unless a later scale decodes; a
+                                        // decode-first match stands only once its refined quad
+                                        // verifies it, so it never reaches the acceptance
+                                        // after the scale loop with its contour corners.
+                                        if !config.decode_first() {
+                                            best_code = Some(code);
+                                            best_id = id;
+                                            best_rot = rot;
+                                        }
                                         continue;
                                     }
 
@@ -1862,7 +1822,7 @@ pub(crate) fn decode_batch_soa_generic(
                                         {
                                             return (
                                                 CandidateState::Valid,
-                                                best_id,
+                                                id,
                                                 rot_ref,
                                                 code_ref,
                                                 hamming_ref as f32,
@@ -1872,36 +1832,30 @@ pub(crate) fn decode_batch_soa_generic(
                                         continue;
                                     }
 
+                                    // Keep the refined corners if they decode the same tag with
+                                    // a Hamming distance that is not worse.
                                     if let Some(code_ref) =
                                         sample_grid_soa_precomputed(img, &roi, &ref_h_mat, decoder)
-                                    {
-                                        if let Some((id_ref, hamming_ref, _)) =
+                                        && let Some((id_ref, hamming_ref, _)) =
                                             decoder.decode_full(code_ref, 255)
-                                        {
-                                            // Only keep if it's the same tag and hamming is not worse
-                                            if id_ref == id && hamming_ref <= hamming {
-                                                best_h = hamming_ref;
-                                                best_code = Some(code_ref);
-                                                // Update the actual corners in the batch!
-                                                if let Some(&code_inner) = best_code.as_ref() {
-                                                    return (
-                                                        CandidateState::Valid,
-                                                        best_id,
-                                                        best_rot,
-                                                        code_inner,
-                                                        best_h as f32,
-                                                        Some(refined_corners_f32),
-                                                    );
-                                                }
-                                            }
-                                        }
+                                        && id_ref == id
+                                        && hamming_ref <= hamming
+                                    {
+                                        return (
+                                            CandidateState::Valid,
+                                            id,
+                                            rot,
+                                            code_ref,
+                                            hamming_ref as f32,
+                                            Some(refined_corners_f32),
+                                        );
                                     }
                                 }
 
                                 return (
                                     CandidateState::Valid,
-                                    best_id,
-                                    best_rot,
+                                    id,
+                                    rot,
                                     code,
                                     hamming as f32,
                                     None,
@@ -1913,10 +1867,10 @@ pub(crate) fn decode_batch_soa_generic(
                             }
                         }
 
-                        // Stage 2: Configurable Corner Refinement (Recovery for near-misses)
+                        // Stage 2: Configurable Corner Refinement (Recovery for near-misses).
+                        // `best_h <= recovery_max_h` implies some decoder sampled and decoded.
                         if best_h > frame_max_h_floor
                             && best_h <= recovery_max_h
-                            && best_overall_code.is_some()
                             && decoders.iter().any(|d| {
                                 ring_budget_ok(
                                     rectified_ring_evidence(img, &roi, homography, d.as_ref()),
@@ -1997,7 +1951,6 @@ pub(crate) fn decode_batch_soa_generic(
                                                     };
                                                     if hamming < best_h {
                                                         best_h = hamming;
-                                                        best_overall_code = Some(code);
                                                         current_corners = refined_f32;
                                                     }
                                                     if hamming <= decoder_max_h[decoder_idx]
@@ -2084,7 +2037,6 @@ pub(crate) fn decode_batch_soa_generic(
                                                             {
                                                                 if hamming < best_h {
                                                                     best_h = hamming;
-                                                                    best_overall_code = Some(code);
                                                                     current_corners = test_corners;
                                                                     pass_improved = true;
 
@@ -2158,11 +2110,9 @@ pub(crate) fn decode_batch_soa_generic(
                 *payload_slot = payload;
                 *err_slot = error_rate;
 
-                let refined = refined_corners.is_some();
-                if let Some(refined) = refined_corners {
-                    for (j, corner) in refined.iter().enumerate() {
-                        corners_slot[j] = *corner;
-                    }
+                let decoder_refined = refined_corners.is_some();
+                if let Some(decoded_corners) = refined_corners {
+                    *corners_slot = decoded_corners;
                 }
 
                 // Gradient-orthogonality refinement of the accepted corners, after the
@@ -2173,17 +2123,14 @@ pub(crate) fn decode_batch_soa_generic(
                     let seed = core::array::from_fn(|j| {
                         [f64::from(corners_slot[j].x), f64::from(corners_slot[j].y)]
                     });
-                    let (mut refined, bits) =
-                        crate::refinement::subpix_marker_corners(img, seed, cells, rectified);
+                    let (subpix_corners, bits) =
+                        crate::refinement::subpix_marker_corners(img, seed, cells);
                     // Remove the photometric inset the decoded marker's bit edges measure.
-                    if rectified
-                        && let Some(calibrated) =
-                            crate::marker_inset::calibrate_marker_corners(img, refined, cells)
-                    {
-                        refined = calibrated;
-                    }
+                    let final_corners =
+                        crate::marker_inset::calibrate_marker_corners(img, subpix_corners, cells)
+                            .unwrap_or(subpix_corners);
                     refined_bits = bits;
-                    for (slot, r) in corners_slot.iter_mut().zip(refined) {
+                    for (slot, r) in corners_slot.iter_mut().zip(final_corners) {
                         *slot = Point2f {
                             x: r[0] as f32,
                             y: r[1] as f32,
@@ -2220,7 +2167,7 @@ pub(crate) fn decode_batch_soa_generic(
                 // projects saddle predictions through `batch.homographies[i]`.
                 // The stale-`h_slot` failure mode is the same class as
                 // `memory/project_refine_saddle_noop.md`.
-                if valid && (refined || subpix || rot > 0) {
+                if valid && (decoder_refined || subpix || rot > 0) {
                     let dst = [
                         [f64::from(corners_slot[0].x), f64::from(corners_slot[0].y)],
                         [f64::from(corners_slot[1].x), f64::from(corners_slot[1].y)],
@@ -2750,7 +2697,7 @@ mod tests {
             ..Default::default()
         };
         let bits =
-            sample_grid(&img, &arena, &cand, &decoder, 20.0).expect("Should sample successfully");
+            sample_grid_generic(&img, &arena, &cand, &decoder).expect("Should sample successfully");
 
         // bit 0 should be 1 (high intensity)
         assert_eq!(bits & 1, 1, "Bit 0 should be 1");
@@ -2921,7 +2868,7 @@ mod tests {
         let mut results = Vec::new();
 
         for quad in &detections {
-            if let Some(bits) = sample_grid(&img, &arena, quad, &decoder, 20.0)
+            if let Some(bits) = sample_grid_generic(&img, &arena, quad, &decoder)
                 && let Some((id, hamming, _rot)) = decoder.decode(bits)
             {
                 results.push((id, hamming));

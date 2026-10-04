@@ -375,13 +375,12 @@ const SUBPIX_EPS: f64 = 0.005;
 /// At an L-corner the two estimates are combined by inverse covariance when they agree
 /// ([`fuse_corner`]); both covariances are statistically calibrated. At an X-junction
 /// ([`junction_is_x`]: AprilGrid connectors) the edge lines carry the photometric edge offset
-/// and the junction point does not, so the junction estimate stands alone. Fusion needs a
-/// `rectified` image: under lens distortion the edges are curves.
+/// and the junction point does not, so the junction estimate stands alone. Fusion assumes a
+/// pinhole image, where the edges are straight; the decoder only calls this on one.
 pub(crate) fn subpix_marker_corners(
     img: &ImageView,
     seed: [[f64; 2]; 4],
     cells: usize,
-    rectified: bool,
 ) -> ([[f64; 2]; 4], u8) {
     let side = (0..4)
         .map(|j| {
@@ -426,11 +425,7 @@ pub(crate) fn subpix_marker_corners(
             }
         }
     }
-    // Fuse each L-corner with the intersection of its two whole-edge lines. Under lens
-    // distortion the marker's edges are curves, not lines.
-    if !rectified {
-        return (out, refined_bits);
-    }
+    // Fuse each L-corner with the intersection of its two whole-edge lines.
     let cell = side / cells.max(1) as f64;
     // The band spans the blur and the refined corners' error, and stays within half a cell.
     let half = (0.5 * cell).clamp(2.0, EDGE_MAX_HALF_PX);
@@ -1147,7 +1142,7 @@ mod subpix_tests {
         let truth = [[16.0, 16.0], [48.0, 16.0], [48.0, 48.0], [16.0, 48.0]];
         let mut seed = truth;
         seed[2] = [48.0, 44.0];
-        let (got, bits) = subpix_marker_corners(&img, seed, 8, true);
+        let (got, bits) = subpix_marker_corners(&img, seed, 8);
         assert_eq!(bits, 0b1111);
         for (g, t) in got.iter().zip(&truth) {
             let d = (g[0] - t[0]).hypot(g[1] - t[1]);
