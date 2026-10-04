@@ -1603,6 +1603,8 @@
       
         
       
+        
+      
     
     
     
@@ -1828,6 +1830,34 @@
     
   
     Real-image competitiveness: Liu4K + EuRoC (2026-10-01)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../benchmarking/euroc_sota_20261004/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    EuRoC, the real-data benchmark: SOTA scoreboard (2026-10-04)
   
 
     
@@ -2172,6 +2202,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#2026-10-04-euroc-the-only-real-data-benchmark-scorer-connectivity-clipped-and-gross-corners" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2026-10-04 — EuRoC, the only real-data benchmark: scorer, connectivity, clipped and gross corners
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#re-attempt-watch-outs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2215,7 +2256,7 @@
 
 <h1 id="recall-quad-extraction-icra-lessons">Recall, quad extraction &amp; ICRA — lessons</h1>
 <p><strong>Status:</strong> ACTIVE — the 2026-07 issues are CLOSED (fixes shipped; <code>max_recall_adaptive</code> removed); the <a href="#2026-10-01-real-image-recall-liu4k-euroc-the-segmentation-model">2026-10-01 real-image recall</a> findings are open.
-<strong>Last updated:</strong> 2026-10-01
+<strong>Last updated:</strong> 2026-10-04
 <strong>Owning code:</strong> quad extraction (<code>extract_quads_soa</code> / <code>extract_quads_soa_with_camera</code> and <code>pixel_count_descending_order</code> in the quad module), the AdaptivePpb extraction router (<code>quad.extraction_policy</code>), the decoder Hamming/bit-sample path, and the shipped profiles under <code>crates/locus-core/profiles/</code> (<code>standard.json</code>, <code>high_accuracy.json</code>).</p>
 <h2 id="tldr">TL;DR</h2>
 <p>Extraction-mode choice, not funnel/threshold/refinement knobs, governs recall vs. pose-tail trade-offs: EdLines wins the clean-render pose tail but culls ~50% of dense small-tag candidates; ContourRdp wins crude-render recall but destroys the render-tag rotation tail. No single static <code>(extraction, refinement)</code> pair wins both regimes — the durable fix is PPB-based adaptive routing (<code>AdaptivePpb</code>, threshold 2.5), which lets <code>high_accuracy</code> recover ICRA recall (+14.2 pt) while staying byte-identical on render-tag. A separate quad-truncation bug (truncating candidates by pixel_count <em>before</em> geometric filtering) silently dropped tag-sized candidates behind large background blobs; the fix moved truncation caller-side, post-filter. The <code>max_recall_adaptive</code> profile validated this routing but was later removed in the config consolidation — its behavior lives on inside <code>high_accuracy</code>'s AdaptivePpb block.</p>
@@ -2297,6 +2338,115 @@ off): ICRA forward −0.36 pp recall and +0.019 px corner RMSE (0.280 → 0.298)
 <code>tag16h5</code> precision (RC2); serial latency (L1). Sharpening, and PR #384's shoot-limited
 variant, are a crutch for RC1 on the ContourRdp route; on Liu4K, sharpening off is best
 once the threshold model is fixed.</p>
+<h2 id="2026-10-04-euroc-the-only-real-data-benchmark-scorer-connectivity-clipped-and-gross-corners">2026-10-04 — EuRoC, the only real-data benchmark: scorer, connectivity, clipped and gross corners</h2>
+<p><strong>Status:</strong> SHIPPED in <code>standard</code>: 4-connectivity and no blob gates; the gross-corner repair
+and the frame-clipping rejection are in every profile. OPEN: a cut below the local
+midpoint, and a merge-robust quad seed. Numbers:
+<a href="../../benchmarking/euroc_sota_20261004/"><code>benchmarking/euroc_sota_20261004.md</code></a>.</p>
+<p><strong>1. Fix the measurement first.</strong> EuRoC has no per-corner truth: its scorer fits a board
+homography to the pooled detections after undistorting with the published camera model.
+Three defects made a correct detector look wrong, and every detector shows the same
+residual curve:
+- <strong>Lens model range:</strong> the radtan model fails beyond r ≈ 380 px from the principal point
+  (radial residual −1.5, −4.9, −10.4 px in the 380–400, 400–420 and 420–440 px bands).
+- <strong>Error space:</strong> errors were measured after undistortion, which stretches the periphery
+  1.5–2×.
+- <strong>Reference pool:</strong> the pool included OpenCV NONE/SUBPIX corners, which sit inset on the
+  2-bit border, so the verdict changed with which runs shared the directory.</p>
+<p>Judge only inside the model's radius, in image pixels, against a pool of self-consistent
+detectors. Locus's "precision loss" (417 FP) was nearly all reference error: 12 of 12 and 16
+of 16 inspected cases.</p>
+<p><strong>2. Connectivity is topology, not tuning.</strong> AprilGrid connector squares touch every tag at
+a corner. 8-connectivity links any diagonal contact, so the whole board becomes one
+component (recall 20 %). 4-connectivity separates them (86 %), and it is AprilTag 3's choice
+for dark regions. The cost is markers of about 2 px per cell: their one-pixel ring connects only
+diagonally. A local rule linking diagonals only through thin structures (dark-pixel count in
+each half of the 3 × 3 neighbourhood) cannot separate the two regimes:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Rule</th>
+<th style="text-align: right;">EuRoC recall</th>
+<th style="text-align: right;">ChArUco 16 px frame (markers kept)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">4-connectivity</td>
+<td style="text-align: right;">86.8 %</td>
+<td style="text-align: right;">3 / 14</td>
+</tr>
+<tr>
+<td style="text-align: left;">k = 2</td>
+<td style="text-align: right;">86.4 %</td>
+<td style="text-align: right;">7 / 14</td>
+</tr>
+<tr>
+<td style="text-align: left;">k = 3</td>
+<td style="text-align: right;">55 %</td>
+<td style="text-align: right;">14 / 14</td>
+</tr>
+</tbody>
+</table>
+<p>Not shipped.</p>
+<p><strong>3. A corner contact is a saddle at exactly half the local range.</strong> For any symmetric PSF,
+the blurred X-junction where two dark squares touch reads 50 %. A midpoint threshold resolves
+it by noise, so blurred frames still fuse under 4-connectivity. Cutting at a fraction <code>f</code> of
+the local range lifts EuRoC recall:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;"><code>f</code></th>
+<th style="text-align: right;">0.50</th>
+<th style="text-align: right;">0.42</th>
+<th style="text-align: right;">0.40</th>
+<th style="text-align: right;">0.35</th>
+<th style="text-align: right;">0.30</th>
+<th style="text-align: right;">0.25</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">EuRoC recall</td>
+<td style="text-align: right;">86 %</td>
+<td style="text-align: right;">95 %</td>
+<td style="text-align: right;">96 %</td>
+<td style="text-align: right;">98 %</td>
+<td style="text-align: right;">97 %</td>
+<td style="text-align: right;">88 % (thin features vanish)</td>
+</tr>
+</tbody>
+</table>
+<p>It also lifts Liu4K 37 → 59 % and low_key 66 → 100 %. With the same local min/max, a lower cut
+can only shrink or split dark regions, never merge them. It still costs render-tag recall
+(640: 100 → 94–98 %, tag16h5 98 → 93–96 %): a tag's border then merges differently with the
+background, and the quad reducer picks a vertex 17 px off. <strong>Open:</strong> ship the cut once quad
+seeds are robust to merged components.</p>
+<p><strong>4. Blob gates assume a filled blob.</strong> <code>min_fill_ratio</code>, <code>min_density</code> and <code>max_elongation</code>
+reject markers whose black cells are wider than the tile neighbourhood (hollow rings: 4K
+tags of 250–370 px) and markers merged with structure. With them off, Kannala–Brandt recall goes
+88 → 96 % and ICRA circle 83 → 85 %, with no precision cost (the ring check and code budget
+judge candidates).</p>
+<p><strong>5. Reporting a corner the image does not show is a false positive.</strong> A marker cut by the
+frame reports the frame edge as a side. Reject it when a corner is outside the image, or a
+side's middle is within the smallest corner window's reach (3 px) of the border. A pure
+distance-to-border rule (OpenCV's <code>minDistanceToBorder</code>) would reject correct corners: a
+tag16h5 corner 0.5 px from the edge is within 0.1 px of the truth.</p>
+<p><strong>6. Gross seeds survive because every later stage abstains.</strong>
+- <strong>Mechanism:</strong> the junction model rejects a seed 4–5 px off and keeps it, and fusion needs
+  all four junctions. Re-placing a rejected corner from its two edges (fitted on the halves next
+  to the good neighbours, iterated, confirmed by the junction model) fixes them.
+- <strong>Open:</strong> a seed that lands on a <em>different</em> genuine junction (scene_0004's quiet-zone corner,
+  9.5 px off) still needs a marker-model refit.
+- <strong>Snapshots that average pose over few tags are noisy:</strong> repairing one of two gross corners
+  on a tag can raise its pose error (2.4° → 3.4°) because the two errors partly cancelled.</p>
+<p><strong>Negative results:</strong>
+- <strong>Kalibr's 2-bit border decoded with its true lattice</strong> (sample points scaled by
+  <code>(d+2)/(d+2b)</code>) gave more false positives (66 → 256) and worse LOO than the 0.9 scale retry.
+- <strong>Declaring the camera model</strong> sends Locus through the separate <code>non_rectified</code> camera path:
+  EuRoC recall 86 → 66 %, Hub Brown–Conrady corners 0.07 → 0.36 px. Distortion over a 40–60 px
+  tag bends an edge by only 0.1–0.4 px, which the marker calibration's bow terms absorb. The
+  camera model belongs in pose. Deferred to the next release.</p>
 <h2 id="re-attempt-watch-outs">Re-attempt / watch-outs</h2>
 <ul>
 <li>Do <strong>not</strong> reintroduce a standalone <code>max_recall_adaptive</code> profile — its <code>AdaptivePpb</code> block already lives in <code>high_accuracy</code>. Any revival must justify why the shared router isn't sufficient.</li>
