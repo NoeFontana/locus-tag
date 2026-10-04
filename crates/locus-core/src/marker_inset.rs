@@ -166,15 +166,24 @@ pub(crate) fn calibrate_marker_corners(
     // Image point of layout coordinates (u, v) ∈ [0, N]².
     let at = |u: f64, v: f64| h.project([2.0 * u / n - 1.0, 2.0 * v / n - 1.0]);
     // Every sample lies within one cell of the layout square (the quiet-zone reads at half a
-    // cell out, profiles reach half a cell past the outline). The projective image of that
-    // square is a convex quad, so its corners bound every sample.
-    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
-    for (u, v) in [
+    // cell out, profiles reach half a cell past the outline). While the projective depth `w`
+    // keeps one sign over that padded square (it is affine in the layout coordinates, so its
+    // corners decide), the square's image is a convex quad and its corners bound every sample.
+    // A vanishing line crossing the padding (a strongly foreshortened quad) breaks that, and so
+    // does a non-finite projection; both take the checked sampler.
+    let padded = [
         (-1.0, -1.0),
         (n + 1.0, -1.0),
         (n + 1.0, n + 1.0),
         (-1.0, n + 1.0),
-    ] {
+    ];
+    let depth = |(u, v): (f64, f64)| {
+        let (x, y) = (2.0 * u / n - 1.0, 2.0 * v / n - 1.0);
+        h.h[(2, 0)] * x + h.h[(2, 1)] * y + h.h[(2, 2)]
+    };
+    let convex = padded.iter().all(|&c| depth(c) > 0.0) || padded.iter().all(|&c| depth(c) < 0.0);
+    let (mut lo, mut hi) = ([f64::INFINITY; 2], [f64::NEG_INFINITY; 2]);
+    for &(u, v) in &padded {
         let p = at(u, v);
         for k in 0..2 {
             lo[k] = lo[k].min(p[k]);
@@ -182,7 +191,8 @@ pub(crate) fn calibrate_marker_corners(
         }
     }
     #[allow(clippy::cast_precision_loss)]
-    let inside = lo[0] >= 1.0
+    let inside = convex
+        && lo[0] >= 1.0
         && lo[1] >= 1.0
         && hi[0] <= img.width as f64 - 2.0
         && hi[1] <= img.height as f64 - 2.0;
@@ -191,8 +201,10 @@ pub(crate) fn calibrate_marker_corners(
             unsafe_code,
             reason = "the bounds of every sample are checked once per marker above, so the per-sample checks of the safe sampler are redundant on this hot path"
         )]
-        // SAFETY: every sample point lies in `[1, width − 2] × [1, height − 2]` (bounded above),
-        // so after the sampler's −0.5 shift both bilinear taps are valid pixel indices.
+        // SAFETY: `w` keeps one sign over the padded layout square, so its image is the convex
+        // quad of its four corners, which lie in `[1, width − 2] × [1, height − 2]` (checked
+        // above, finite since NaN fails every comparison). Every sample point is inside that
+        // quad, so after the sampler's −0.5 shift both bilinear taps are valid pixel indices.
         calibrate_with(
             &|x, y| unsafe { img.sample_bilinear_unchecked(x, y) },
             &at,

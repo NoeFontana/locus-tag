@@ -478,6 +478,11 @@ fn recovery_window(bit_count: usize, num_codes: usize) -> u32 {
     window
 }
 
+/// Capacity of the per-decoder scratch arrays: one decoder per tag family at most (the
+/// detector registers each family once).
+pub(crate) const MAX_DECODERS: usize = 8;
+const _: () = assert!(crate::config::TagFamily::all().len() <= MAX_DECODERS);
+
 /// Border-ring cells of the largest supported family: `4·(d + 1)` for a `d×d` payload.
 const MAX_RING_CELLS: usize = 4 * (8 + 1);
 
@@ -1215,12 +1220,15 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
     let mut accepted: Option<(u32, u8, u64, u32)> = None;
     // Ring evidence on the reported (unscaled) quad, at most once per decoder.
     let h_report = Homography::square_to_quad(&ideal);
-    let mut ring_cache = [None::<bool>; 8];
+    let mut ring_cache = [None::<bool>; MAX_DECODERS];
 
     // Resolve `max_hamming_error` once per registered decoder; see the
     // matching block in `decode_batch_soa_generic` for rationale.
-    debug_assert!(decoders.len() <= 8, "more than 8 registered decoders");
-    let mut decoder_max_h_buf = [0u32; 8];
+    debug_assert!(
+        decoders.len() <= MAX_DECODERS,
+        "more decoders than tag families"
+    );
+    let mut decoder_max_h_buf = [0u32; MAX_DECODERS];
     for (idx, d) in decoders.iter().enumerate() {
         decoder_max_h_buf[idx] = config
             .max_hamming_error
@@ -1496,30 +1504,23 @@ pub(crate) fn decode_batch_soa_generic(
     use crate::batch::CandidateState;
     use rayon::prelude::*;
 
-    // Cells across a marker side (payload plus the one-cell black border), which sizes the
-    // `decoder.corner_subpix` window. With several families the finest grid is the
-    // conservative choice: it gives the smallest cell, so the window stays inside the border.
-    let subpix_cells = decoders
-        .iter()
-        .map(|d| d.dimension() + 2)
-        .max()
-        .unwrap_or(8);
-
     // Resolve `max_hamming_error` once per registered decoder so the
     // inner per-scale per-decoder loop reads a plain `u32`. `None` in
     // the config means "use family defaults"; an explicit `Some(n)`
     // overrides every family uniformly. The fixed-size array keeps this
-    // stack-allocated; `TagFamily` has 5 variants and the detector
-    // registers at most one decoder per family.
-    debug_assert!(decoders.len() <= 8, "more than 8 registered decoders");
-    let mut decoder_max_h_buf = [0u32; 8];
+    // stack-allocated; the detector registers at most one decoder per family.
+    debug_assert!(
+        decoders.len() <= MAX_DECODERS,
+        "more decoders than tag families"
+    );
+    let mut decoder_max_h_buf = [0u32; MAX_DECODERS];
     for (idx, d) in decoders.iter().enumerate() {
         decoder_max_h_buf[idx] = config
             .max_hamming_error
             .unwrap_or_else(|| d.default_max_hamming());
     }
     let decoder_max_h = &decoder_max_h_buf[..decoders.len()];
-    let mut decoder_ring_rate_buf = [0.0f32; 8];
+    let mut decoder_ring_rate_buf = [0.0f32; MAX_DECODERS];
     for (idx, d) in decoders.iter().enumerate() {
         decoder_ring_rate_buf[idx] = ring_error_rate(config, decoder_max_h[idx], d.bit_count());
     }
@@ -1604,6 +1605,9 @@ pub(crate) fn decode_batch_soa_generic(
                 let input_corners: [Point2f; 4] = *corners_slot;
                 let input_homography: Matrix3x3 = *h_slot;
 
+                // Cells across the matched family's outline (payload plus the one-cell border):
+                // the layout the sub-pixel stage and the photometric calibration read.
+                let mut cells = 0usize;
                 let (state, id, rot, payload, error_rate, refined_corners) = WORKSPACE_ARENA
                     .with_borrow_mut(|arena| {
                         arena.reset();
@@ -1643,7 +1647,7 @@ pub(crate) fn decode_batch_soa_generic(
                         let mut best_overall_code = None;
                         // Ring evidence is evaluated on the reported (unscaled) quad, so it
                         // depends only on the decoder: compute it at most once per decoder.
-                        let mut ring_cache = [None::<bool>; 8];
+                        let mut ring_cache = [None::<bool>; MAX_DECODERS];
 
                         let scales = [1.0, 0.9, 1.1];
                         let center = [
@@ -1755,6 +1759,7 @@ pub(crate) fn decode_batch_soa_generic(
                                     best_code = Some(code);
                                 }
                                 let decoder = decoders[decoder_idx].as_ref();
+                                cells = decoder.dimension() + 2;
 
                                 // Always perform ERF refinement for finalists if requested
                                 if config.refinement_mode
@@ -2004,6 +2009,7 @@ pub(crate) fn decode_batch_soa_generic(
                                                             decoder_ring_rate[decoder_idx],
                                                         )
                                                     {
+                                                        cells = decoder.dimension() + 2;
                                                         return (
                                                             CandidateState::Valid,
                                                             id,
@@ -2094,14 +2100,12 @@ pub(crate) fn decode_batch_soa_generic(
                                                                                 [decoder_idx],
                                                                         )
                                                                     {
-                                                                        best_id = id;
-                                                                        best_rot = rot;
-                                                                        best_code = Some(code);
-
+                                                                        cells =
+                                                                            decoder.dimension() + 2;
                                                                         return (
                                                                             CandidateState::Valid,
-                                                                            best_id,
-                                                                            best_rot,
+                                                                            id,
+                                                                            rot,
                                                                             code,
                                                                             best_h as f32,
                                                                             Some(current_corners),
@@ -2169,19 +2173,12 @@ pub(crate) fn decode_batch_soa_generic(
                     let seed = core::array::from_fn(|j| {
                         [f64::from(corners_slot[j].x), f64::from(corners_slot[j].y)]
                     });
-                    let (mut refined, bits) = crate::refinement::subpix_marker_corners(
-                        img,
-                        seed,
-                        subpix_cells,
-                        rectified,
-                    );
+                    let (mut refined, bits) =
+                        crate::refinement::subpix_marker_corners(img, seed, cells, rectified);
                     // Remove the photometric inset the decoded marker's bit edges measure.
                     if rectified
-                        && let Some(calibrated) = crate::marker_inset::calibrate_marker_corners(
-                            img,
-                            refined,
-                            subpix_cells,
-                        )
+                        && let Some(calibrated) =
+                            crate::marker_inset::calibrate_marker_corners(img, refined, cells)
                     {
                         refined = calibrated;
                     }
@@ -2201,7 +2198,8 @@ pub(crate) fn decode_batch_soa_generic(
                 }
 
                 // Apply rotation reorder, if any.
-                if state == CandidateState::Valid && rot > 0 {
+                let valid = *status_slot == CandidateState::Valid;
+                if valid && rot > 0 {
                     let mut temp_corners = [Point2f::default(); 4];
                     for (j, item) in temp_corners.iter_mut().enumerate() {
                         let src_idx = (j + usize::from(rot)) % 4;
@@ -2222,7 +2220,7 @@ pub(crate) fn decode_batch_soa_generic(
                 // projects saddle predictions through `batch.homographies[i]`.
                 // The stale-`h_slot` failure mode is the same class as
                 // `memory/project_refine_saddle_noop.md`.
-                if state == CandidateState::Valid && (refined || subpix || rot > 0) {
+                if valid && (refined || subpix || rot > 0) {
                     let dst = [
                         [f64::from(corners_slot[0].x), f64::from(corners_slot[0].y)],
                         [f64::from(corners_slot[1].x), f64::from(corners_slot[1].y)],

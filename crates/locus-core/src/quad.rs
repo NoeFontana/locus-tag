@@ -199,18 +199,13 @@ pub fn extract_quads_soa(
                 y: corner.y as f32,
             };
         }
-        // Write per-corner 2×2 covariances (4 floats each, 16 total per candidate).
-        if covs.is_empty() {
-            batch.corner_covariances[i].fill(0.0);
-            batch.corner_refined[i] = 0;
-        } else {
-            for (chunk, cov) in batch.corner_covariances[i]
-                .chunks_exact_mut(4)
-                .zip(covs.iter())
-            {
-                chunk.copy_from_slice(cov);
-            }
+        // Per-corner 2×2 covariances (4 floats each, 16 per candidate). The corner-class bits
+        // belong to the decoder's sub-pixel stage; clear them so a slot never carries bits from
+        // an earlier frame (the distortion-aware decoder does not write them).
+        for (chunk, cov) in batch.corner_covariances[i].chunks_exact_mut(4).zip(&covs) {
+            chunk.copy_from_slice(cov);
         }
+        batch.corner_refined[i] = 0;
         if let Some(ref mut u) = unrefined {
             u.push(unrefined_pts);
         }
@@ -597,17 +592,10 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
                 y: corner.y as f32,
             };
         }
-        if covs.is_empty() {
-            batch.corner_covariances[i].fill(0.0);
-            batch.corner_refined[i] = 0;
-        } else {
-            for (chunk, cov) in batch.corner_covariances[i]
-                .chunks_exact_mut(4)
-                .zip(covs.iter())
-            {
-                chunk.copy_from_slice(cov);
-            }
+        for (chunk, cov) in batch.corner_covariances[i].chunks_exact_mut(4).zip(&covs) {
+            chunk.copy_from_slice(cov);
         }
+        batch.corner_refined[i] = 0;
         if let Some(ref mut u) = unrefined {
             u.push(unrefined_pts);
         }

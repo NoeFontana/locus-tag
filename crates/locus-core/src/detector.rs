@@ -1026,6 +1026,15 @@ impl LocusEngine {
         decoders: Vec<Box<dyn TagDecoder + Send + Sync>>,
         pool_size: usize,
     ) -> Self {
+        let mut decoders = decoders;
+        if decoders.len() > crate::decoder::MAX_DECODERS {
+            tracing::warn!(
+                registered = decoders.len(),
+                kept = crate::decoder::MAX_DECODERS,
+                "more decoders than tag families; extra decoders ignored"
+            );
+            decoders.truncate(crate::decoder::MAX_DECODERS);
+        }
         let capacity = pool_size.max(1);
         let pool = crossbeam_queue::ArrayQueue::new(capacity);
         for _ in 0..pool_size {
@@ -1174,9 +1183,11 @@ impl LocusEngine {
     /// Clear all decoders and replace them with the given tag families.
     pub fn set_families(&mut self, families: &[crate::config::TagFamily]) {
         self.decoders.clear();
-        for &family in families {
-            self.decoders
-                .push(crate::decoder::family_to_decoder(family));
+        for (k, &family) in families.iter().enumerate() {
+            if !families[..k].contains(&family) {
+                self.decoders
+                    .push(crate::decoder::family_to_decoder(family));
+            }
         }
         self.min_outer_dim = compute_min_outer_dim(&self.decoders);
     }
