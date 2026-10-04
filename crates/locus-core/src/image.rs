@@ -127,11 +127,28 @@ impl<'a> ImageView<'a> {
         v0 * (1.0 - dy) + v1 * dy
     }
 
+    /// Whether every point of the box `[lo, hi]` (Locus pixel-centre coordinates) may go to
+    /// [`Self::sample_bilinear_unchecked`]. Keeps a margin of half a pixel beyond the
+    /// sampler's contract on each side; NaN bounds fail.
+    #[must_use]
+    #[allow(clippy::cast_precision_loss)]
+    pub fn bilinear_box_is_safe(&self, lo: [f64; 2], hi: [f64; 2]) -> bool {
+        lo[0] >= 1.0
+            && lo[1] >= 1.0
+            && hi[0] <= self.width as f64 - 2.0
+            && hi[1] <= self.height as f64 - 2.0
+    }
+
     /// Sample pixel value with bilinear interpolation at sub-pixel coordinates without bounds checking.
     ///
+    /// Same convention and result as [`Self::sample_bilinear`] inside the image: pixel `(i, j)`
+    /// has its centre at `(i + 0.5, j + 0.5)`.
+    ///
     /// # Safety
-    /// Caller must ensure `0.0 <= x <= width - 1.001` and `0.0 <= y <= height - 1.001`
-    /// such that floor(x), floor(x)+1, floor(y), floor(y)+1 are all valid indices.
+    /// Caller must ensure `0.5 <= x < width - 0.5` and `0.5 <= y < height - 0.5` (finite), so
+    /// the two bilinear taps `floor(x - 0.5)` and `floor(x - 0.5) + 1` (likewise in `y`) are
+    /// valid pixel indices. Every point of a box accepted by [`Self::bilinear_box_is_safe`]
+    /// satisfies this.
     #[inline(always)]
     #[must_use]
     pub unsafe fn sample_bilinear_unchecked(&self, x: f64, y: f64) -> f64 {
