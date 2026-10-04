@@ -3,7 +3,7 @@
 Usage::
 
     python -m tools.bench.sota.run locus <family> <profile> <overrides-json> <list> <out> [reps]
-    python -m tools.bench.sota.run apriltag3 <family> <list> <out> <threads>
+    python -m tools.bench.sota.run apriltag3 <family> <list> <out> <threads> [reps]
 
 ``overrides-json`` merges into the profile; its optional ``"detector"`` object holds per-call
 ``Detector`` options instead (e.g. ``{"detector": {"decimation": 2}}``).
@@ -11,11 +11,17 @@ Usage::
 Image decode is outside every timer; ``ms`` is the best of ``reps`` ``detect()``
 calls after one untimed warm-up call. Threads are controlled by the caller
 (``RAYON_NUM_THREADS`` for Locus, ``nthreads`` for AprilTag 3).
+
+The first record of a Locus run carries ``locus_extension`` (path and modification time of
+the imported native module), so a run can be traced to the build it measured.
 """
 
 from __future__ import annotations
 
+import datetime
+import importlib
 import json
+import os
 import sys
 import time
 from typing import Any, cast
@@ -23,7 +29,8 @@ from typing import Any, cast
 import cv2
 import numpy as np
 
-from tools.bench.utils import _APRILTAG_CORNER_TO_GT as APRILTAG_TO_OPENCV_ORDER  # noqa: PLC2701
+# numpy-only: `apriltag3` runs without the Locus wheel.
+from tools.bench.matching import APRILTAG_CORNER_TO_GT as APRILTAG_TO_OPENCV_ORDER
 
 
 def merge(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
@@ -48,6 +55,13 @@ def _paths(list_file: str) -> list[str]:
         return [line.strip() for line in f if line.strip()]
 
 
+def locus_extension() -> dict[str, str]:
+    """Path and modification time (UTC, ISO 8601) of the imported Locus native module."""
+    path = importlib.import_module("locus.locus").__file__ or ""
+    mtime = datetime.datetime.fromtimestamp(os.path.getmtime(path), tz=datetime.timezone.utc)
+    return {"path": path, "mtime": mtime.isoformat(timespec="seconds")}
+
+
 def run_locus(
     family: str, profile: str, overrides: str, list_file: str, out: str, reps: int = 2
 ) -> None:
@@ -63,6 +77,7 @@ def run_locus(
         families=[getattr(locus.TagFamily, family)],
         **options,
     )
+    extension: dict[str, str] | None = locus_extension()
     warmed = False
     with open(out, "w") as f:
         for p in _paths(list_file):
@@ -84,10 +99,13 @@ def run_locus(
                 "corners": corners.round(4).tolist(),
                 "convention": "locus",
             }
+            if extension is not None:
+                rec["locus_extension"] = extension
+                extension = None
             f.write(json.dumps(rec) + "\n")
 
 
-def run_apriltag3(family: str, list_file: str, out: str, threads: int) -> None:
+def run_apriltag3(family: str, list_file: str, out: str, threads: int, reps: int = 2) -> None:
     from pupil_apriltags import Detector  # noqa: PLC0415
 
     det = Detector(families=family, nthreads=threads, quad_decimate=1.0, refine_edges=True)
@@ -98,13 +116,15 @@ def run_apriltag3(family: str, list_file: str, out: str, threads: int) -> None:
             if not warmed:
                 det.detect(img)
                 warmed = True
-            t0 = time.perf_counter()
-            # pupil_apriltags' stub types detect() as a single Detection; it returns a list.
-            res = cast(list[Any], det.detect(img))
-            ms = (time.perf_counter() - t0) * 1e3
+            best, res = float("inf"), []
+            for _ in range(max(1, reps)):
+                t0 = time.perf_counter()
+                # pupil_apriltags' stub types detect() as a single Detection; it returns a list.
+                res = cast(list[Any], det.detect(img))
+                best = min(best, (time.perf_counter() - t0) * 1e3)
             rec = {
                 "image": p,
-                "ms": ms,
+                "ms": best,
                 "ids": [int(r.tag_id) for r in res],
                 "corners": [
                     np.asarray(r.corners)[APRILTAG_TO_OPENCV_ORDER].round(4).tolist() for r in res
@@ -120,8 +140,8 @@ def main(argv: list[str]) -> None:
         family, profile, overrides, list_file, out, *reps = rest
         run_locus(family, profile, overrides, list_file, out, int(reps[0]) if reps else 2)
     elif kind == "apriltag3":
-        family, list_file, out, threads = rest
-        run_apriltag3(family, list_file, out, int(threads))
+        family, list_file, out, threads, *reps = rest
+        run_apriltag3(family, list_file, out, int(threads), int(reps[0]) if reps else 2)
     else:
         raise SystemExit(f"unknown runner {kind!r}")
 

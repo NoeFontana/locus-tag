@@ -7,21 +7,32 @@ fixed pixel threshold. Before consolidation the greedy loop lived in two places
 with the threshold hard-coded twice; they are now one function so recall/precision
 can never silently diverge between the printed summary and the emitted records.
 
-Kept numpy-only (no ``locus`` / ``cv2`` import) so it can be imported from
-``utils`` without an import cycle — the ``TagGroundTruth`` annotation is resolved
-lazily under ``TYPE_CHECKING`` and the matcher only duck-types ``.tag_id`` /
-``.corners``.
+Kept numpy-only (no ``locus`` / ``cv2`` / ``pupil_apriltags`` import): it also owns the
+ground-truth record :class:`TagGroundTruth` and the AprilTag 3 corner order, so scorers and
+reference runners (``tools.bench.sota``, ``tools.bench.liu4k``) need neither the Locus wheel
+nor the other detectors. ``utils`` re-exports both.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 import numpy as np
 
-if TYPE_CHECKING:
-    from tools.bench.utils import TagGroundTruth
+# Fixed permutation mapping pupil_apriltags' corner order to the GT / Locus /
+# OpenCV convention (empirically verified sub-pixel across all detections).
+APRILTAG_CORNER_TO_GT = [1, 0, 3, 2]
+
+
+@dataclass
+class TagGroundTruth:
+    tag_id: int
+    corners: np.ndarray  # 4x2 float32
+    fully_visible: bool = True
+    # 6-DOF pose if available: [tx, ty, tz, qx, qy, qz, qw] (Scalar-Last)
+    pose: np.ndarray | None = None
+
 
 # Detection ↔ GT pairing threshold in pixels. A detection whose center lands
 # within this distance of a same-id GT center counts as a true positive.

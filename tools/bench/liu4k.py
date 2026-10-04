@@ -22,7 +22,7 @@ from typing import Any
 import numpy as np
 
 from tools.bench.dataset_registry import fetch, load_manifest
-from tools.bench.utils import TagGroundTruth
+from tools.bench.matching import TagGroundTruth
 
 LIU4K_CACHE_DIR = Path("tests/data/liu4k")
 LIU4K_SUBDIR = "liu4k_markers_1024"
@@ -88,36 +88,44 @@ def _center(corners: np.ndarray) -> np.ndarray:
     return np.asarray(corners, dtype=np.float64).reshape(4, 2).mean(axis=0)
 
 
+def first_match(
+    det_ids: list[int] | None,
+    det_corners: np.ndarray,
+    gt_tags: list[TagGroundTruth],
+    threshold: float = LIU4K_MATCH_THRESHOLD_PX,
+) -> list[tuple[int, int]]:
+    """``(det_idx, gt_idx)`` pairs exactly as aruco_nano's ``evaluateDetection``.
+
+    For each detection in order, the *first* not-yet-matched GT marker with the same id
+    whose centre is within ``threshold`` pixels (``<=``) is its match. Pass ``det_ids=None``
+    for the id-agnostic quad variant, which drops the id condition (same first-match rule,
+    same threshold).
+    """
+    matched = [False] * len(gt_tags)
+    gt_centers = [_center(g.corners) for g in gt_tags]
+    pairs: list[tuple[int, int]] = []
+    for k in range(len(det_corners)):
+        c = _center(det_corners[k])
+        for j, g in enumerate(gt_tags):
+            if matched[j] or (det_ids is not None and int(det_ids[k]) != g.tag_id):
+                continue
+            if float(np.linalg.norm(c - gt_centers[j])) <= threshold:
+                matched[j] = True
+                pairs.append((k, j))
+                break
+    return pairs
+
+
 def score_detections(
     det_ids: list[int] | None,
     det_corners: np.ndarray,
     gt_tags: list[TagGroundTruth],
     threshold: float = LIU4K_MATCH_THRESHOLD_PX,
 ) -> tuple[int, int, int]:
-    """Return ``(tp, fp, fn)`` exactly as aruco_nano's ``evaluateDetection``.
-
-    For each detection in order, the *first* not-yet-matched GT marker with the same id
-    whose centre is within ``threshold`` pixels (``<=``) is a TP; a detection with no such
-    GT is a FP; ``fn = n_gt - tp``. Pass ``det_ids=None`` for the id-agnostic quad variant,
-    which drops the id condition (same first-match rule, same threshold).
-    """
-    matched = [False] * len(gt_tags)
-    gt_centers = [_center(g.corners) for g in gt_tags]
-    tp = fp = 0
-    for k in range(len(det_corners)):
-        c = _center(det_corners[k])
-        hit = False
-        for j, g in enumerate(gt_tags):
-            if matched[j] or (det_ids is not None and int(det_ids[k]) != g.tag_id):
-                continue
-            if float(np.linalg.norm(c - gt_centers[j])) <= threshold:
-                matched[j] = True
-                tp += 1
-                hit = True
-                break
-        if not hit:
-            fp += 1
-    return tp, fp, len(gt_tags) - tp
+    """Return ``(tp, fp, fn)`` of :func:`first_match`: a detection without a match is a FP;
+    ``fn = n_gt - tp``."""
+    tp = len(first_match(det_ids, det_corners, gt_tags, threshold))
+    return tp, len(det_corners) - tp, len(gt_tags) - tp
 
 
 @dataclass

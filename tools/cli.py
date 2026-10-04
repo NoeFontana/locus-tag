@@ -1,9 +1,12 @@
 import json
 import time
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import typer
+
+if TYPE_CHECKING:
+    import locus
 
 try:
     import rerun as rr
@@ -13,6 +16,20 @@ except ImportError:
 _RERUN_INSTALL_HINT = (
     "Rerun SDK not installed. Run `uv add rerun-sdk` or install with the `bench` group."
 )
+
+
+def _tag_family(name: str) -> "locus.TagFamily":
+    """The ``locus.TagFamily`` named ``name`` (full name or short alias); exits if unknown."""
+    from tools.bench.utils import FamilyMapper, resolve_tag_family
+
+    try:
+        families = FamilyMapper.to_locus(resolve_tag_family(name))
+    except ValueError as e:
+        typer.echo(f"Error: {e}", err=True)
+        raise typer.Exit(code=1) from e
+    assert families is not None
+    return families[0]
+
 
 app = typer.Typer(help="Locus Developer CLI")
 bench_app = typer.Typer(help="Locus Unified Benchmarking")
@@ -340,8 +357,14 @@ def bench_real(
     rerun_addr: str = typer.Option("127.0.0.1:9876", help="Rerun server address"),
     rerun_serve: bool = typer.Option(False, help="Serve Rerun web viewer"),
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
-    refinement: str = typer.Option("Erf", help="Refinement mode (None, Edge, Erf, Gwlf)"),
-    tile_size: int = typer.Option(8, help="Threshold tile size"),
+    refinement: str | None = typer.Option(
+        None,
+        help="Override decoder.refinement_mode (None, Erf, Gwlf); "
+        "default: keep the standard profile's value.",
+    ),
+    tile_size: int | None = typer.Option(
+        None, help="Override threshold.tile_size (default: keep the standard profile's value)."
+    ),
     threshold_mode: str | None = typer.Option(
         None,
         help="Override threshold.mode ('TileMidExtreme' | 'LocalMean'); "
@@ -352,10 +375,19 @@ def bench_real(
         help="Override threshold.constant, the local-mean offset "
         "(only read when threshold.mode is LocalMean).",
     ),
-    min_fill: float = typer.Option(0.10, help="Min quad fill ratio"),
-    min_range: int = typer.Option(10, help="Threshold min range"),
-    max_hamming: int = typer.Option(2, help="Max hamming error"),
-    min_edge_score: float = typer.Option(4.0, help="Min edge alignment score"),
+    min_fill: float | None = typer.Option(
+        None, help="Override quad.min_fill_ratio (default: keep the standard profile's value)."
+    ),
+    min_range: int | None = typer.Option(
+        None, help="Override threshold.min_range (default: keep the standard profile's value)."
+    ),
+    max_hamming: int | None = typer.Option(
+        None,
+        help="Override decoder.max_hamming_error (default: keep the standard profile's value).",
+    ),
+    min_edge_score: float | None = typer.Option(
+        None, help="Override quad.min_edge_score (default: keep the standard profile's value)."
+    ),
     sharpening: bool | None = typer.Option(
         None,
         "--sharpening/--no-sharpening",
@@ -415,32 +447,16 @@ def bench_real(
                 url = url.rstrip("/") + "/proxy"
             rr.connect_grpc(url)
 
-    family_mapping = {
-        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
-        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
-        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
-        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
-        "ArUco6x6_250": locus.TagFamily.ArUco6x6_250,
-        "ArUcoMip36h12": locus.TagFamily.ArUcoMip36h12,
-        "16h5": locus.TagFamily.AprilTag16h5,
-        "36h11": locus.TagFamily.AprilTag36h11,
-        "4x4_50": locus.TagFamily.ArUco4x4_50,
-        "4x4_100": locus.TagFamily.ArUco4x4_100,
-        "6x6_250": locus.TagFamily.ArUco6x6_250,
-        "mip_36h12": locus.TagFamily.ArUcoMip36h12,
-    }
-
-    tag_family_int = family_mapping.get(family)
-    if tag_family_int is None:
-        typer.echo(f"Error: Unknown tag family '{family}'", err=True)
-        raise typer.Exit(code=1)
+    tag_family_int = _tag_family(family)
 
     refinement_mapping = {
         "None": getattr(locus.CornerRefinementMode, "None"),
         "Erf": locus.CornerRefinementMode.Erf,
         "Gwlf": locus.CornerRefinementMode.Gwlf,
     }
-    refinement_mode = refinement_mapping.get(refinement, locus.CornerRefinementMode.Erf)
+    if refinement is not None and refinement not in refinement_mapping:
+        typer.echo(f"Error: unknown refinement mode '{refinement}'", err=True)
+        raise typer.Exit(code=1)
 
     icra_dir = data_dir if data_dir else ICRA_CACHE_DIR
     loader = DatasetLoader(icra_dir=icra_dir)
@@ -452,16 +468,22 @@ def bench_real(
     base = locus.DetectorConfig.from_profile("standard").model_dump()
     if sharpening is not None:
         base["threshold"]["enable_sharpening"] = sharpening
-    base["threshold"]["tile_size"] = tile_size
+    if tile_size is not None:
+        base["threshold"]["tile_size"] = tile_size
     if threshold_mode is not None:
         base["threshold"]["mode"] = threshold_mode
     if constant is not None:
         base["threshold"]["constant"] = constant
-    base["threshold"]["min_range"] = min_range
-    base["quad"]["min_fill_ratio"] = min_fill
-    base["quad"]["min_edge_score"] = min_edge_score
-    base["decoder"]["max_hamming_error"] = max_hamming
-    base["decoder"]["refinement_mode"] = refinement_mode
+    if min_range is not None:
+        base["threshold"]["min_range"] = min_range
+    if min_fill is not None:
+        base["quad"]["min_fill_ratio"] = min_fill
+    if min_edge_score is not None:
+        base["quad"]["min_edge_score"] = min_edge_score
+    if max_hamming is not None:
+        base["decoder"]["max_hamming_error"] = max_hamming
+    if refinement is not None:
+        base["decoder"]["refinement_mode"] = refinement_mapping[refinement]
     detector = locus.Detector(
         config=locus.DetectorConfig.model_validate(base),
         families=[tag_family_int],
@@ -849,7 +871,6 @@ def bench_synthetic(
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
 ):
     """Run benchmarks on procedurally generated synthetic images."""
-    import locus
     import numpy as np
 
     from tools.bench.utils import (
@@ -861,23 +882,7 @@ def bench_synthetic(
         generate_synthetic_image,
     )
 
-    family_mapping = {
-        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
-        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
-        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
-        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
-        "ArUco6x6_250": locus.TagFamily.ArUco6x6_250,
-        "16h5": locus.TagFamily.AprilTag16h5,
-        "36h11": locus.TagFamily.AprilTag36h11,
-        "4x4_50": locus.TagFamily.ArUco4x4_50,
-        "4x4_100": locus.TagFamily.ArUco4x4_100,
-        "6x6_250": locus.TagFamily.ArUco6x6_250,
-    }
-
-    tag_family_int = family_mapping.get(family)
-    if tag_family_int is None:
-        typer.echo(f"Error: Unknown tag family '{family}'", err=True)
-        raise typer.Exit(code=1)
+    tag_family_int = _tag_family(family)
 
     wrappers: list[LibraryWrapper] = []
     wrappers.append(LocusWrapper(decimation=decimation, family=tag_family_int))
@@ -926,7 +931,6 @@ def bench_hosted(
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
 ):
     """Evaluate against datasets hosted on Hugging Face Hub."""
-    import locus
     import numpy as np
     from tqdm import tqdm
 
@@ -939,23 +943,7 @@ def bench_hosted(
         OpenCVWrapper,
     )
 
-    family_mapping = {
-        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
-        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
-        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
-        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
-        "ArUco6x6_250": locus.TagFamily.ArUco6x6_250,
-        "16h5": locus.TagFamily.AprilTag16h5,
-        "36h11": locus.TagFamily.AprilTag36h11,
-        "4x4_50": locus.TagFamily.ArUco4x4_50,
-        "4x4_100": locus.TagFamily.ArUco4x4_100,
-        "6x6_250": locus.TagFamily.ArUco6x6_250,
-    }
-
-    tag_family_int = family_mapping.get(family)
-    if tag_family_int is None:
-        typer.echo(f"Error: Unknown tag family '{family}'", err=True)
-        raise typer.Exit(code=1)
+    tag_family_int = _tag_family(family)
 
     loader = HubBenchmarkLoader()
     wrappers: list[LibraryWrapper] = []
@@ -1048,28 +1036,11 @@ def bench_profile(
     family: str = typer.Option("AprilTag36h11", help="Tag family to detect"),
 ):
     """Profile pipeline bottlenecks using synthetic images."""
-    import locus
     import numpy as np
 
     from tools.bench.utils import LocusWrapper, generate_synthetic_image
 
-    family_mapping = {
-        "AprilTag16h5": locus.TagFamily.AprilTag16h5,
-        "AprilTag36h11": locus.TagFamily.AprilTag36h11,
-        "ArUco4x4_50": locus.TagFamily.ArUco4x4_50,
-        "ArUco4x4_100": locus.TagFamily.ArUco4x4_100,
-        "ArUco6x6_250": locus.TagFamily.ArUco6x6_250,
-        "16h5": locus.TagFamily.AprilTag16h5,
-        "36h11": locus.TagFamily.AprilTag36h11,
-        "4x4_50": locus.TagFamily.ArUco4x4_50,
-        "4x4_100": locus.TagFamily.ArUco4x4_100,
-        "6x6_250": locus.TagFamily.ArUco6x6_250,
-    }
-
-    tag_family_int = family_mapping.get(family)
-    if tag_family_int is None:
-        typer.echo(f"Error: Unknown tag family '{family}'", err=True)
-        raise typer.Exit(code=1)
+    tag_family_int = _tag_family(family)
 
     wrapper = LocusWrapper(family=tag_family_int)
     res = (1280, 720)

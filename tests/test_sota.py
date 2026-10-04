@@ -10,8 +10,8 @@ import pytest
 
 from tools.bench import dataset_registry as dsm
 from tools.bench.liu4k import score_detections
+from tools.bench.matching import TagGroundTruth
 from tools.bench.sota import report, score, spec
-from tools.bench.utils import TagGroundTruth
 
 _DATA = """
 [hub]
@@ -295,20 +295,37 @@ def test_scoreboard_reports_bias_without_judging_it() -> None:
 # ── euroc ────────────────────────────────────────────────────────────────────
 
 
-def _euroc_runs(tmp_path: Path, detectors: dict[str, dict[int, np.ndarray]]) -> None:
+def _euroc_runs(
+    tmp_path: Path,
+    detectors: dict[str, dict[int, np.ndarray]],
+    origin: tuple[float, float] = (230.0, 110.0),
+    missing: dict[str, set[int]] | None = None,
+    extra: dict[str, list[int]] | None = None,
+) -> None:
     """Eight identical frames per detector; ``detectors`` maps a label to per-tag corner
-    offsets (px, image space) applied to the exact projection of a board."""
-    # Board (m) -> undistorted pixels: 300 px/m, board origin placed at (u0, v0).
-    u0, v0 = 230.0, 110.0
+    offsets (px, image space) applied to the exact projection of a board. Tags falling
+    outside the image are not detected; ``missing`` drops more tags per detector and
+    ``extra`` adds a detection with that id on tag 0's outline."""
+    # Board (m) -> undistorted pixels: 300 px/m, board origin placed at ``origin``.
+    u0, v0 = origin
     h = np.array([[300.0, 0.0, u0], [0.0, 300.0, v0], [0.0, 0.0, 1.0]])
     for label, offsets in detectors.items():
         lines = []
         for k in range(8):
             ids, corners = [], []
             for t in range(36):
-                c = score._redist(score._proj(h, score._board(t, score._PERMS[0])))
+                c = score._redist(score._proj(h, score._board(t, score.DIHEDRAL[0])))
+                if t in (missing or {}).get(label, set()) or not np.all(
+                    (c >= 0) & (c <= [score.EUROC_W - 1, score.EUROC_H - 1])
+                ):
+                    continue
                 ids.append(t)
                 corners.append((c + offsets.get(t, 0.0)).tolist())
+            for tid in (extra or {}).get(label, []):
+                ids.append(tid)
+                corners.append(
+                    score._redist(score._proj(h, score._board(0, score.DIHEDRAL[0]))).tolist()
+                )
             lines.append(
                 json.dumps(
                     {
@@ -355,3 +372,104 @@ def test_euroc_does_not_judge_tags_beyond_the_lens_model() -> None:
     beyond = c + np.array([[0.0, score.EUROC_VALID_RADIUS_PX + 1.0]])
     assert score._modelled(inside)
     assert not score._modelled(np.vstack([inside, beyond]))
+
+
+def test_euroc_recall_counts_only_present_tags(tmp_path: Path) -> None:
+    # Shifted board: tag 0 is in the image but beyond the modelled radius, tag 5 is outside
+    # the image; the other 34 tags are present.
+    origin = (-50.0, -40.0)
+    _euroc_runs(
+        tmp_path,
+        {"exact": {}, "miss_beyond": {}, "miss_present": {}},
+        origin=origin,
+        missing={"miss_beyond": {0}, "miss_present": {20}},
+    )
+    r = score.score_euroc(tmp_path)
+    # Tag 0's detection is neither TP nor FP, and missing it is not a miss.
+    for name in ("exact", "miss_beyond"):
+        assert r[name]["recall"] == pytest.approx(100.0)
+        assert (r[name]["fp"], r[name]["precision"]) == (0, pytest.approx(100.0))
+    assert r["miss_present"]["recall"] == pytest.approx(100.0 * 33 / 34)
+
+
+def test_euroc_off_board_ids_and_duplicates_are_false_positives(tmp_path: Path) -> None:
+    # Id 40 is not on the 6x6 board; a second id-0 detection makes both id-0 detections
+    # ambiguous, so tag 0 is missed as well.
+    _euroc_runs(
+        tmp_path,
+        {"exact": {}, "off_board": {}, "duplicate": {}},
+        extra={"off_board": [40], "duplicate": [0]},
+    )
+    r = score.score_euroc(tmp_path)
+    assert (r["off_board"]["fp"], r["off_board"]["recall"]) == (8, pytest.approx(100.0))
+    assert (r["duplicate"]["fp"], r["duplicate"]["recall"]) == (16, pytest.approx(100.0 * 35 / 36))
+
+
+# ── ICRA tags.csv ────────────────────────────────────────────────────────────
+
+
+def _write_tags_csv(path: Path, rows: list[tuple[str, int, int, float, float, int]]) -> None:
+    lines = ["image,tag_id,corner,ground_truth_x,ground_truth_y,tag_fully_visible"]
+    lines += [",".join(str(v) for v in r) for r in rows]
+    path.write_text("\n".join(lines) + "\n")
+
+
+def test_load_gt_csv_ignores_partly_visible_and_incomplete_tags(tmp_path: Path) -> None:
+    rows = []
+    for tid, x0, visible, n_corners in [(1, 100.5, 1, 4), (2, 300.5, 0, 4), (3, 500.5, 1, 3)]:
+        for k, (x, y) in enumerate(_square(x0, 100.5)[:n_corners]):
+            # A single not-fully-visible row marks the whole tag.
+            rows.append(("f0.png", tid, k, x, y, visible if k == 0 else 1))
+    rows.append(("f0.png", 1, 7, 0.0, 0.0, 1))  # out-of-range corner index: dropped
+    _write_tags_csv(tmp_path / "tags.csv", rows)
+    frames = score.load_gt_csv(tmp_path / "tags.csv")
+    f0 = frames["f0.png"]
+    assert [g.tag_id for g in f0.tags] == [1]
+    np.testing.assert_allclose(f0.tags[0].corners, _square(100.5, 100.5))
+    assert sorted(g.tag_id for g in f0.ignore) == [2, 3]
+    incomplete = next(g for g in f0.ignore if g.tag_id == 3)
+    assert np.isnan(incomplete.corners[3]).all() and not np.isnan(incomplete.corners[:3]).any()
+
+    # Detections of ignored tags are neither TP nor FP (an incomplete tag is located by the
+    # centre of its known corners); only tag 1 counts.
+    runs = tmp_path / "runs"
+    runs.mkdir()
+    dets = [_square(100, 100), _square(300, 100), _square(500, 100)]
+    (runs / "ref.jsonl").write_text(
+        json.dumps(
+            {
+                "image": "/x/f0.png",
+                "ms": 1.0,
+                "ids": [1, 2, 3],
+                "corners": [d.tolist() for d in dets],
+                "convention": "opencv",
+            }
+        )
+        + "\n"
+    )
+    s = spec.Spec(
+        name="t",
+        data="icra2020-forward",
+        images="*.png",
+        family="F",
+        opencv_dict="D",
+        border_bits=1,
+        scorer="gt-csv",
+        gt_convention="locus",
+        gt="tags.csv",
+    )
+    out = score.score_gt(s, runs, frames)
+    assert (out["ref"]["tp"], out["ref"]["fp"], out["ref"]["fn"]) == (1, 0, 0)
+    assert out["ref"]["corner_mean"] == pytest.approx(0.0, abs=1e-9)
+
+
+def test_report_lists_the_locus_extension_of_each_run(tmp_path: Path) -> None:
+    ext = {"path": "/venv/locus/locus.abi3.so", "mtime": "2026-10-04T00:00:00+00:00"}
+    first = {"image": "a.png", "ms": 1.0, "ids": [], "corners": [], "locus_extension": ext}
+    (tmp_path / "locus_standard.jsonl").write_text(json.dumps(first) + "\n")
+    (tmp_path / "locus_old.jsonl").write_text(json.dumps({**first, "locus_extension": None}) + "\n")
+    (tmp_path / "opencv.jsonl").write_text(json.dumps(first) + "\n")
+    assert report.locus_extensions(tmp_path) == {
+        f"`{ext['path']}` (mtime {ext['mtime']})": ["locus_standard"],
+        "not recorded": ["locus_old"],
+    }

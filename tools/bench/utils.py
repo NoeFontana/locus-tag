@@ -14,7 +14,12 @@ import numpy as np
 from pupil_apriltags import Detector as AprilTagDetector
 from tqdm import tqdm
 
-from tools.bench.matching import MATCH_DISTANCE_THRESHOLD_PX, match_detections_to_gt
+from tools.bench.matching import (
+    APRILTAG_CORNER_TO_GT,
+    MATCH_DISTANCE_THRESHOLD_PX,
+    TagGroundTruth,
+    match_detections_to_gt,
+)
 from tools.bench.metrics import percentiles
 
 ICRA_CACHE_DIR = Path("tests/data/icra2020")
@@ -199,15 +204,6 @@ def resolve_tag_family(name: str) -> int:
     if fam is None:
         raise ValueError(f"unknown tag family {name!r}; known: {sorted(_TAG_FAMILY_BY_NAME)}")
     return fam
-
-
-@dataclass
-class TagGroundTruth:
-    tag_id: int
-    corners: np.ndarray  # 4x2 float32
-    fully_visible: bool = True
-    # 6-DOF pose if available: [tx, ty, tz, qx, qy, qz, qw] (Scalar-Last)
-    pose: np.ndarray | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -999,9 +995,7 @@ class OpenCVWrapper(LibraryWrapper):
         return detections, None
 
 
-# Fixed permutation mapping pupil_apriltags' corner order to the GT / Locus /
-# OpenCV convention (empirically verified sub-pixel across all detections).
-_APRILTAG_CORNER_TO_GT = [1, 0, 3, 2]
+_APRILTAG_CORNER_TO_GT = APRILTAG_CORNER_TO_GT
 
 
 class AprilTagWrapper(LibraryWrapper):

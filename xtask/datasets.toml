@@ -28,7 +28,8 @@ repo = "NoeFontana/locus-tag-bench"
 revision = "5346835a9ed350828472a4c83d6e3999cf94fefb"
 dest = "tests/data/hub_cache"
 env = "LOCUS_HUB_DATASET_DIR"
-# Default subsets for `fetch hub` (all configs: `--subsets all`).
+# Default subsets for `fetch hub` (all configs: `--subsets all`): everything the regression
+# suites and the `hub-*` SOTA benchmarks read.
 subsets = [
     "locus_v1_tag36h11_640x480",
     "locus_v1_tag36h11_1280x720",
@@ -38,6 +39,11 @@ subsets = [
     "locus_v1_low_key_1920x1080",
     "locus_v1_raw_pipeline_1920x1080",
     "locus_v1_tag16h5_1920x1080",
+    # Boards (regression_board_hub.rs) and lens-distorted boards (regression_distortion_hub.rs).
+    "aprilgrid_golden_v1_1920x1080",
+    "charuco_golden_v1_1920x1080",
+    "aprilgrid_distortion_brown_conrady_v1_1920x1080",
+    "aprilgrid_distortion_kannala_brandt_v1_1920x1080",
 ]
 license = "MIT"
 source_url = "https://huggingface.co/datasets/NoeFontana/locus-tag-bench"
@@ -285,8 +291,7 @@ scorer = "gt-hub"
 gt = "rich_truth.json"
 gt_convention = "locus"
 
-# Board renders (fetch with `cargo xtask sota fetch hub-aprilgrid` etc.; not in the default
-# hub subsets). Scored at marker level. The render-tag AprilGrid prints a 1-bit border
+# Board renders (in the default hub subsets). Scored at marker level. The render-tag AprilGrid prints a 1-bit border
 # (verified on the images), unlike the 2-bit Kalibr target of EuRoC.
 [sota.hub-aprilgrid]
 data = "hub"
@@ -302,7 +307,8 @@ gt_convention = "locus"
 
 # Lens-distorted board renders: the same 1-bit AprilGrid seen through Brown-Conrady and
 # Kannala-Brandt lenses (`distortion_model`, `distortion_coeffs` and `k_matrix` per record).
-# References get no camera model (their marker detectors take none); Locus is run both ways.
+# No detector is given the camera model: the references' marker detectors take none, and
+# Locus is run the same way.
 [sota.hub-aprilgrid-bc]
 data = "hub"
 subset = "aprilgrid_distortion_brown_conrady_v1_1920x1080"
