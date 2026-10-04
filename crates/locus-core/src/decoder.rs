@@ -1216,12 +1216,19 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
     config: &crate::config::DetectorConfig,
     intrinsics: &crate::pose::CameraIntrinsics,
     model: &C,
-) -> (crate::batch::CandidateState, u32, u8, u64, f32) {
+) -> (crate::batch::CandidateState, u32, u8, u64, f32, usize) {
     use crate::batch::CandidateState;
 
-    let ideal: [[f64; 2]; 4] = core::array::from_fn(|j| {
-        intrinsics.undistort_pixel(f64::from(corners[j].x), f64::from(corners[j].y))
-    });
+    // Checked: the whole decode hangs off this homography, so a corner the lens model cannot
+    // invert must fail the candidate rather than be mapped to a non-preimage and sampled.
+    let mut ideal = [[0.0_f64; 2]; 4];
+    for (slot, corner) in ideal.iter_mut().zip(corners.iter()) {
+        match intrinsics.undistort_pixel_checked(f64::from(corner.x), f64::from(corner.y)) {
+            Some(u) => *slot = u,
+            None => return (CandidateState::FailedDecode, 0, 0, 0, 0.0, 0),
+        }
+    }
+    let ideal = ideal;
 
     let center = [
         (ideal[0][0] + ideal[1][0] + ideal[2][0] + ideal[3][0]) * 0.25,
@@ -1232,7 +1239,10 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
     let mut best_bits = 0u64;
     // Lowest-Hamming candidate that is within its own decoder's budget and shows the
     // border ring: `(id, rotation, code, hamming)`.
-    let mut accepted: Option<(u32, u8, u64, u32)> = None;
+    // The accepted decoder's grid travels with the match: `finalize_decoded_candidate` sizes
+    // its sub-pixel window from the marker that actually decoded, not from a conservative
+    // minimum over every registered family.
+    let mut accepted: Option<(u32, u8, u64, u32, usize)> = None;
     // Ring evidence on the reported (unscaled) quad, at most once per decoder.
     let h_report = Homography::square_to_quad(&ideal);
     let mut ring_cache = [None::<bool>; MAX_DECODERS];
@@ -1275,7 +1285,7 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
                     best_h = hamming;
                     best_bits = code;
                 }
-                let improves = accepted.is_none_or(|(_, _, _, h)| hamming < h);
+                let improves = accepted.is_none_or(|(_, _, _, h, _)| hamming < h);
                 if improves
                     && hamming <= decoder_max_h[decoder_idx]
                     && *ring_cache[decoder_idx].get_or_insert_with(|| {
@@ -1288,20 +1298,20 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
                         })
                     })
                 {
-                    accepted = Some((id, rot, code, hamming));
+                    accepted = Some((id, rot, code, hamming, decoder.dimension() + 2));
                 }
             }
-            if accepted.is_some_and(|(_, _, _, h)| h == 0) {
+            if accepted.is_some_and(|(_, _, _, h, _)| h == 0) {
                 break;
             }
         }
-        if accepted.is_some_and(|(_, _, _, h)| h == 0) {
+        if accepted.is_some_and(|(_, _, _, h, _)| h == 0) {
             break;
         }
     }
 
-    if let Some((id, rot, code, hamming)) = accepted {
-        (CandidateState::Valid, id, rot, code, hamming as f32)
+    if let Some((id, rot, code, hamming, cells)) = accepted {
+        (CandidateState::Valid, id, rot, code, hamming as f32, cells)
     } else {
         (
             CandidateState::FailedDecode,
@@ -1313,7 +1323,100 @@ fn decode_candidate_distorted<C: crate::camera::CameraModel>(
             } else {
                 best_h as f32
             },
+            0,
         )
+    }
+}
+
+/// Finish one decoded candidate's corners: sub-pixel refinement, the marker-inset photometric
+/// calibration, the frame-clipping check, the rotation reorder, and the homography recompute.
+///
+/// **Shared by both decode loops on purpose.** `decode_batch_soa_generic` (pinhole/SIMD) and
+/// `decode_batch_soa_with_camera_inner` (distorted) are separate implementations, and this tail
+/// is where every corner-estimator change lands. It lived only in the former, so the
+/// gradient-orthogonality pass (#426, #430, #431, #432), the marker-inset calibration (#434)
+/// and the frame-clipping rule (#436) **all** silently skipped distorted cameras:
+/// `decoder.corner_subpix` was a no-op there, at a cost of ~5x in corner RMSE on the distortion
+/// hubs. Every pass here is a local photometric or geometric test on the raw image — none needs
+/// a camera model, and a lens cannot make a corner stop being a corner. Keeping one copy is what
+/// stops the next one diverging again.
+///
+/// `cells` is the decoded marker's grid (payload plus its one-cell black border), which sizes
+/// the sub-pixel window; `corners_already_moved` reports whether the caller's own refinement
+/// (the ERF / `refinement_mode` pass) had already displaced the corners, so the homography is
+/// rebuilt exactly when the quad changed.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one pipeline stage's inputs plus the four SoA slots it owns; bundling them behind \
+a struct would only move the same list and cost the callers a borrow split"
+)]
+fn finalize_decoded_candidate(
+    img: &crate::image::ImageView,
+    config: &crate::config::DetectorConfig,
+    cells: usize,
+    rot: u8,
+    corners_already_moved: bool,
+    status_slot: &mut crate::batch::CandidateState,
+    corners_slot: &mut [Point2f; 4],
+    h_slot: &mut Matrix3x3,
+    refined_slot: &mut u8,
+) {
+    use crate::batch::CandidateState;
+
+    // Gradient-orthogonality refinement of the accepted corners, after the
+    // configured refinement mode (`decoder.corner_subpix`).
+    let subpix = *status_slot == CandidateState::Valid && config.decoder_corner_subpix;
+    let mut refined_bits = 0u8;
+    if subpix {
+        let seed = quad_to_f64(corners_slot);
+        let (subpix_corners, bits) = crate::refinement::subpix_marker_corners(img, seed, cells);
+        // Remove the photometric inset the decoded marker's bit edges measure.
+        let final_corners =
+            crate::marker_inset::calibrate_marker_corners(img, subpix_corners, cells)
+                .unwrap_or(subpix_corners);
+        refined_bits = bits;
+        *corners_slot = quad_to_f32(&final_corners);
+    }
+
+    if *status_slot == CandidateState::Valid
+        && !outline_observed(corners_slot, img.width, img.height)
+    {
+        *status_slot = CandidateState::FailedDecode;
+    }
+
+    // Apply rotation reorder, if any.
+    let valid = *status_slot == CandidateState::Valid;
+    if valid && rot > 0 {
+        let mut temp_corners = [Point2f::default(); 4];
+        for (j, item) in temp_corners.iter_mut().enumerate() {
+            let src_idx = (j + usize::from(rot)) % 4;
+            *item = corners_slot[src_idx];
+        }
+        *corners_slot = temp_corners;
+        // Corner j now holds the old corner (j + rot) % 4.
+        let r = u32::from(rot) % 4;
+        refined_bits = ((refined_bits >> r) | (refined_bits << (4 - r))) & 0x0F;
+    }
+    *refined_slot = refined_bits;
+
+    // Recompute the homography whenever corners changed — ERF or sub-pixel
+    // refinement, *or* rotation. Without the ERF branch, a
+    // canonical-orientation refined candidate (`rot == 0`,
+    // `refined_corners.is_some()`) would carry the pre-refinement
+    // homography forward into Phase D and `CharucoRefiner`, which
+    // projects saddle predictions through `batch.homographies[i]`.
+    // The stale-`h_slot` failure mode is the same class as
+    // `memory/project_refine_saddle_noop.md`.
+    //
+    // A degenerate quad (zero area, collinear after rotation) has no homography:
+    // `h_slot` then retains the previous one, mirroring pre-existing best-effort
+    // behaviour. A stricter design would downgrade to `FailedDecode` here — left for
+    // a follow-up that can weigh the recall trade-off against benchmarks.
+    if valid
+        && (corners_already_moved || subpix || rot > 0)
+        && let Some(h_new) = homography_matrix(&quad_to_f64(corners_slot))
+    {
+        h_slot.data = h_new.data;
     }
 }
 
@@ -1343,11 +1446,13 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
     let error_rates_out = &mut batch.error_rates[..n];
     let corners_out = &mut batch.corners[..n];
     let homographies_out = &mut batch.homographies[..n];
+    let refined_out = &mut batch.corner_refined[..n];
 
     // Rayon `Zip` truncates to the shortest input; guard the disjoint-slice
     // contract so a future off-by-one fix on any column fails loudly in
     // debug rather than silently dropping the last candidate.
     debug_assert_eq!(status_out.len(), n);
+    debug_assert_eq!(refined_out.len(), n);
     debug_assert_eq!(ids_out.len(), n);
     debug_assert_eq!(payloads_out.len(), n);
     debug_assert_eq!(error_rates_out.len(), n);
@@ -1361,8 +1466,12 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
         .zip(error_rates_out.par_iter_mut())
         .zip(corners_out.par_iter_mut())
         .zip(homographies_out.par_iter_mut())
+        .zip(refined_out.par_iter_mut())
         .for_each(
-            |(((((status_slot, id_slot), payload_slot), err_slot), corners_slot), h_slot)| {
+            |(
+                (((((status_slot, id_slot), payload_slot), err_slot), corners_slot), h_slot),
+                refined_slot,
+            )| {
                 if *status_slot != CandidateState::Active {
                     // Bypass: preserve status_mask and error_rates (no-op
                     // writes in the original drain); zero ids/payloads to
@@ -1373,7 +1482,7 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
                     return;
                 }
 
-                let (state, id, rot, bits, err) = decode_candidate_distorted::<C>(
+                let (state, id, rot, bits, err, cells) = decode_candidate_distorted::<C>(
                     img,
                     corners_slot,
                     decoders,
@@ -1387,29 +1496,19 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
                 *payload_slot = bits;
                 *err_slot = err;
 
-                // Reorder corners based on the decoded rotation (same convention as the SIMD path).
-                if state == CandidateState::Valid && rot > 0 {
-                    let mut tmp = [Point2f::default(); 4];
-                    for (j, item) in tmp.iter_mut().enumerate() {
-                        let src = (j + usize::from(rot)) % 4;
-                        *item = corners_slot[src];
-                    }
-                    *corners_slot = tmp;
-
-                    // Recompute the homography for the rotated corners. The
-                    // pre-decoding homography mapped canonical (-1,-1) → old
-                    // corners[0]; after the rotation, that point now lives at
-                    // new corners[(4 - rot) % 4]. Downstream consumers
-                    // (e.g. `CharucoRefiner` projecting saddle predictions
-                    // through this homography) require it to remain aligned with
-                    // the canonical TL/TR/BR/BL convention of `corners[]`.
-                    // Without this recompute, `H(canonical_TL)` lands at the
-                    // wrong image corner and any extrapolated point (saddle,
-                    // bit-grid sample, etc.) lands at a rotated image position.
-                    if let Some(h_new) = homography_matrix(&quad_to_f64(&tmp)) {
-                        h_slot.data = h_new.data;
-                    }
-                }
+                // `false`: no `refinement_mode` pass runs on this route, so the corners
+                // entering the shared tail are the extraction's own.
+                finalize_decoded_candidate(
+                    img,
+                    config,
+                    cells,
+                    rot,
+                    false,
+                    status_slot,
+                    corners_slot,
+                    h_slot,
+                    refined_slot,
+                );
             },
         );
 }
@@ -1984,62 +2083,17 @@ pub fn decode_batch_soa(
                     *corners_slot = decoded_corners;
                 }
 
-                // Gradient-orthogonality refinement of the accepted corners, after the
-                // configured refinement mode (`decoder.corner_subpix`).
-                let subpix = state == CandidateState::Valid && config.decoder_corner_subpix;
-                let mut refined_bits = 0u8;
-                if subpix {
-                    let seed = quad_to_f64(corners_slot);
-                    let (subpix_corners, bits) =
-                        crate::refinement::subpix_marker_corners(img, seed, cells);
-                    // Remove the photometric inset the decoded marker's bit edges measure.
-                    let final_corners =
-                        crate::marker_inset::calibrate_marker_corners(img, subpix_corners, cells)
-                            .unwrap_or(subpix_corners);
-                    refined_bits = bits;
-                    *corners_slot = quad_to_f32(&final_corners);
-                }
-
-                if *status_slot == CandidateState::Valid
-                    && !outline_observed(corners_slot, img.width, img.height)
-                {
-                    *status_slot = CandidateState::FailedDecode;
-                }
-
-                // Apply rotation reorder, if any.
-                let valid = *status_slot == CandidateState::Valid;
-                if valid && rot > 0 {
-                    let mut temp_corners = [Point2f::default(); 4];
-                    for (j, item) in temp_corners.iter_mut().enumerate() {
-                        let src_idx = (j + usize::from(rot)) % 4;
-                        *item = corners_slot[src_idx];
-                    }
-                    *corners_slot = temp_corners;
-                    // Corner j now holds the old corner (j + rot) % 4.
-                    let r = u32::from(rot) % 4;
-                    refined_bits = ((refined_bits >> r) | (refined_bits << (4 - r))) & 0x0F;
-                }
-                *refined_slot = refined_bits;
-
-                // Recompute the homography whenever corners changed — ERF or sub-pixel
-                // refinement, *or* rotation. Without the ERF branch, a
-                // canonical-orientation refined candidate (`rot == 0`,
-                // `refined_corners.is_some()`) would carry the pre-refinement
-                // homography forward into Phase D and `CharucoRefiner`, which
-                // projects saddle predictions through `batch.homographies[i]`.
-                // The stale-`h_slot` failure mode is the same class as
-                // `memory/project_refine_saddle_noop.md`.
-                //
-                // A degenerate quad (zero area, collinear after rotation) has no homography:
-                // `h_slot` then retains the previous one, mirroring pre-existing best-effort
-                // behaviour. A stricter design would downgrade to `FailedDecode` here — left for
-                // a follow-up that can weigh the recall trade-off against benchmarks.
-                if valid
-                    && (decoder_refined || subpix || rot > 0)
-                    && let Some(h_new) = homography_matrix(&quad_to_f64(corners_slot))
-                {
-                    h_slot.data = h_new.data;
-                }
+                finalize_decoded_candidate(
+                    img,
+                    config,
+                    cells,
+                    rot,
+                    decoder_refined,
+                    status_slot,
+                    corners_slot,
+                    h_slot,
+                    refined_slot,
+                );
             },
         );
 }

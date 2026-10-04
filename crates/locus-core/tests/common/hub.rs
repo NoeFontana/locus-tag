@@ -690,6 +690,25 @@ impl HubProvider {
         self.gt_map.values().next()?.intrinsics
     }
 
+    /// Frames whose effective intrinsics carry **no** distortion model, given the
+    /// dataset-level `fallback`.
+    ///
+    /// Mirrors `RegressionHarness::run`'s own `gt.intrinsics.or(self.options.intrinsics)`
+    /// exactly: the per-entry value wins, so a suite that means to exercise the distortion
+    /// path has to check what every frame will actually be detected with, not just the
+    /// fallback built from the first record.
+    pub fn frames_without_distortion(&self, fallback: Option<CameraIntrinsics>) -> Vec<String> {
+        self.gt_map
+            .iter()
+            .filter(|(_, gt)| {
+                !gt.intrinsics
+                    .or(fallback)
+                    .is_some_and(|k| k.distortion.is_distorted())
+            })
+            .map(|(name, _)| name.clone())
+            .collect()
+    }
+
     /// Tag size from the first image's ground truth, used as dataset-level fallback.
     pub fn fallback_tag_size(&self) -> Option<f64> {
         self.gt_map.values().next()?.tag_size
