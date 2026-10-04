@@ -38,8 +38,7 @@ opt in at `1.0e-3`.
 
 | Refinement mode | Σ source                                                                              |
 | :-------------- | :------------------------------------------------------------------------------------ |
-| GWLF            | Per-corner external covariances written into `corner_covariances` SoA column.         |
-| Accurate (no GWLF) | `pose_weighted::compute_framework_uncertainty` (Structure-Tensor + sigma_n_sq). |
+| Accurate        | `pose_weighted::compute_framework_uncertainty` (Structure-Tensor + sigma_n_sq).       |
 | Fast            | Isotropic `Σ⁻¹ = (1 / sigma_n_sq) · I` (`sigma_n_sq` defaults to 4 px²).              |
 
 The same `Σ` matrices are passed to (a) the IPPE branch selector, (b) the LM

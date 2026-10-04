@@ -28,19 +28,23 @@ batch = detector.detect(img)
 
 ## Concurrent Detection
 
-`Detector` supports concurrent multi-frame processing via `detect_concurrent`. To configure the internal pool size (`max_concurrent_frames`), you must use the `DetectorBuilder`.
+`Detector` supports concurrent multi-frame processing via `detect_concurrent`. The internal pool size is set with `max_concurrent_frames`, either as a `Detector` keyword (`locus.Detector(max_concurrent_frames=8)`) or through the `DetectorBuilder`.
 
 See the [Concurrent Detection how-to](../how-to/concurrent_detection.md) for full usage examples.
 
 ### `DetectorBuilder`
 
-The fluent builder is used to construct `Detector` instances with advanced settings not yet exposed in the primary `Detector` constructor, specifically `max_concurrent_frames`.
+A fluent builder for `Detector`. It carries orchestration only — the configuration, tag families, decimation, threads and pool size. Detection settings live in `DetectorConfig`: edit one and pass it to `with_config`. `build()` re-validates the configuration through the Pydantic model and returns a `locus.Detector`.
 
 ```python
 import locus
 
+cfg = locus.DetectorConfig.from_profile("standard")
+cfg.decoder.min_contrast = 12.0
+
 detector = (
     locus.DetectorBuilder()
+    .with_config(cfg)
     .with_family(locus.TagFamily.AprilTag36h11)
     .with_threads(4)
     .with_max_concurrent_frames(8)  # Enable parallel batch processing
@@ -50,12 +54,13 @@ detector = (
 
 | Method | Description |
 | :--- | :--- |
-| `with_family(family)` | Add a tag family to detect. |
+| `with_profile(name)` | Use a shipped profile (`"standard"`, `"grid"`, `"high_accuracy"`). |
+| `with_config(config)` | Use a `DetectorConfig` (default: the `standard` profile). |
+| `with_family(family)` | Add a tag family to detect (default: `AprilTag36h11`). |
 | `with_decimation(n)` | Spatial decimation factor (default 1). |
 | `with_threads(n)` | Rayon worker count for the detector (see [Thread control](#thread-control)). `0` (default) = the global Rayon pool. |
-| `with_corner_refinement(mode)` | `CornerRefinementMode` for subpixel accuracy. |
 | `with_max_concurrent_frames(n)` | Pool size for `detect_concurrent` (default 1 = sequential). |
-| `build()` | Build the `Detector`. |
+| `build()` | Validate the configuration and build the `Detector`. |
 
 **`detect_concurrent(frames, *, intrinsics=None, tag_size=None) -> list[DetectionResult]`**
 
@@ -103,10 +108,6 @@ Locus uses Pydantic for robust configuration validation.
     options:
         heading_level: 3
 
-::: locus.DetectOptions
-    options:
-        heading_level: 3
-
 ## Data Models
 
 These classes represent the output and internal state of the detection pipeline.
@@ -131,7 +132,7 @@ Locus supports board-level 6-DOF pose estimation for AprilGrid and ChAruco board
 All board types enforce dictionary bounds at construction time — a `ValueError` is raised
 if the board requires more marker IDs than the target `TagFamily` provides.
 
-For the underlying algorithm, see [Board-Level Pose Estimation](../explanation/algorithms.md#7-board-level-pose-estimation).
+For the underlying algorithm, see [Board-Level Pose Estimation](../explanation/algorithms.md#6-board-level-pose-estimation).
 
 ### `AprilGrid`
 

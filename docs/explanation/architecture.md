@@ -189,7 +189,7 @@ The `locus-core` crate is organized into logical modules mirroring the pipeline 
 | `edlines` | EdLines quad extraction (arc boundary, IRLS lines, joint Gauss-Newton corners). | `extract_quad_edlines` |
 | `refinement` | Corner-refinement dispatch; gradient-orthogonality junction corners, whole-edge fusion and gross-corner repair (`decoder.corner_subpix`). | `refine_quad_corners`, `subpix_marker_corners` |
 | `marker_inset` | Per-marker photometric inset calibration from the decoded bit edges. | `calibrate_marker_corners` |
-| `gwlf` | Gradient-Weighted Line Fitting (legacy refinement mode; moment accumulator shared with EdLines). | `refine_quad_gwlf` |
+| `moments` | Gradient-weighted edge moments and the 2×2 symmetric min-eigenvector (edge normals for line fits). | `MomentAccumulator`, `min_eigenvector_2x2_symmetric` |
 | `decoder` | Homography (DLT, DDA), bit sampling, ring evidence, decode-first verification, near-miss recovery. | `TagDecoder`, `Homography`, `HomographyDda` |
 | `dictionaries` | Embedded family code tables and the nearest-codeword scan. | `TagDictionary` |
 | `strategy` | Hard-decision bit packing against per-cell thresholds. | `bits_from_intensities` |

@@ -179,7 +179,6 @@ Phase labels are stable identifiers, not the execution order, which is A → B.5
 | **A: Contour Extraction** | Image | `corners`, `status_mask`, `corner_covariances`, `corner_refined` (cleared) |
 | **B.5: Funnel** | Image, `corners` | `status_mask`, `funnel_status` |
 | **B: Homography** | `corners`, `status_mask` | `homographies` |
-| **B.7: Detector-level GWLF** (only if a route uses it; no shipped profile does) | Image, `status_mask`, `routed_to` | `corners`, `corner_covariances` |
 | **C: Decoding** | Image, `corners`, `homographies` | `ids`, `payloads`, `error_rates`, `status_mask`, `corners`¹, `corner_refined`, `homographies`² |
 | **D: Pose** | `corners`, `corner_covariances` (on the partitioned `[0..V]`) | `poses` (+ `bench-internals` diagnostic columns) |
 

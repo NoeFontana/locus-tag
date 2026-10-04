@@ -117,17 +117,19 @@ All configuration validation happens in `DetectorConfig::validate()`
 | --- | --- | --- |
 | `threshold_tile_size >= 2` | `DetectorConfig::validate` | `TileSizeTooSmall` |
 | `1 <= threshold_local_mean_radius <= 127` (`threshold::MAX_LOCAL_MEAN_RADIUS`: keeps box sums `< 2²⁴`, exact in the local-mean arithmetic) | `DetectorConfig::validate` | `InvalidLocalMeanRadius` |
+| `threshold_noise_k` finite and `> 0` | `DetectorConfig::validate` | `InvalidNoiseK` |
 | `decoder_max_border_error_rate`, when set, lies in `[0, 1]` (`None` = the family's `max_hamming / bit_count`; `1.0` disables the ring check) | `DetectorConfig::validate` | `InvalidBorderErrorRate` |
 | `decimation >= 1` | `DetectorConfig::validate` | `InvalidDecimation` |
 | `upscale_factor >= 1` | `DetectorConfig::validate` | `InvalidUpscaleFactor` |
 | `0.0 <= quad_min_fill_ratio < quad_max_fill_ratio <= 1.0` | `DetectorConfig::validate` | `InvalidFillRatio { min, max }` |
 | `quad_min_edge_length > 0.0` | `DetectorConfig::validate` | `InvalidEdgeLength` |
-| `structure_tensor_radius <= 8` | `DetectorConfig::validate` | `InvalidStructureTensorRadius` |
+| `1 <= structure_tensor_radius <= 8` | `DetectorConfig::validate` | `InvalidStructureTensorRadius` |
 | `0 <= pose_consistency_fpr < 1` | `DetectorConfig::validate` | `InvalidPoseConsistencyFpr` |
 | `outlier_drop_d2_threshold` finite and `>= 0` | `DetectorConfig::validate` | `InvalidOutlierDropD2Threshold` |
 | `quad_extraction_mode == EdLines` ⇒ `refinement_mode != Erf` (also per `AdaptivePpb` route) | `DetectorConfig::validate` | `EdLinesIncompatibleWithErf` |
 | `AdaptivePpb` low/high extraction modes differ | `DetectorConfig::validate` | `AdaptivePolicyDegenerate` |
 | `AdaptivePpb` threshold in `(1.0, 5.0)` | `DetectorConfig::validate` | `AdaptivePolicyThresholdOutOfRange` |
+| `quad_extraction_policy == AdaptivePpb` ⇒ `refinement_mode == None` (each route carries its own refinement) | `DetectorConfig::validate` | `AdaptivePolicyStaticRefinement` |
 
 A further check runs per call: a `Static` `EdLines`
 config with distorted intrinsics fails `detect()` with
@@ -145,11 +147,11 @@ declares explicit ranges:
 - `quad_max_elongation`, `quad_min_density`
 - `huber_delta_px`, `tikhonov_alpha_max`, `sigma_n_sq`
 
-The Pydantic model declares ranges for most of these. Every Python
-construction path goes through it: `Detector(profile=…)` and
-`Detector(config=…)` both serialize a validated `DetectorConfig`, and there is
-no keyword path that bypasses it. A config therefore reaches Rust unchecked
-only as a user-authored JSON payload handed to the Rust API directly.
+The Pydantic model declares ranges for most of these. `Detector(profile=…)`,
+`Detector(config=…)` and `locus.DetectorBuilder.build()` all serialize a validated
+`DetectorConfig`. A field assigned on an existing model after construction is not
+re-validated (the model has no `validate_assignment`), so Rust's `validate()` is the
+backstop for that path and for user-authored JSON handed to the Rust API.
 
 ### Field scope: live, telemetry-only, inert
 
@@ -169,7 +171,12 @@ also fails the test — so neither category can drift silently.
 | Field | Scope |
 | --- | --- |
 | `nthreads` | **Live but output-invariant** by design: it picks the scoped Rayon pool (`LocusEngine::run_scoped`). Allowlisted as inert *for output*; `nthreads_selects_the_pipeline_pool` separately proves the pool is installed. |
-| `threshold_local_mean_radius` and the LocalMean offset | **Live under `threshold_mode = LocalMean` only** (the local-mean window and its offset); ignored by `TileMidExtreme`. Not allowlisted: their cases switch the mode on first. |
+| `threshold_local_mean_radius`, `threshold_noise_k` | **Live under `threshold_mode = LocalMean` only** (the local-mean window and its noise-calibrated offset); ignored by `TileMidExtreme`. Not allowlisted: their cases switch the mode on first. |
+
+The tile-contrast floor that used to be the `threshold_min_range` field is now an internal
+constant (`TILE_MIN_RANGE = 10` in `threshold.rs`). It is telemetry-only: the tile-validity
+mask it drives is applied only while writing `telemetry.binarized`, never to the
+`threshold_map` segmentation consumes.
 
 ---
 
