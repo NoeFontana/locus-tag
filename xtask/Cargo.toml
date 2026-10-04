@@ -12,3 +12,7 @@ description = "Repository automation: reproducible comparative benchmarking agai
 
 [lints]
 workspace = true
+
+# Internal automation: never versioned or published with the crates.
+[package.metadata.release]
+release = false
