@@ -4,7 +4,7 @@ This document details Locus's memory architecture: the Data-Oriented Design (DOD
 
 ## Design Philosophy
 
-Locus achieves sub-15 ms latency by treating memory as an explicit resource rather than delegating it to the system allocator. The hot path (`detect()`) executes **zero heap allocations** after initialization. All ephemeral per-frame data lives in a bump arena that is reset in $O(1)$ time at frame boundaries.
+Locus keeps latency low and bounded by treating memory as an explicit resource rather than delegating it to the system allocator. The hot path (`detect()`) executes **zero heap allocations** after initialization. All ephemeral per-frame data lives in a bump arena that is reset in $O(1)$ time at frame boundaries.
 
 ## Memory Hierarchy
 
@@ -26,7 +26,6 @@ flowchart LR
 
         subgraph Static ["Pooled Buffers (Persistent)"]
             Upscale["Upscale Buffer"]
-            Integral["Integral Image Buffer"]
         end
     end
 
@@ -40,8 +39,8 @@ flowchart LR
 
 | Class | Lifetime | Strategy | Examples |
 | :--- | :--- | :--- | :--- |
-| **Persistent** | Detector lifetime | Pre-allocated at `Detector::new()` | `DetectionBatch`, upscale buffer, integral image buffer |
-| **Per-Frame** | Single `detect()` call | Bump arena (`bumpalo::Bump`) | Binarized image, contours, intermediate SoA slices |
+| **Persistent** | Detector lifetime | Pre-allocated at `Detector::new()` | `DetectionBatch` (boxed), upscale buffer |
+| **Per-Frame** | Single `detect()` call | Bump arena (`bumpalo::Bump`) | Sharpened / decimated image, threshold map, binarized image, runs, contours, intermediate SoA slices |
 | **Stack** | Function scope | Fixed-size arrays, `SmallVec`, `arrayvec` | Homography matrices, sample buffers, ROI caches |
 
 ### Forbidden in the Hot Path
@@ -76,8 +75,18 @@ poses      │ Pose6D  │ Pose6D  │ Pose6D  │   ...   │  32-byte aligned
 status_mask│  u8     │  u8     │  u8     │   ...   │
            ├─────────┼─────────┼─────────┼─────────┤
 funnel_status│ u8    │  u8     │  u8     │   ...   │
+           ├─────────┼─────────┼─────────┼─────────┤
+corner_covariances│ [16×f32]│ [16×f32]│ ...  │   ...   │  four 2×2 blocks
+           ├─────────┼─────────┼─────────┼─────────┤
+corner_refined│ u8   │  u8     │  u8     │   ...   │  bit j: corner j from the junction pass
+           ├─────────┼─────────┼─────────┼─────────┤
+routed_to  │  u8     │  u8     │  u8     │   ...   │  AdaptivePpb route (telemetry)
+           ├─────────┼─────────┼─────────┼─────────┤
+ppb_estimate│ f32    │  f32    │  f32    │   ...   │  pixels per bit (telemetry)
            └─────────┴─────────┴─────────┴─────────┘
 ```
+
+`bench-internals` builds add Phase D diagnostic columns (`outlier_corner_idx`, `pose_consistency_d2`, `pose_consistency_d2_max_corner`, `ippe_branch_d2_ratio`). The batch is far larger than a thread stack, so it is only ever constructed on the heap (`DetectionBatch::new_boxed`) and owned through a `Box` (see [Constraints §1](../engineering/constraints.md)).
 
 ### The Identity Rule
 
@@ -102,9 +111,8 @@ sequenceDiagram
     Frame->>Arena: arena.reset()
     Note over Arena: All prior allocations freed (O(1))
 
-    Frame->>Arena: alloc(binarized_image)
-    Frame->>Arena: alloc(integral_image)
-    Frame->>Arena: alloc(contours)
+    Frame->>Arena: alloc(sharpened_image, threshold_map)
+    Frame->>Arena: alloc(runs, contours)
     Arena->>Allocs: Pointer bumps only
 
     Note over Frame: Pipeline runs...
@@ -164,15 +172,21 @@ flowchart TD
 
 To enable lock-free parallelization, each pipeline phase has strict read/write privileges over the SoA columns. See the full contract in [DetectionBatch Contract](../engineering/detection-batch-contract.md).
 
+Phase labels are stable identifiers, not the execution order, which is A → B.5 → B → (B.7 → B) → C → partition → D.
+
 | Phase | Reads | Writes |
 | :--- | :--- | :--- |
-| **A: Contour Extraction** | Image | `corners`, `status_mask`, `corner_covariances` |
-| **B: Homography** | `corners`, `status_mask` | `homographies` |
+| **A: Contour Extraction** | Image | `corners`, `status_mask`, `corner_covariances`, `corner_refined` (cleared) |
 | **B.5: Funnel** | Image, `corners` | `status_mask`, `funnel_status` |
-| **C: Decoding** | Image, `homographies` | `ids`, `payloads`, `error_rates`, `status_mask`, `corners`¹ |
-| **D: Pose** | `corners`, `status_mask`, `corner_covariances` | `poses` |
+| **B: Homography** | `corners`, `status_mask` | `homographies` |
+| **B.7: Detector-level GWLF** (only if a route uses it; no shipped profile does) | Image, `status_mask`, `routed_to` | `corners`, `corner_covariances` |
+| **C: Decoding** | Image, `corners`, `homographies` | `ids`, `payloads`, `error_rates`, `status_mask`, `corners`¹, `corner_refined`, `homographies`² |
+| **D: Pose** | `corners`, `corner_covariances` (on the partitioned `[0..V]`) | `poses` (+ `bench-internals` diagnostic columns) |
 
-¹ Phase C's write to `corners` is restricted to a rotation-permutation (and optional sub-pixel refinement) — the four corner slots of a single index are cyclically re-labelled to reflect the decoded rotation, preserving the identity invariant. See `docs/engineering/detection-batch-contract.md §4 Phase C` and the enforcing test at `crates/locus-core/tests/contract_detection_batch.rs`.
+¹ Phase C writes `corners` only for the rotation permutation (the four slots of one index are cyclically re-labelled; the identity invariant holds), the decode-first / ERF refinement of a decoded candidate, and the `decoder.corner_subpix` corner stage.
+² Whenever Phase C writes corners it recomputes `homographies[i]`, so the (corners, H) pair stays consistent for downstream consumers such as `CharucoRefiner`.
+
+The full contract is in [DetectionBatch Contract §4](../engineering/detection-batch-contract.md); it is enforced by `crates/locus-core/tests/contract_detection_batch.rs`.
 
 This isolation guarantees that phases B and C can be parallelized via `rayon` without synchronization.
 

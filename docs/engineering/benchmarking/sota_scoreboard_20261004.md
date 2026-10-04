@@ -7,7 +7,7 @@ junction/edge-line corners with the photometric corner calibration. `main` at `3
 before column. Reproduce any cell with `cargo xtask sota` (`xtask/README.md`).
 
 **Result:** 52 of 73 judged cells won (`main`: 47). Corner metrics are debiased: each detector's
-mean radial offset is removed and reported separately ([why](../lessons/rotation-tail-and-edge-refinement.md#2026-10-04--the-marker-calibrates-its-own-photometric-inset)).
+mean radial offset is removed and reported separately ([why](../lessons/rotation-tail-and-edge-refinement.md#2026-10-04-the-marker-calibrates-its-own-photometric-inset)).
 
 | Benchmark | Corner metric (px) | `main` | This build | Best reference |
 | :-- | :-- | --: | --: | --: |

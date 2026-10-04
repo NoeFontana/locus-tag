@@ -6,7 +6,7 @@ This document provides rigorous mathematical descriptions of the core solvers in
 
 ## 1. Homography Estimation (DLT)
 
-**Module:** `homography.rs`
+**Module:** `decoder.rs` (`Homography`, `HomographyDda`)
 
 A homography $\mathbf{H} \in \mathbb{R}^{3 \times 3}$ is the projective transformation mapping points from canonical tag space to image pixels:
 
@@ -46,9 +46,11 @@ The perspective divide $\mathbf{p}_{\text{img}} = (n_x/d, \; n_y/d)$ is computed
 
 ---
 
-## 2. ERF Sub-pixel Edge Refinement
+## 2. Sub-pixel Corner Refinement
 
-**Module:** `edge_refinement.rs`
+Two corner estimators run in sequence on the default path. The ERF edge fit (§2.1–2.4) refines quad corners during extraction or, under decode-first ordering, on the candidates that decode. On every decoded marker, `decoder.corner_subpix` (`standard`, `grid`) then re-estimates the corners from junctions and whole-edge lines (§2.5) and removes the photometric inset the marker's own bit edges measure (§2.6).
+
+**Module (ERF):** `edge_refinement.rs`
 
 ### 2.1 Intensity Model
 
@@ -96,11 +98,46 @@ with convergence when $|\Delta\rho| < 10^{-4}$ or after 15 iterations.
 
 The `erf_approx` function is shared across both variants and has a SIMD-vectorized 4-wide version (`erf_approx_v4`) for batch evaluation.
 
+### 2.5 Gradient-orthogonality corners and whole-edge fusion
+
+**Module:** `refinement.rs` (`subpix_marker_corners`)
+
+**Junction estimate.** At a corner $\mathbf{c}$, every image gradient in the neighbourhood is orthogonal to $\mathbf{p} - \mathbf{c}$: zero on flat patches, normal to the edge on an edge through $\mathbf{c}$. The corner therefore solves the `cv::cornerSubPix` normal equations over a Gaussian-weighted window,
+
+$$\Big(\sum_\mathbf{p} w\, \nabla I \nabla I^\top\Big)\, \mathbf{c} = \sum_\mathbf{p} w\, \nabla I \nabla I^\top \mathbf{p},$$
+
+re-centred until the step is below 0.005 px. A sandwich covariance from the residual gives each solution an uncertainty. The window half-width is tried at 0.3, 0.5 and 0.75 of the marker cell (clamped to 2–4 px: past the blur, inside the border cell). The largest window whose uncertainty is within a factor of 2 of the best is kept. The estimator converges on *any* junction in its window, so a solution is kept only if the image around it still shows the corner of this marker's black border: the inward diagonal is darker than the two quiet-zone side probes. Markers with cells under ~3.3 px keep their seed corners.
+
+**Gross-corner repair.** A corner the junction model rejects while both neighbours pass is usually not near the marker corner at all: quad extraction cut across a blurred apex or a touching square. Its two edges still run straight from the good neighbours. Each is refitted on its half next to the good neighbour, the corner is re-placed at their crossing (iterated, at most a quarter side), and the result must pass the junction model. A repaired corner can make its neighbour repairable, so the sweep repeats until nothing changes.
+
+**Whole-edge fusion** *(undistorted images)*. The junction sees only the corner's neighbourhood; each edge carries information along its whole length. Each side is fitted as a straight line through gradient-weighted edge stations over its middle 70 %, with $\operatorname{Var}(\text{offset}) = s^2/N$ and $\operatorname{Var}(\text{angle}) = s^2/\sum t^2$ from the stations' own scatter, so bit edges or clutter in the band inflate the line's uncertainty. Two adjacent lines give a line corner and its covariance. At an L-corner the junction and line corners are fused by inverse covariance when they agree (Mahalanobis $d^2 \le 9.21$, the $\chi^2_2$ 99 % point). Fusion is all-or-nothing per marker: mixing estimators with different apex biases would turn the square into rotation error. At an X-junction (an AprilGrid connector touching the corner) the edge lines carry the photometric edge offset and the junction point does not, so the junction estimate stands alone.
+
+### 2.6 Marker photometric inset calibration
+
+**Module:** `marker_inset.rs`
+
+**Why.** A camera blurs in linear light and then applies its tone curve. On the recorded intensities every blurred edge is therefore shifted by some $\delta$ toward its **dark side** — 0.3–0.5 px on sRGB images, growing with blur. Every gradient corner estimator (Locus's, OpenCV's, aruco_nano's) reports a marker's corners 0.4–0.7 px inside the printed ones. On a single tag that inset reads as depth (centimetres of translation), and under perspective it is not even the image of a smaller square, so it becomes rotation error too. Since $\delta$ depends on blur, which varies with depth along an oblique edge, it cannot be a detector constant.
+
+**Fit per marker.** The decoded marker measures $\delta$ itself. Its bit boundaries come in both polarities; each shifts toward its dark side by the same $\delta$, and the decoded layout says where each boundary should be. For each boundary station, the measured edge offset from where the corners' homography puts it is modelled as
+
+$$e = \delta\,\sigma + (s - 1)(u - N/2)\,c + \operatorname{shrink}(u; \varepsilon) + \operatorname{bow}(u, w; q),$$
+
+with $\sigma = \pm 1$ the side that is dark, $s$ a scale of the interior layout about the marker centre, $\varepsilon$ per side how far the detected corners sit inside the true outline, and an optional bow term (added only when an F-test supports it) for lens distortion the pinhole model does not describe. Polarity separates $\delta$; the outer boundaries, which carry no $s$ term, pin $\varepsilon$. The ten-parameter robust (Huber IRLS) fit needs no tone curve, blur model or camera knowledge, and the corners move outward by $\varepsilon$ per side. Guards (enough boundaries found, small residual scale, $|s - 1| \le 0.05$, inset $\le 1.5$ px, cells ≥ ~3.3 px) leave a marker whose layout does not match — e.g. a 2-bit Kalibr border decoded as a 1-bit tag — with its corners unchanged. See the [rotation-tail lessons](../engineering/lessons/rotation-tail-and-edge-refinement.md#2026-10-04-the-marker-calibrates-its-own-photometric-inset).
+
+### 2.7 Board-level inset (`BoardEstimator`)
+
+**Module:** `board.rs`
+
+On a board the pose is shared, so the inset is estimated jointly instead: the board LM alternates with a per-frame Huber estimate of the marker-corner inset along each corner's edge-offset direction. Each **corner estimator** gets its own $\delta$ — corners placed by the junction pass (`corner_refined` bit set) and corners from the ERF edge fit carry different photometric offsets (equal on L-corners, not on AprilGrid's X-junctions). An inset is modelled only when it exceeds three standard errors.
+
 ---
 
 ## 3. Gradient-Weighted Line Fitting (GWLF)
 
 **Module:** `gwlf.rs`
+
+!!! note "Not used by any shipped profile"
+    GWLF is a legacy corner-refinement mode; none of `standard`, `grid` or `high_accuracy` selects it. The moment accumulator (§3.1) is still used by EdLines. The section documents the method for reference.
 
 ### 3.1 Moment Accumulation
 
@@ -199,10 +236,10 @@ ensuring $\det(\mathbf{R}) = +1$.
 ## 5. Levenberg-Marquardt Pose Refinement
 
 The LM stage selects its cost surface from the availability of per-corner
-covariances — *not* a user mode flag. When covariances are present (image
-view supplied to the detector, or external GWLF covariances threaded in),
+covariances — *not* a user mode flag. When covariances are present (the
+image view is supplied, as on every `detect()` call),
 the weighted-Mahalanobis path (§5.2) runs and returns a 6×6 pose
-covariance. When the caller skips both (e.g. a pure pose-only refit from
+covariance. When no image is available (e.g. a pure pose-only refit from
 pre-extracted corners), the LM falls back to the unweighted Huber path
 (§5.1) and reports no covariance. Both paths share the same IPPE-Square
 seed and the same Marquardt / Nielsen trust-region machinery.
@@ -281,7 +318,7 @@ where:
 
 $$s_i = \sqrt{\mathbf{r}_i^T \mathbf{W}_i \mathbf{r}_i}$$
 
-is the Mahalanobis distance and $\mathbf{W}_i = \boldsymbol{\Sigma}_i^{-1}$ is the information matrix (inverse of the $2 \times 2$ corner covariance from the Structure Tensor or GWLF).
+is the Mahalanobis distance and $\mathbf{W}_i = \boldsymbol{\Sigma}_i^{-1}$ is the information matrix (inverse of the $2 \times 2$ corner covariance, from the Structure Tensor on the shipped profiles).
 
 #### Huber-on-Mahalanobis IRLS
 
@@ -304,7 +341,7 @@ The Jacobian $\mathbf{J}_i$ has the same structure as in Fast mode.
 | Source | Method | Module |
 | :--- | :--- | :--- |
 | **Structure Tensor** | $\boldsymbol{\Sigma}_c \approx \sigma_n^2 \mathbf{S}^{-1}$ where $\mathbf{S}$ is the Sobel-based structure tensor | `pose_weighted.rs` |
-| **GWLF Propagation** | Formal covariance propagation through PCA line fitting and homogeneous intersection | `gwlf.rs` |
+| **GWLF Propagation** (legacy mode, unused by the shipped profiles) | Formal covariance propagation through PCA line fitting and homogeneous intersection | `gwlf.rs` |
 
 #### Gain-Scheduled Tikhonov Regularization
 
@@ -330,9 +367,13 @@ This encodes the full translational and rotational uncertainty and is returned a
 
 ## 6. Decoding Strategies
 
-**Module:** `decoder.rs`, `strategy.rs`
+**Module:** `decoder.rs`, `strategy.rs`, `dictionaries.rs`
 
-Each bit cell is sampled at its grid center via the homography DDA. The sampled intensity is compared against the local adaptive threshold to produce a binary code. Dictionary lookup is $O(1)$ via precomputed Hamming distance tables.
+Each bit cell is sampled at its grid center via the homography DDA. The sampled intensity is compared against a per-cell adaptive threshold to produce a binary code (`strategy::bits_from_intensities`).
+
+**Nearest codeword.** The code is matched against all four rotations of every codeword in one branch-free pass: each entry yields the key $(\operatorname{popcount}(b \oplus c_i) \ll 16) \,|\, i$, and the minimum key is the nearest codeword, lowest index on ties. The pass is a vectorizable popcount-and-min, dispatched at runtime to `popcnt`/AVX2 or NEON; it is $O(\text{codes})$ per candidate, not a table lookup. (A multi-index-hash path exists for payloads above 36 bits; no shipped family uses it.)
+
+**Acceptance.** A match stands when its distance is within the family budget (`decoder.max_hamming_error`, else the family default) and the marker's dark border ring passes its error budget (see [Pipeline §4d](pipeline.md#4d-border-ring-evidence)). Near misses within the family's recovery window — the largest distance random bits reach with probability ≤ 0.1 — get a refinement retry when the seed shows a dark ring.
 
 ---
 
@@ -349,6 +390,8 @@ Board pose estimation aggregates evidence from multiple detected tags into a sin
 **Struct:** `BoardEstimator`
 
 Each visible tag contributes 4 point correspondences: its refined image corners paired with pre-computed 3D board-frame coordinates from `AprilGridTopology::obj_points`.
+
+The board LM also estimates a **per-frame photometric inset** for each corner estimator (junction-pass corners vs. ERF corners), alternating with the pose; see §2.7.
 
 The `group_size=4` parameter tells `RobustPoseSolver` that these 4 points belong to a rigid group — RANSAC hypotheses are drawn from whole tags, not individual corners, preventing degenerate single-tag hypotheses.
 

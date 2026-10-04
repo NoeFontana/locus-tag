@@ -35,7 +35,7 @@ moved corners) → C → partition → D.
 
 ### Phase A: Contour Extraction
 *   **Privileges**: Write to `corners`, `status_mask`, `corner_covariances`, and `corner_refined` (cleared).
-*   **Contract**: The extractor sequentially writes quad vertices into memory, zeroes the covariance blocks (or fills them with Structure-Tensor estimates when GWLF is enabled), and marks each populated slot `Active`. It returns a single integer N representing the total active candidates found in the frame. With `quad.refine_before_decode = false` (decode-first) on the ERF route of an undistorted camera, the written corners are the unrefined contour corners; Phase C refines the candidates that decode.
+*   **Contract**: The extractor sequentially writes quad vertices into memory, zeroes the covariance blocks (or fills them with Structure-Tensor estimates when GWLF is enabled), and marks each populated slot `Active`. It returns a single integer N representing the total active candidates found in the frame. Under decode-first ordering (the ERF route at native resolution on an undistorted camera, as in `standard` and `grid`), the written corners are the unrefined contour corners; Phase C refines the candidates that decode.
 
 ### Phase B: Homography Computation
 *   **Privileges**: Read-Only on `corners[0..N]` and `status_mask[0..N]`; Write-Only on `homographies[0..N]`.

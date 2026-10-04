@@ -8,7 +8,7 @@
 
 > [!WARNING]
 > **Experimental: pre-1.0, not recommended for production yet.**
-> - The API may break until 1.0.0. The road to 1.0 is a smaller API surface and validation on real-camera (not just synthetic) data. Contribution of permissively licensed real datasets greatly appreciated (open an issue to chat about it)!
+> - The API may break until 1.0.0. The road to 1.0 is a smaller API surface and broader validation on real-camera data (EuRoC and Liu4K are benchmarked today). Contribution of permissively licensed real datasets greatly appreciated (open an issue to chat about it)!
 > - Distortion-model support is experimental and slated for a redesign.
 > - The shipped tag families are intentionally minimal.
 
@@ -76,19 +76,24 @@ Profiles are selected by name and embedded in the wheel:
 <!-- --8<-- [start:performance-profiles] -->
 | `profile` | Best for | Notes |
 | :--- | :--- | :--- |
-| `"standard"` | General detection | Balanced recall and precision; highest recall on small/distant tags. |
-| `"grid"` | ChArUco / AprilGrid boards | 4-connectivity recovers touching tags that `"standard"` merges. |
-| `"high_accuracy"` | Metrology, AV pose | Best pose accuracy and rotation-tail control. Needs camera intrinsics + `tag_size`. |
+| `"standard"` | General detection, real cameras | Default. Decode-first with a dark-border-ring check, 4-connectivity, fused and photometrically calibrated corners. |
+| `"grid"` | Calibration boards, low-contrast prints | `standard`'s pipeline with blob-shape gates kept, sharpening off and lower contrast gates. |
+| `"high_accuracy"` | Metrology, AV pose | EdLines quads and model-edge pose refinement for single-tag rotation tails. Needs camera intrinsics + `tag_size`. |
 <!-- --8<-- [end:performance-profiles] -->
 
-On our high-fidelity `render-tag` suite (1080p, single-thread), `high_accuracy` leads both the translation **and** rotation tails while running ~13× faster than OpenCV's best-accuracy configuration:
+`standard` is benchmarked against pinned OpenCV `aruco` 4.10 (three corner refiners) and aruco_nano on real and rendered data with `cargo xtask sota` (2026-10-04, 1 thread, AMD EPYC-Milan):
 
-| Detector | Rot p99 | Trans p99 | Latency |
-| :--- | :---: | :---: | :---: |
-| **Locus (`high_accuracy`)** | **0.249°** | **20.1 mm** | **15.2 ms** |
-| OpenCV (`cv2.aruco`, apriltag) | 0.376° | 55.3 mm | 195.8 ms |
+| Benchmark | Metric | Locus `standard` | Best reference |
+| :--- | :--- | :---: | :---: |
+| EuRoC `cam_april` (real camera, Kalibr AprilGrid) | Recall | **86.0 %** | 57.1 % |
+| | Precision | **99.996 %** | 99.993 % |
+| | Leave-one-out corner error, median / p90 | **0.283 / 0.575 px** | 0.516 / 0.996 px |
+| render-tag 1080p (Blender) | Corner error, debiased mean | **0.062 px** | 0.230 px |
+| Liu4K (real 4K photos, ArUco MIP 36h12) | Recall | 37.2 % | **66.3 %** |
 
-Full results — both benchmark suites (render-tag + ICRA 2020), every percentile, methodology, and hardware — are in the [performance docs](https://noefontana.github.io/locus-tag/latest/explanation/performance/).
+Liu4K recall is an open gap (threshold model; see the [recall lessons](https://noefontana.github.io/locus-tag/latest/engineering/lessons/recall-quad-icra/)). Sources: the [EuRoC report](https://noefontana.github.io/locus-tag/latest/engineering/benchmarking/euroc_sota_20261004/) and the [SOTA scoreboard](https://noefontana.github.io/locus-tag/latest/engineering/benchmarking/sota_scoreboard_20261004/) (2026-10-04).
+
+For single-tag pose, `high_accuracy` had the lowest rotation and translation tails on the 1080p render-tag suite in the 2026-07 snapshot (rotation p99 0.249° vs 0.376° for OpenCV's `apriltag` refiner). Details, methodology and hardware are in the [performance docs](https://noefontana.github.io/locus-tag/latest/explanation/performance/).
 
 ## Visual debugging
 

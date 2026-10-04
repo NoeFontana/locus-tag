@@ -2,9 +2,14 @@
 
 Tools for benchmarking and diagnosing failures, covering both the core Rust engine and the Python bindings.
 
-## The 3-Tier Tooling Stack
+## The Tooling Stack
 
-Strict boundaries between measurement tools, to avoid the "Observer Effect" (see Tier 2).
+Strict boundaries between measurement tools, to avoid the "Observer Effect" (see Tier 2). Three tiers measure Locus itself; a comparative tier measures it against other detectors.
+
+### Comparative tier: `cargo xtask sota` (published comparisons)
+*   **Tool**: `cargo xtask sota` ([`xtask/README.md`](https://github.com/NoeFontana/locus-tag/blob/main/xtask/README.md)).
+*   **Purpose**: Reproducible comparison against **pinned** references — OpenCV `aruco` 4.10.0 (three corner refiners), aruco_nano `961b18b`, AprilTag 3 — on every dataset they can decode (Liu4K, EuRoC, ICRA 2020, the render-tag and board suites). It reports recall, precision, F1, order-preserving and **debiased** corner error, and latency, and ends with a win table; `cargo xtask sota scoreboard` aggregates every scored benchmark.
+*   **Rule**: Any published "Locus vs X" number comes from this tool. Publish latency only from `--jobs 1` runs on an idle machine. The Python sweep tools (`bench sweep` / `tune` / `compare-instances`) use the unpinned `opencv-python` wheel from the `bench` group and are for exploration, not publication.
 
 ### Tier 1: End-to-End Regression (The Python CLI)
 *   **Tool**: `uv run tools/cli.py bench real` (ICRA 2020 scenarios or Hugging Face Hub datasets via `--hub-config`).
@@ -27,12 +32,23 @@ Strict boundaries between measurement tools, to avoid the "Observer Effect" (see
 
 Source of truth for core engine performance and regressions.
 
+### Dataset provisioning
+
+Every external dataset (Hub render suites, ICRA 2020, EuRoC, Liu4K) is pinned in `xtask/datasets.toml` and fetched into `tests/data/` with `cargo xtask data`:
+
+```bash
+cargo xtask data list                                  # what exists, where, licence
+cargo xtask data fetch icra2020-forward icra2020-circle
+cargo xtask data fetch euroc liu4k                     # EuRoC mirror needs `hf auth login` or HF_TOKEN
+cargo xtask data fetch hub --subsets all
+cargo xtask data verify                                # missing or stale-pin copies -> exit 1
+```
+
+Rust tests and Python loaders read the same `tests/data/` paths. `LOCUS_ICRA_DATASET_DIR`, `LOCUS_EUROC_DATASET_DIR` and `LOCUS_HUB_DATASET_DIR` only relocate a dataset — except that the render-tag and distortion Hub suites still require `LOCUS_HUB_DATASET_DIR` to be set (they skip otherwise).
+
 ### Regression Suite (ICRA 2020)
 
-1. **Set Dataset Path**:
-   ```bash
-   export LOCUS_ICRA_DATASET_DIR=/path/to/icra2020
-   ```
+1. **Fetch the dataset**: `cargo xtask data fetch icra2020-forward` (plus `icra2020-circle` / `icra2020-random` for the extended run).
 2. **Run Benchmarks**:
    ```bash
    # Core check (Forward dataset + Fixtures, approx 15s)
@@ -69,7 +85,7 @@ Source of truth for core engine performance and regressions.
 2. **Run Hub Tests**:
    ```bash
    # Tag-level regression (regression_render_tag)
-   # Covers 4 resolutions × Erf/GWLF/EdLines variants and Fast/Accurate pose modes.
+   # Covers 4 resolutions × the shipped extraction/refinement routes and Fast/Accurate pose modes.
    # Requires LOCUS_HUB_DATASET_DIR to locate the cache.
    LOCUS_HUB_DATASET_DIR=tests/data/hub_cache \
      cargo test --release --test regression_render_tag --features bench-internals -- --nocapture
@@ -118,12 +134,15 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 - [Micro-Benchmarking Guide](benchmarking/micro-benchmarking-guide.md) — 3-tier validation loop
 
 ### Point-in-time reports (historical snapshots)
-- [EuRoC, the real-data benchmark (2026-10-04)](benchmarking/euroc_sota_20261004.md) — scorer fixes, 4-connectivity, clipped and gross corners: EuRoC recall 20.9 → 86.0 %, 65/93 cells vs `main` 57/93; latency +17–28 %
-- [SOTA scoreboard checkpoint (2026-10-04)](benchmarking/sota_scoreboard_20261004.md) — fused + photometrically calibrated corners (#434): 52/73 vs `main` 47/73; render-tag corners ≈ 3.7× better than the best reference
+
+The two 2026-10-04 reports describe the current `standard` pipeline; the rest are history.
+
+- [EuRoC, the real-data benchmark (2026-10-04)](benchmarking/euroc_sota_20261004.md) — **latest.** Scorer fixes, 4-connectivity, clipped and gross corners: EuRoC recall 20.9 → 86.0 %, 65/93 cells vs `main` 57/93; latency +17–28 %
+- [SOTA scoreboard checkpoint (2026-10-04)](benchmarking/sota_scoreboard_20261004.md) — **latest for corner metrics.** Fused + photometrically calibrated corners (#434): 52/73 vs `main` 47/73; render-tag corners ≈ 3.7× better than the best reference
 - [SOTA scoreboard checkpoint (2026-10-03)](benchmarking/sota_scoreboard_20261003.md) — `main` `a6199d4`, opt-in decode-first candidate (37/88) vs `standard` (32/88), 1T and 8T latency
 - [SOTA scoreboard baseline (2026-10-02)](benchmarking/sota_scoreboard_20261002.md) — `standard` vs the best OpenCV / aruco_nano operating point on every compatible dataset; `cargo xtask sota scoreboard`
 - [Real-image competitiveness: Liu4K + EuRoC (2026-10-01)](benchmarking/liu4k_euroc_sota_20261001.md) — reproduce with `cargo xtask sota` (`xtask/README.md`)
-- [Render-tag 1080p SOTA (current, v0.7.0-refreshed)](benchmarking/render_tag_sota_20260713.md)
+- [Render-tag 1080p SOTA (2026-07-13, v0.7.0-refreshed)](benchmarking/render_tag_sota_20260713.md) — single-tag pose percentiles; predates decode-first, 4-connectivity and the corner stage
 - [Render-tag 2160p recall lift (2026-04-25)](benchmarking/render_tag_2160p_20260425.md)
 - [Render-tag 1080p SOTA pursuit (2026-04-25)](benchmarking/render_tag_sota_20260425.md)
 - [Release Performance Report (2026-04-18)](benchmarking/release_performance_20260418.md)
@@ -135,10 +154,7 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 `tools/cli.py` is the central entry point for high-level evaluations and development tasks.
 
 ### Data Preparation
-Downloads ICRA 2020 scenarios and auto-discovers/syncs all Hub dataset subsets to `tests/data/hub_cache/`:
-```bash
-PYTHONPATH=. uv run --group bench tools/cli.py bench prepare
-```
+Use `cargo xtask data fetch …` (see [Dataset provisioning](#dataset-provisioning)). `tools/cli.py bench prepare` is a thin wrapper over the same pinned manifest (ICRA forward + circle and every Hub config).
 
 ### Real-World Evaluation (ICRA 2020)
 Evaluate performance on the ICRA 2020 dataset scenarios (`forward`, `circle`):
@@ -164,22 +180,28 @@ PYTHONPATH=. uv run --group bench tools/cli.py bench real --dataset liu4k
 # Adds id-aware decode TP/FP/FN, recall, precision, F1 (markers use ARUCO_MIP_36h12)
 PYTHONPATH=. uv run --group bench tools/cli.py bench real --dataset liu4k --family ArUcoMip36h12
 
-# Best config reachable with shipped options alone (the stronger LocalMean-based candidate needs PR #383; see the real-image competitiveness snapshot)
+# Variant: sharpening off (the LocalMean (opt-in) threshold variants are analysed in the real-image snapshot)
 PYTHONPATH=. uv run --group bench tools/cli.py bench real --dataset liu4k --family ArUcoMip36h12 --no-sharpening
 ```
 
 The scorer mirrors aruco_nano's `testperf.cpp`: for each detection, the first unmatched GT marker with
 the same id and a centre distance `<= 10 px` makes it a TP, otherwise it is a FP; `FN = GT - TP`. The
 10 px radius is the Liu4K-specific `LIU4K_MATCH_THRESHOLD_PX` (`tools/bench/liu4k.py`); the repo-wide
-`MATCH_DISTANCE_THRESHOLD_PX` is untouched. The GT corner winding is opposite to Locus/OpenCV, so any
-future corner-error metric must remap it (0,3,2,1). Results and analysis:
+`MATCH_DISTANCE_THRESHOLD_PX` is untouched. Results and analysis:
 [real-image competitiveness snapshot](benchmarking/liu4k_euroc_sota_20261001.md).
 
-The first run downloads `liu4k.zip` (about 4 GB) from Zenodo into `tests/data/liu4k/`
-(gitignored), verifies its md5 (`e8fafe5444a9e346f25123151ef1a699`, from the Zenodo record),
-extracts it and deletes the archive. The data is never committed, never packaged in wheels or
-sdist, and never republished in converted form. Corner error is not reported: without a decoded id
-the corner order is unknown, and corner error must stay order-preserving.
+**Corner error.** `bench real --dataset liu4k` does not report it. `cargo xtask sota run liu4k`
+does: detections are paired with GT markers by id, the GT corner winding (opposite to
+Locus/OpenCV) is remapped by one fixed relabelling, the error stays order-preserving, and the
+judged cell is the **debiased** median on tags every detector found (each detector's mean radial
+offset is removed and reported separately). Current numbers:
+[2026-10-04 scoreboard](benchmarking/sota_scoreboard_20261004.md).
+
+`cargo xtask data fetch liu4k` downloads `liu4k.zip` (about 4 GB) from Zenodo into
+`tests/data/liu4k/` (gitignored), verifies its md5 (`e8fafe5444a9e346f25123151ef1a699`, from the
+Zenodo record), extracts it and deletes the archive; the bench CLI fetches it the same way on
+first use. The data is never committed, never packaged in wheels or sdist, and never republished
+in converted form.
 
 **Attribution and license.** Dataset: Muñoz-Salinas, R., *Liu4K dataset employed for Aruco_Nano
 paper*, Zenodo, 2026, [doi:10.5281/zenodo.18667018](https://doi.org/10.5281/zenodo.18667018),

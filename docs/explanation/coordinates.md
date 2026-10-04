@@ -26,10 +26,13 @@ This convention is strictly followed to ensure that sub-pixel corner refinement 
     principal point by half a pixel. The offset is measured at $+0.50$ px against `cornerSubPix`
     on EuRoC; `tools/bench/sota/` converts per detector.
 
-    **Open question:** `CameraIntrinsics` does not state which convention its principal point
-    $(c_x, c_y)$ follows, and pose estimation applies it as given to +0.5-convention corners.
-    Until this is specified and tested, check single-tag pose against a known target when using an
-    OpenCV- or Kalibr-calibrated camera matrix.
+    **Camera intrinsics.** Pose estimation applies `CameraIntrinsics` exactly as given: it
+    projects with $u = f_x X/Z + c_x$ (§4) and compares the result directly with the
+    +0.5-convention corners. The principal point $(c_x, c_y)$ is therefore read in the **same
+    +0.5 convention** as the corners. For a camera matrix from OpenCV `calibrateCamera` or
+    Kalibr (integer-centre convention), pass $c_x + 0.5$ and $c_y + 0.5$; $f_x$, $f_y$ and the
+    distortion coefficients are unchanged. Passing the OpenCV values unchanged shifts the
+    principal point by half a pixel.
 
 !!! info "ICRA 2020 Parity"
     While Locus uses the same pixel coordinate system as the ICRA 2020 benchmark, the **corner indexing** differs due to winding conventions:
@@ -63,7 +66,7 @@ Detections return corners in **clockwise order** (when looking at the tag), matc
 Locus strictly adheres to **modern OpenCV (cv2.aruco)** conventions for dictionary layout, bit ordering, and canonical orientation.
 
 ### Row-Major Bit Ordering
-For all supported families (AprilTag 16h5, 36h11, ArUco 4x4, and ArUco 6x6), the binary payload is extracted in **row-major order**:
+For all supported families (AprilTag 16h5, 36h11, ArUco 4x4, ArUco 6x6 and ArUco MIP 36h12), the binary payload is extracted in **row-major order**:
 - **Bit 0**: Top-left data cell.
 - **Bit N-1**: Bottom-right data cell.
 
@@ -165,4 +168,4 @@ A board pose $(R, t)$ transforms a point $P_{\text{board}}$ from board coordinat
 
 $$P_{\text{camera}} = R \cdot P_{\text{board}} + t$$
 
-This is the same convention as the single-tag pose (Section 5). The covariance matrix returned alongside the board pose is a $6 \times 6$ matrix in $\mathfrak{se}(3)$ tangent space, ordered $[\mathbf{t}, \boldsymbol{\omega}]$, in the **body (board) frame** — see [Section 5.1](#51-pose-covariance--perturbation-frame) for the perturbation convention and frame-conversion helpers.
+This is the same convention as the single-tag pose (Section 5). The covariance matrix returned alongside the board pose is a $6 \times 6$ matrix in $\mathfrak{se}(3)$ tangent space, ordered $[\mathbf{t}, \boldsymbol{\omega}]$, in the **body (board) frame** — see [Section 5.1](#51-pose-covariance-perturbation-frame) for the perturbation convention and frame-conversion helpers.
