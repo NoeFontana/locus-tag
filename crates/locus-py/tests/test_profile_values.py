@@ -19,12 +19,13 @@ EXPECTED = {
     "standard": {
         "threshold.enable_sharpening": True,
         "threshold.tile_size": 8,
-        "quad.max_elongation": 20.0,
-        "quad.min_density": 0.15,
+        "quad.min_fill_ratio": 0.0,
+        "quad.max_elongation": 0.0,
+        "quad.min_density": 0.0,
         "quad.extraction_mode": QuadExtractionMode.ContourRdp,
         "decoder.refinement_mode": CornerRefinementMode.Erf,
         "decoder.min_contrast": 20.0,
-        "segmentation.connectivity": SegmentationConnectivity.Eight,
+        "segmentation.connectivity": SegmentationConnectivity.Four,
     },
     "grid": {
         "threshold.enable_sharpening": False,

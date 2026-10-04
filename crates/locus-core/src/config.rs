@@ -254,7 +254,7 @@ pub struct DetectorConfig {
     pub quad_min_area: u32,
     /// Maximum aspect ratio of bounding box (default: 3.0).
     pub quad_max_aspect_ratio: f32,
-    /// Minimum fill ratio (pixel count / bbox area) (default: 0.3).
+    /// Minimum fill ratio (pixel count / bbox area); 0.0 (the default) disables it.
     pub quad_min_fill_ratio: f32,
     /// Maximum fill ratio (default: 0.95).
     pub quad_max_fill_ratio: f32,
@@ -264,7 +264,12 @@ pub struct DetectorConfig {
     pub quad_min_edge_score: f64,
     /// PSF blur factor for subpixel refinement (e.g., 0.6)
     pub subpixel_refinement_sigma: f64,
-    /// Segmentation connectivity (4-way or 8-way).
+    /// Segmentation connectivity of dark regions (default: 4-way).
+    ///
+    /// Where two dark squares touch at a corner (AprilGrid connector squares, any tag touching
+    /// dark structure diagonally) 8-way connectivity always joins them through the diagonal
+    /// pixels, fusing a whole board into one component (EuRoC `cam_april`: 20 % recall vs 86 %).
+    /// 8-way only helps rings thinner than a pixel on the diagonal.
     pub segmentation_connectivity: SegmentationConnectivity,
     /// Factor to upscale the image before detection (1 = no upscaling).
     /// Increasing this to 2 allows detecting smaller tags (e.g., < 15px)
@@ -320,7 +325,9 @@ pub struct DetectorConfig {
     ///    Gaussian-weighted window sized from the marker's cell (the `cv::cornerSubPix`
     ///    model).
     /// 2. It is fused, by inverse covariance, with the intersection of the marker's two
-    ///    whole-edge lines.
+    ///    whole-edge lines. A corner whose seed is no junction at all (quad extraction cut
+    ///    across a blurred apex or a touching square) is first re-placed at the crossing of
+    ///    its two edges, fitted from the neighbouring corners.
     /// 3. The corners are calibrated against the marker's own bit edges, which removes the
     ///    tone-curve inset every gradient estimator has on gamma-encoded images.
     ///
@@ -454,11 +461,16 @@ pub struct DetectorConfig {
     pub gwlf_transversal_alpha: f64,
 
     /// Maximum elongation (λ_max / λ_min) allowed for a component before contour tracing.
-    /// 0.0 = disabled. Recommended: 15.0 to reject thin lines and non-square blobs.
+    /// 0.0 = disabled (the default).
+    ///
+    /// This gate and [`Self::quad_min_density`] / [`Self::quad_min_fill_ratio`] assume a filled
+    /// component. A marker merged with neighbouring structure, or one whose black cells are
+    /// wider than the threshold neighbourhood (a hollow ring), fails them although it decodes;
+    /// `standard` judges candidates by marker evidence instead (border ring, codeword budget).
     pub quad_max_elongation: f64,
 
     /// Minimum pixel density (pixel_count / bbox_area) required to pass the moments gate.
-    /// 0.0 = disabled. Recommended: 0.2 to reject sparse/noisy regions.
+    /// 0.0 = disabled (the default).
     pub quad_min_density: f64,
 
     /// Quad extraction mode: legacy contour tracing (default) or EDLines.
@@ -517,13 +529,13 @@ impl Default for DetectorConfig {
             // workload), tag36h11 1 PPB (= 64) costs 1 pp recall on forward.
             quad_min_area: 36,
             quad_max_aspect_ratio: 10.0,
-            quad_min_fill_ratio: 0.10,
+            quad_min_fill_ratio: 0.0,
             quad_max_fill_ratio: 0.98,
             quad_min_edge_length: 4.0,
             quad_min_edge_score: 4.0,
             subpixel_refinement_sigma: 0.6,
 
-            segmentation_connectivity: SegmentationConnectivity::Eight,
+            segmentation_connectivity: SegmentationConnectivity::Four,
             upscale_factor: 1,
             decimation: 1,
             nthreads: 0,
@@ -537,8 +549,8 @@ impl Default for DetectorConfig {
             sigma_n_sq: 4.0,
             structure_tensor_radius: 2,
             gwlf_transversal_alpha: 0.01,
-            quad_max_elongation: 20.0,
-            quad_min_density: 0.15,
+            quad_max_elongation: 0.0,
+            quad_min_density: 0.0,
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
             edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
             pose_consistency_fpr: 0.0,

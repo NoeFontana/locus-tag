@@ -226,14 +226,14 @@ class QuadConfig(BaseModel):
 
     min_area: int = Field(default=36, ge=1)
     max_aspect_ratio: float = Field(default=10.0, ge=1.0)
-    min_fill_ratio: float = Field(default=0.10, ge=0.0, le=1.0)
+    min_fill_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
     max_fill_ratio: float = Field(default=0.98, ge=0.0, le=1.0)
     min_edge_length: float = Field(default=4.0, gt=0.0)
     min_edge_score: float = Field(default=4.0, ge=0.0)
     subpixel_refinement_sigma: float = Field(default=0.6, ge=0.0)
     upscale_factor: int = Field(default=1, ge=1)
-    max_elongation: float = Field(default=20.0, ge=0.0)
-    min_density: float = Field(default=0.15, ge=0.0, le=1.0)
+    max_elongation: float = Field(default=0.0, ge=0.0)
+    min_density: float = Field(default=0.0, ge=0.0, le=1.0)
     extraction_mode: _QuadExtractionField = Field(
         default_factory=lambda: QuadExtractionMode.ContourRdp
     )
@@ -281,7 +281,8 @@ class DecoderConfig(BaseModel):
     corner_subpix: bool = True
     """Sub-pixel corner stage for every decoded marker, after ``refinement_mode``. Each
     corner is the gradient-orthogonality junction (the ``cv::cornerSubPix`` model) fused
-    with the intersection of the marker's whole-edge lines. The corners are then calibrated
+    with the intersection of the marker's whole-edge lines; a corner whose seed is no
+    junction at all is first re-placed from its two edges. The corners are then calibrated
     against the marker's own bit edges, which removes the tone-curve inset that every
     gradient corner estimator has on gamma-encoded images. Windows and weights come from
     the image; nothing is configured. Undistorted cameras only."""
@@ -359,7 +360,7 @@ class PoseConfig(BaseModel):
 class SegmentationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True)
 
-    connectivity: _SegConnField = Field(default_factory=lambda: SegmentationConnectivity.Eight)
+    connectivity: _SegConnField = Field(default_factory=lambda: SegmentationConnectivity.Four)
 
 
 class DetectorConfig(BaseModel):

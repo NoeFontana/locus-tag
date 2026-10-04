@@ -7,6 +7,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Gross-corner repair (in `decoder.corner_subpix`).** A corner the junction model rejects
+  while both neighbours pass is re-placed at the crossing of its two edges.
+  - **Why:** such a seed is usually nowhere near the marker's corner. Quad extraction cut
+    across a blurred apex or a touching square, no subpix window reaches the junction, and the
+    seed was kept unrepaired.
+  - **Method:** each edge is fitted on its half next to the good neighbour, then refitted from
+    each new crossing until it settles. The result is accepted only if the junction model
+    confirms a marker corner there.
+  - **Effect:** fires on 0.04 % of EuRoC markers, each a 4–5 px corner. On raw_pipeline the worst
+    corner error falls 19.7 → 0.25 px on the tags `main` also finds (scene_0026: rotation
+    26.3° → 0.37°).
+- **Two distortion benchmarks in `cargo xtask sota`:** `hub-aprilgrid-bc` and `hub-aprilgrid-kb`,
+  the Hub AprilGrid seen through Brown–Conrady and Kannala–Brandt lenses.
+
 - **Fused, photometrically calibrated marker corners (in `decoder.corner_subpix`; `standard`, `grid`).**
   - **Fusion:** each L-corner's gradient-orthogonality junction estimate is fused, by inverse
     covariance, with the intersection of the marker's two whole-edge lines.
@@ -248,6 +262,29 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **EuRoC scoring judged the reference, not the detectors.** About 400 correct Locus detections
+  were counted as false positives. All fixes apply to every detector alike:
+  - **Valid radius:** the published radtan calibration fails beyond about 380 px from the
+    principal point. There every detector shows the same inward radial error (−1.5 px at
+    380–400 px, −4.9 at 400–420, −10.4 at 420–440). Tags reaching past it are now neither true
+    nor false positives (`EUROC_VALID_RADIUS_PX`).
+  - **Image pixels:** corner errors are measured in image pixels, not after undistortion,
+    which stretched the periphery 1.5–2×.
+  - **Reference pool:** the reference is pooled only from detectors whose corners are
+    self-consistent (leave-one-tag-out median under 1 px). OpenCV NONE and SUBPIX (1.5–1.9 px on
+    the 2-bit border) set it before, so the verdict depended on which runs shared the directory.
+  - **Effect:** OpenCV's recall rises 45 → 57 %, and Locus `standard` + 4-connectivity goes from
+    417 "false positives" to 0.
+- **Markers cut by the frame were reported with a clipped corner.** The printed corner lies
+  outside the image, 4–5 px from the reported one (10 of 11 border false positives on EuRoC).
+  Such markers are now rejected:
+  - a corner outside the image, or
+  - a side whose middle lies within the reach of the smallest corner window (3 px) of the
+    border, where it cannot be told from the frame edge.
+
+  A corner may still touch the border; a tag16h5 corner 0.5 px from the edge is placed within
+  0.1 px of the truth.
+
 - **Decode-first accepted matches that failed verification.** A seed match was recorded before
   its refined quad was verified, and the fallback after the scale loop accepted it with its
   contour corners when verification failed. Such matches are now rejected, as refine-first
@@ -287,6 +324,47 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - `detection-batch-contract.md` documents the real phase execution order and the GWLF phase.
 
 ### Changed
+
+- **`standard` segments with 4-connectivity and drops the blob-shape quad gates.**
+  - **Connectivity:** where two dark squares touch at a corner (AprilGrid connector squares),
+    8-connectivity always links them through the diagonal pixels and fuses the board into one
+    component. AprilTag 3 uses 4-connectivity for the same reason.
+  - **Gates:** `quad.min_fill_ratio`, `quad.min_density` and `quad.max_elongation` are now 0
+    (off). They assume a filled component. A marker merged with neighbouring structure, or one
+    whose black cells are wider than the threshold neighbourhood (a hollow ring), fails them
+    although it decodes. Candidates are judged by marker evidence (border ring, codeword
+    budget) instead.
+  - **`grid` and `high_accuracy` are unchanged.** `DetectorConfig::default()` follows `standard`.
+  - **Results** (`cargo xtask sota`, full datasets): judged cells won 57 → 65 of 93
+    ([report](docs/engineering/benchmarking/euroc_sota_20261004.md)).
+
+    | Benchmark | `main` | This build | Best reference |
+    | :-- | --: | --: | --: |
+    | EuRoC recall | 20.9 % | 86.0 % | 57.1 % |
+    | EuRoC precision | 99.91 % | 99.996 % | 99.993 % |
+    | EuRoC LOO corner median / p90 (px) | 0.316 / 0.634 | 0.283 / 0.575 | 0.516 / 0.996 |
+    | Liu4K recall | 28.9 % | 37.2 % | 66.3 % |
+    | low_key recall | 14 % | 66 % | 100 % |
+    | raw_pipeline recall | 60 % | 96 % | 100 % |
+    | AprilGrid Kannala–Brandt recall | 82.4 % | 96.3 % | 89.8 % |
+    | ICRA circle recall | 83.1 % | 85.1 % | 80.6 % |
+
+  - **Cost:** markers of about 2 px per cell. Their one-pixel ring holds together only
+    diagonally, which is below the corner stage's own 3.3 px cell floor.
+    - ChArUco marker recall: 99.6 → 99.2 % (references 90 %).
+    - One render with 16 px markers keeps 3 of 14, and the ChArUco refiner's board pose fails on
+      it (suite mean rotation 0.11° → 0.61°).
+    - One 300 px tag16h5 tag is lost: recall 100 → 99 %.
+    - **Latency:** 1-thread latency rises 17–28 % (render-tag 1080p 18.1 → 21.5 ms, Liu4K
+      127 → 163 ms; EuRoC 4.3 → 9.5 ms while decoding four times the tags).
+      - 4-connectivity accounts for most of it: texture splits into more components that are
+        traced and reduced.
+      - The gates account for a quarter.
+      - The fix is a cheaper component trace (M8).
+
+    A pixel-level rule that keeps diagonal links only through thin structures (dark-pixel count
+    in each half of the 3 × 3 neighbourhood) was measured and dropped: it recovers that frame
+    but loses EuRoC recall and other board tails, with a tuned constant.
 
 - **Breaking (config): `decoder.max_border_error_rate` is optional, with a per-family default.**
   - `None` (the default) gives each family the codeword's own error density,

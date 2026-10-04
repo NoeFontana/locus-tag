@@ -118,6 +118,7 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 - [Micro-Benchmarking Guide](benchmarking/micro-benchmarking-guide.md) — 3-tier validation loop
 
 ### Point-in-time reports (historical snapshots)
+- [EuRoC, the real-data benchmark (2026-10-04)](benchmarking/euroc_sota_20261004.md) — scorer fixes, 4-connectivity, clipped and gross corners: EuRoC recall 20.9 → 86.0 %, 65/93 cells vs `main` 57/93; latency +17–28 %
 - [SOTA scoreboard checkpoint (2026-10-04)](benchmarking/sota_scoreboard_20261004.md) — fused + photometrically calibrated corners (#434): 52/73 vs `main` 47/73; render-tag corners ≈ 3.7× better than the best reference
 - [SOTA scoreboard checkpoint (2026-10-03)](benchmarking/sota_scoreboard_20261003.md) — `main` `a6199d4`, opt-in decode-first candidate (37/88) vs `standard` (32/88), 1T and 8T latency
 - [SOTA scoreboard baseline (2026-10-02)](benchmarking/sota_scoreboard_20261002.md) — `standard` vs the best OpenCV / aruco_nano operating point on every compatible dataset; `cargo xtask sota scoreboard`

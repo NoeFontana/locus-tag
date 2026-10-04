@@ -300,6 +300,33 @@ scorer = "gt-hub"
 gt = "rich_truth.json"
 gt_convention = "locus"
 
+# Lens-distorted board renders: the same 1-bit AprilGrid seen through Brown-Conrady and
+# Kannala-Brandt lenses (`distortion_model`, `distortion_coeffs` and `k_matrix` per record).
+# References get no camera model (their marker detectors take none); Locus is run both ways.
+[sota.hub-aprilgrid-bc]
+data = "hub"
+subset = "aprilgrid_distortion_brown_conrady_v1_1920x1080"
+images = "images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
+[sota.hub-aprilgrid-kb]
+data = "hub"
+subset = "aprilgrid_distortion_kannala_brandt_v1_1920x1080"
+images = "images/*.png"
+family = "AprilTag36h11"
+opencv_dict = "APRILTAG_36h11"
+apriltag_family = "tag36h11"
+border_bits = 1
+scorer = "gt-hub"
+gt = "rich_truth.json"
+gt_convention = "locus"
+
 [sota.hub-charuco]
 data = "hub"
 subset = "charuco_golden_v1_1920x1080"

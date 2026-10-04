@@ -40,7 +40,6 @@ fn assert_shared_defaults(cfg: &DetectorConfig) {
     // `max_hamming_error` is profile-specific (high_accuracy tightens to 1 to
     // close the synthetic-corpus FP at hamming=2); asserted per-profile.
     assert_eq!(cfg.quad_max_aspect_ratio, d.quad_max_aspect_ratio);
-    assert_eq!(cfg.quad_min_fill_ratio, d.quad_min_fill_ratio);
     assert_eq!(cfg.quad_max_fill_ratio, d.quad_max_fill_ratio);
     assert_eq!(cfg.quad_min_edge_length, d.quad_min_edge_length);
     assert_eq!(cfg.subpixel_refinement_sigma, d.subpixel_refinement_sigma);
@@ -66,8 +65,10 @@ fn standard_profile_matches_former_builder() {
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, true);
     assert_eq!(cfg.quad_min_area, 36);
-    assert_eq!(cfg.quad_max_elongation, 20.0);
-    assert_eq!(cfg.quad_min_density, 0.15);
+    // Marker evidence (border ring, codeword budget) judges candidates, not blob shape.
+    assert_eq!(cfg.quad_min_fill_ratio, 0.0);
+    assert_eq!(cfg.quad_max_elongation, 0.0);
+    assert_eq!(cfg.quad_min_density, 0.0);
     assert_eq!(cfg.quad_min_edge_score, 4.0);
     assert_eq!(cfg.refinement_mode, CornerRefinementMode::Erf);
     assert_eq!(cfg.decoder_min_contrast, 20.0);
@@ -75,7 +76,7 @@ fn standard_profile_matches_former_builder() {
     assert_eq!(cfg.max_hamming_error, None);
     assert_eq!(
         cfg.segmentation_connectivity,
-        SegmentationConnectivity::Eight
+        SegmentationConnectivity::Four
     );
     // Edge refinement is a high_accuracy-only opt-in; standard stays off.
     assert_eq!(cfg.pose_edge_refinement_enabled, false);
@@ -95,6 +96,7 @@ fn grid_profile_matches_former_builder() {
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
     assert_eq!(cfg.quad_min_area, 36);
+    assert_eq!(cfg.quad_min_fill_ratio, 0.10);
     assert_eq!(cfg.quad_max_elongation, 20.0);
     assert_eq!(cfg.quad_min_density, 0.15);
     assert_eq!(cfg.quad_min_edge_score, 2.0);
@@ -125,6 +127,7 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
     assert_eq!(cfg.quad_min_area, 400);
+    assert_eq!(cfg.quad_min_fill_ratio, 0.10);
     assert_eq!(cfg.quad_max_elongation, 20.0);
     assert_eq!(cfg.quad_min_density, 0.15);
     assert_eq!(cfg.quad_min_edge_score, 4.0);

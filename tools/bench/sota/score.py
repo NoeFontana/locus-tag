@@ -35,12 +35,17 @@ and the scatter around it is judged.
 
 **euroc** (``cam_april``, no per-corner GT) uses a ground-truth-free protocol:
 
-* **Presence** — corners pooled over all detectors are undistorted with the
+* **Presence** — corners pooled over the self-consistent detectors (leave-one-tag-out
+  median below ``REFERENCE_MAX_SELF_ERROR_PX``) are undistorted with the
   published cam0 radtan calibration and a RANSAC homography board -> undistorted
   image is fitted per frame (exact for a planar board). A tag is *present* when
   its four reprojected, redistorted corners lie >= 3 px inside the image.
+* **Judgeable region** — the published calibration holds only within
+  ``EUROC_VALID_RADIUS_PX`` of the principal point; beyond it the reference itself is
+  several pixels off for every detector. Tags reaching past it are not present, their
+  detections are neither TP nor FP, and their corners enter neither the reference nor LOO.
 * **Precision** — a detection is a TP when its id is on the board and all four
-  corners lie within 4 px (undistorted) of the reference projection.
+  corners lie within 4 px (in the image) of the redistorted reference projection.
 * **Accuracy** — leave-one-tag-out: a tag's corners are predicted from a DLT
   homography fitted to the *same detector's* other tags in the frame; reported on
   the (frame, tag) set common to every *reference* detector with >= 20 % recall.
@@ -402,6 +407,15 @@ EUROC_K = np.array([[458.654, 0.0, 367.215], [0.0, 457.296, 248.375], [0.0, 0.0,
 EUROC_D = np.array([-0.28340811, 0.07395907, 0.00019359, 1.76187114e-05])
 EUROC_W, EUROC_H = 752, 480
 TAG, PITCH = 0.088, 0.088 * 1.3  # Kalibr april_6x6.yaml: tagSize 0.088, tagSpacing 0.3
+# Image radius (px from the principal point) within which the published radtan model holds.
+# Beyond it the reference projection has a systematic inward radial error that every detector
+# shows alike: mean -1.1 to -1.5 px at 380-400 px, -4.5 to -4.9 px at 400-420 px, -10.4 px at
+# 420-440 px (Locus and OpenCV-apriltag, 2026-10-04), against |mean| <= 0.5 px inside 380 px.
+# Tags reaching past it cannot be judged by this protocol.
+EUROC_VALID_RADIUS_PX = 380.0
+# A detector joins the reference pool when its leave-one-tag-out median error is below this:
+# 0.27 (Locus) and 0.48 px (OpenCV APRILTAG) qualify, NONE / SUBPIX (1.9 / 1.5 px) do not.
+REFERENCE_MAX_SELF_ERROR_PX = 1.0
 _LOCAL = np.array([[0.0, 0.0], [TAG, 0.0], [TAG, TAG], [0.0, TAG]])
 # Corner order on the board is detector-convention dependent; the right dihedral
 # permutation is selected empirically per detector (all agree in practice).
@@ -428,6 +442,11 @@ def _redist(pu: np.ndarray) -> np.ndarray:
     ]
     out, _ = cv2.projectPoints(n, np.zeros(3), np.zeros(3), EUROC_K, EUROC_D)
     return out.reshape(-1, 2)
+
+
+def _modelled(px: np.ndarray) -> bool:
+    """Whether every point lies where the published lens model holds."""
+    return bool(np.all(np.linalg.norm(px - EUROC_K[:2, 2], axis=1) <= EUROC_VALID_RADIUS_PX))
 
 
 def _proj(h: np.ndarray, pts: np.ndarray) -> np.ndarray:
@@ -466,19 +485,50 @@ def _find_perm(frames: dict[str, tuple[float, Dets]]) -> list[int]:
     return best[1]
 
 
+def _loo_errors(dets: dict[int, np.ndarray], perm: list[int]) -> dict[int, np.ndarray]:
+    """Per-corner errors of each tag predicted from the other tags' corners (undistorted)."""
+    out = {}
+    for t in dets:
+        others = [i for i in dets if i != t]
+        h, _ = cv2.findHomography(
+            np.concatenate([_board(i, perm) for i in others]),
+            np.concatenate([dets[i] for i in others]),
+            0,
+        )
+        if h is not None:
+            out[t] = np.linalg.norm(_proj(h, _board(t, perm)) - dets[t], axis=1)
+    return out
+
+
+def _self_consistency(frames: dict[str, tuple[float, Dets]], perm: list[int]) -> float:
+    """Median leave-one-tag-out corner error of a detector against its own other tags."""
+    errs = []
+    for _, dets in list(frames.values())[::5]:
+        ok = {i: _undist(c) for i, c in _unique(dets).items() if _modelled(c)}
+        if len(ok) >= 5:
+            errs.extend(e for v in _loo_errors(ok, perm).values() for e in v)
+    return float(np.median(errs)) if errs else float("inf")
+
+
 def score_euroc(runs_dir: Path) -> dict[str, Any]:
     runs = {n: _frames(r) for n, r in _load_runs(runs_dir).items()}
     names = sorted(runs)
     perms = {n: _find_perm(runs[n]) for n in names}
+    # The reference is pooled from the detectors whose corners fit a plane among themselves;
+    # corners biased per tag (OpenCV NONE/SUBPIX on Kalibr's 2-bit border: about 1.5 px)
+    # would otherwise set it, and the verdict would depend on which runs share the directory.
+    consistency = {n: _self_consistency(runs[n], perms[n]) for n in names}
+    pool = [n for n in names if consistency[n] <= REFERENCE_MAX_SELF_ERROR_PX] or names
     st: dict[str, dict[str, float]] = {n: defaultdict(float) for n in names}
     loo: dict[str, dict[tuple[str, int], np.ndarray]] = {n: {} for n in names}
     n_ref = 0
     for fr in sorted(runs[names[0]]):
         src, dst = [], []
-        for n in names:
+        for n in pool:
             for i, c in _unique(runs[n][fr][1]).items():
-                src.append(_board(i, perms[n]))
-                dst.append(_undist(c))
+                if _modelled(c):
+                    src.append(_board(i, perms[n]))
+                    dst.append(_undist(c))
         if len(src) < 8:
             continue
         href, mask = cv2.findHomography(np.concatenate(src), np.concatenate(dst), cv2.RANSAC, 3.0)
@@ -491,17 +541,22 @@ def score_euroc(runs_dir: Path) -> dict[str, Any]:
             if np.any(np.abs(pu - EUROC_K[:2, 2]) > 1500):
                 continue
             pd = _redist(pu)
-            if np.all((pd >= 3.0) & (pd <= [EUROC_W - 4.0, EUROC_H - 4.0])):
+            if np.all((pd >= 3.0) & (pd <= [EUROC_W - 4.0, EUROC_H - 4.0])) and _modelled(pd):
                 present.add(t)
         for n in names:
             ms, dets = runs[n][fr]
             good: dict[int, np.ndarray] = {}
             for i, cs in dets.items():
                 for c in cs:
-                    ok = 0 <= i < 36 and len(cs) == 1
-                    if ok:
-                        err = np.linalg.norm(_undist(c) - _proj(href, _board(i, perms[n])), axis=1)
-                        ok = bool(err.max() <= 4.0)
+                    # The reference outline in image pixels, where a detector's corner error
+                    # lives: undistortion would stretch it 1.5-2x towards this lens's corners.
+                    ref = _redist(_proj(href, _board(i, perms[n]))) if 0 <= i < 36 else None
+                    # Neither TP nor FP where the lens model cannot judge the tag.
+                    if not _modelled(c) or (ref is not None and not _modelled(ref)):
+                        continue
+                    ok = ref is not None and len(cs) == 1
+                    if ref is not None and ok:
+                        ok = bool(np.linalg.norm(c - ref, axis=1).max() <= 4.0)
                     if ok:
                         good[i] = _undist(c)
                         st[n]["tp"] += 1
@@ -512,22 +567,16 @@ def score_euroc(runs_dir: Path) -> dict[str, Any]:
             st[n]["present"] += len(present)
             st[n]["hit"] += len(present & set(good))
             if len(good) >= 5:
-                for t in good:
-                    others = [i for i in good if i != t]
-                    h, _ = cv2.findHomography(
-                        np.concatenate([_board(i, perms[n]) for i in others]),
-                        np.concatenate([good[i] for i in others]),
-                        0,
-                    )
-                    if h is not None:
-                        e = np.linalg.norm(_proj(h, _board(t, perms[n])) - good[t], axis=1)
-                        loo[n][(fr, t)] = e
+                for t, e in _loo_errors(good, perms[n]).items():
+                    loo[n][(fr, t)] = e
     recall = {n: _pct(st[n]["hit"], st[n]["present"]) for n in names}
     eligible = [
         n for n in names if not n.startswith(LOCUS_PREFIX) and recall[n] >= COMMON_MIN_RECALL
     ]
     common = set.intersection(*(set(loo[n]) for n in eligible)) if eligible else set()
-    out: dict[str, Any] = {"_meta": {"reference_frames": n_ref, "common_loo_tags": len(common)}}
+    out: dict[str, Any] = {
+        "_meta": {"reference_frames": n_ref, "common_loo_tags": len(common), "reference_pool": pool}
+    }
     for n in names:
         own = np.concatenate(list(loo[n].values())) if loo[n] else np.array([np.nan])
         mine = [loo[n][k] for k in common if k in loo[n]]

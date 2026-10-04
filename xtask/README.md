@@ -89,10 +89,11 @@ width, scorer, ground truth and its pixel convention, unsupported references) an
 | Benchmark | Content | Ground truth | Scorer |
 | :-- | :-- | :-- | :-- |
 | `liu4k` | 924 4K photos, `ARUCO_MIP_36h12` (Zenodo 10.5281/zenodo.18667018, CC BY 4.0) | ids + corners | aruco_nano `testperf.cpp` rule: same id, centre ≤ 10 px, first-match TP/FP/FN; recall by marker side; corner error |
-| `euroc` | 1450 frames of the EuRoC `cam_april` sequence, 6×6 Kalibr AprilGrid (tag36h11, **2-bit border**), strong radtan distortion | none per corner | GT-free: pooled-detector homography after undistortion defines presence/precision; leave-one-tag-out corner error on a common tag set |
+| `euroc` | 1450 frames of the EuRoC `cam_april` sequence, 6×6 Kalibr AprilGrid (tag36h11, **2-bit border**), strong radtan distortion | none per corner | GT-free: a homography after undistortion, pooled from the self-consistent detectors, defines presence and precision (corner error in image pixels, only within the 380 px radius where the published lens model holds); leave-one-tag-out corner error on a common tag set |
 | `icra-{forward,circle,random}` | ICRA 2020 AprilTag localization dataset, `pure_tags` images, tag36h11 | corners (`tags.csv`) | `gt-csv` |
 | `hub-{640,720p,1080p,4k,high-iso,low-key,raw-pipeline,tag16h5}` | Locus render-tag suites (Blender), one tag per frame | corners (`rich_truth.json`) | `gt-hub` |
 | `hub-aprilgrid`, `hub-charuco` | Board renders (tag36h11 1-bit AprilGrid; ArUco 6x6_250 ChArUco), scored per marker | corners | `gt-hub` |
+| `hub-aprilgrid-bc`, `hub-aprilgrid-kb` | The AprilGrid render seen through Brown–Conrady and Kannala–Brandt lenses; no detector is given the camera model | corners | `gt-hub` |
 
 `gt-*` scorers: a detection is a TP when it pairs with a same-id GT tag whose centre is
 within 20 px (`tools/bench/matching.py`); detections of tags the GT marks partly visible or
