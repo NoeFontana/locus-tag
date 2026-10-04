@@ -6,7 +6,6 @@ import numpy as np
 
 from ._config import (
     AdaptivePpbConfig,
-    DetectOptions,
     DetectorConfig,
     ProfileName,
     QuadExtractionPolicy,
@@ -20,12 +19,12 @@ from .locus import (
     CharucoTelemetryResult,
     CornerRefinementMode,
     DetectionResult,
-    DetectorBuilder,
     EdLinesImbalanceGatePolicy,
     PipelineTelemetryResult,
     QuadExtractionMode,
     SegmentationConnectivity,
     TagFamily,
+    ThresholdMode,
     init_tracy,
 )
 from .locus import BoardEstimator as _BoardEstimator
@@ -183,8 +182,6 @@ class PipelineTelemetry:
 
     binarized: np.ndarray  # Shape: (H, W), Dtype: uint8
     threshold_map: np.ndarray  # Shape: (H, W), Dtype: uint8
-    gwlf_fallback_count: int = 0
-    gwlf_avg_delta: float = 0.0
     subpixel_jitter: np.ndarray | None = None  # Shape: (N, 4, 2), Dtype: float32
     reprojection_errors: np.ndarray | None = None  # Shape: (N,), Dtype: float32
 
@@ -197,15 +194,19 @@ class Detector:
         ``Detector(config=my_cfg)`` — use a pre-built :class:`DetectorConfig`.
         ``Detector()`` — equivalent to ``profile="standard"``.
 
-    Per-call orchestration options (``decimation``, ``threads``, ``families``)
-    stay outside the profile because they describe *how* the detector is
-    invoked, not *what* it looks for.
+    Per-call orchestration options (``decimation``, ``threads``, ``families``,
+    ``max_concurrent_frames``) stay outside the profile because they describe
+    *how* the detector is invoked, not *what* it looks for.
 
     ``threads`` sets the Rayon worker count. ``0`` or ``None`` (the default)
     uses the global Rayon pool (``RAYON_NUM_THREADS`` / core count); ``n > 0``
     builds one scoped ``n``-thread pool at construction and runs every
     ``detect`` / ``detect_concurrent`` call inside it, bounding this detector's
     CPU footprint. Detection output is identical for every value.
+
+    ``max_concurrent_frames`` sizes the pool of frame contexts that
+    :meth:`detect_concurrent` leases (default ``1``); frames beyond it get a
+    temporary context each.
     """
 
     def __init__(
@@ -216,6 +217,7 @@ class Detector:
         decimation: int | None = None,
         threads: int | None = None,
         families: list[TagFamily] | None = None,
+        max_concurrent_frames: int | None = None,
     ) -> None:
         if profile is not None and config is not None:
             raise ValueError("Pass either `profile` or `config`, not both.")
@@ -231,6 +233,7 @@ class Detector:
             decimation=decimation,
             threads=threads,
             families=[int(f) for f in families],
+            max_concurrent_frames=max_concurrent_frames,
         )
 
     def config(self) -> DetectorConfig:
@@ -283,8 +286,6 @@ class Detector:
             telemetry = PipelineTelemetry(
                 binarized=t.binarized,
                 threshold_map=t.threshold_map,
-                gwlf_fallback_count=t.gwlf_fallback_count,
-                gwlf_avg_delta=t.gwlf_avg_delta,
                 subpixel_jitter=t.subpixel_jitter,
                 reprojection_errors=t.reprojection_errors,
             )
@@ -344,6 +345,79 @@ class Detector:
         ]
 
 
+class DetectorBuilder:
+    """Fluent builder for :class:`Detector`.
+
+    Carries orchestration only: the configuration (a shipped profile or a
+    :class:`DetectorConfig`), tag families, decimation, thread count and the
+    concurrent-frame pool size. Detection settings live in
+    :class:`DetectorConfig`; edit one and hand it to :meth:`with_config`::
+
+        cfg = locus.DetectorConfig.from_profile("standard")
+        cfg.quad.min_area = 400
+        detector = (
+            locus.DetectorBuilder()
+            .with_config(cfg)
+            .with_family(locus.TagFamily.AprilTag36h11)
+            .with_max_concurrent_frames(8)
+            .build()
+        )
+
+    :meth:`build` re-validates the configuration through the Pydantic model, so
+    a field edited after the config was constructed is checked like any other.
+    """
+
+    def __init__(self) -> None:
+        self._config: DetectorConfig | None = None
+        self._families: list[TagFamily] = []
+        self._decimation: int | None = None
+        self._threads: int | None = None
+        self._max_concurrent_frames: int | None = None
+
+    def with_profile(self, profile: ProfileName) -> "DetectorBuilder":
+        """Use a shipped profile (``"standard"``, ``"grid"``, ``"high_accuracy"``)."""
+        self._config = DetectorConfig.from_profile(profile)
+        return self
+
+    def with_config(self, config: DetectorConfig) -> "DetectorBuilder":
+        """Use a :class:`DetectorConfig`. Defaults to the ``standard`` profile."""
+        self._config = config
+        return self
+
+    def with_family(self, family: TagFamily) -> "DetectorBuilder":
+        """Add a tag family to decode. Defaults to ``AprilTag36h11`` when none is added."""
+        if family not in self._families:
+            self._families.append(family)
+        return self
+
+    def with_decimation(self, decimation: int) -> "DetectorBuilder":
+        """Decimate the input by this factor before segmentation."""
+        self._decimation = decimation
+        return self
+
+    def with_threads(self, threads: int) -> "DetectorBuilder":
+        """Intra-frame Rayon thread count; ``0`` uses the global pool."""
+        self._threads = threads
+        return self
+
+    def with_max_concurrent_frames(self, n: int) -> "DetectorBuilder":
+        """Size of the frame-context pool used by :meth:`Detector.detect_concurrent`."""
+        self._max_concurrent_frames = n
+        return self
+
+    def build(self) -> Detector:
+        """Validate the configuration and construct the :class:`Detector`."""
+        config = self._config or DetectorConfig.from_profile("standard")
+        config = DetectorConfig.model_validate_json(config.model_dump_json())
+        return Detector(
+            config=config,
+            decimation=self._decimation,
+            threads=self._threads,
+            families=list(self._families) or None,
+            max_concurrent_frames=self._max_concurrent_frames,
+        )
+
+
 __all__ = [
     "HAS_NON_RECTIFIED",
     "AdaptivePpbConfig",
@@ -356,7 +430,6 @@ __all__ = [
     "CharucoRefiner",
     "CharucoTelemetryResult",
     "CornerRefinementMode",
-    "DetectOptions",
     "DetectionBatch",
     "DetectionResult",
     "Detector",
@@ -372,5 +445,6 @@ __all__ = [
     "QuadExtractionPolicy",
     "SegmentationConnectivity",
     "TagFamily",
+    "ThresholdMode",
     "init_tracy",
 ]

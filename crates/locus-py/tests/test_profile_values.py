@@ -67,7 +67,6 @@ def _dotget(cfg: DetectorConfig, path: str):
 def test_shipped_profile_loads(profile_name: ProfileName) -> None:
     cfg = DetectorConfig.from_profile(profile_name)
     assert cfg.name == profile_name
-    assert cfg.extends is None
 
 
 @pytest.mark.parametrize("profile_name", sorted(SHIPPED_PROFILES))
@@ -95,7 +94,7 @@ def test_bare_default_matches_standard_profile() -> None:
     """
     default = DetectorConfig()
     standard = DetectorConfig.from_profile("standard")
-    exclude = {"name", "extends"}
+    exclude = {"name"}
     assert default.model_dump(mode="python", exclude=exclude) == standard.model_dump(
         mode="python", exclude=exclude
     )
@@ -112,9 +111,56 @@ def test_unknown_json_field_rejected() -> None:
         DetectorConfig.from_profile_json(bad)
 
 
-def test_extends_non_null_rejected() -> None:
-    bad = json.dumps({"name": "x", "extends": "standard"})
-    with pytest.raises((ValidationError, NotImplementedError), match="extends"):
+@pytest.mark.parametrize(
+    "removed",
+    [
+        {"extends": None},
+        {"threshold": {"min_range": 10}},
+        {"threshold": {"constant": 15}},
+        {"quad": {"refine_before_decode": False}},
+        {"decoder": {"gwlf_transversal_alpha": 0.01}},
+        {"pose": {"pose_consistency_min_decisive_ratio": 5.0}},
+    ],
+)
+def test_removed_v0_9_keys_rejected(removed: dict[str, object]) -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        DetectorConfig.from_profile_json(json.dumps(removed))
+
+
+def test_gwlf_refinement_mode_rejected() -> None:
+    bad = json.dumps({"decoder": {"refinement_mode": "Gwlf"}})
+    with pytest.raises(ValidationError, match="CornerRefinementMode"):
+        DetectorConfig.from_profile_json(bad)
+
+
+def test_adaptive_ppb_requires_static_refinement_none() -> None:
+    bad = json.dumps(
+        {
+            "quad": {"extraction_policy": {"AdaptivePpb": {}}},
+            "decoder": {"refinement_mode": "Erf"},
+        }
+    )
+    with pytest.raises(ValidationError, match="AdaptivePpb requires decoder.refinement_mode=None"):
+        DetectorConfig.from_profile_json(bad)
+    ok = json.dumps(
+        {
+            "quad": {"extraction_policy": {"AdaptivePpb": {}}},
+            "decoder": {"refinement_mode": "None"},
+        }
+    )
+    DetectorConfig.from_profile_json(ok)
+
+
+@pytest.mark.parametrize("noise_k", [0.0, -1.0])
+def test_threshold_noise_k_must_be_positive(noise_k: float) -> None:
+    bad = json.dumps({"threshold": {"noise_k": noise_k}})
+    with pytest.raises(ValidationError, match="noise_k"):
+        DetectorConfig.from_profile_json(bad)
+
+
+def test_structure_tensor_radius_must_be_positive() -> None:
+    bad = json.dumps({"pose": {"structure_tensor_radius": 0}})
+    with pytest.raises(ValidationError, match="structure_tensor_radius"):
         DetectorConfig.from_profile_json(bad)
 
 
@@ -178,17 +224,11 @@ def test_int_discriminant_accepted_for_enum_fields() -> None:
     assert cfg.segmentation.connectivity == SegmentationConnectivity.Four
 
 
-@pytest.mark.parametrize(
-    ("bool_value", "expected"),
-    [(True, EdLinesImbalanceGatePolicy.Enabled), (False, EdLinesImbalanceGatePolicy.Disabled)],
-)
-def test_imbalance_gate_legacy_bool_accepted_with_warning(
-    bool_value: bool, expected: EdLinesImbalanceGatePolicy
-) -> None:
+@pytest.mark.parametrize("bool_value", [True, False])
+def test_imbalance_gate_bool_form_rejected(bool_value: bool) -> None:
     bare = json.dumps({"name": "x", "quad": {"edlines_imbalance_gate": bool_value}})
-    with pytest.warns(DeprecationWarning, match="edlines_imbalance_gate"):
-        cfg = DetectorConfig.from_profile_json(bare)
-    assert cfg.quad.edlines_imbalance_gate == expected
+    with pytest.raises(ValidationError, match="EdLinesImbalanceGatePolicy"):
+        DetectorConfig.from_profile_json(bare)
 
 
 @pytest.mark.parametrize(

@@ -32,15 +32,22 @@ use pyo3_stub_gen::derive::{
     gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods,
 };
 
+/// Fiducial marker dictionary to decode.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum TagFamily {
+    /// AprilTag 16h5 (30 codes, 4x4 bits, minimum Hamming distance 5).
     AprilTag16h5 = 0,
+    /// AprilTag 36h11 (587 codes, 6x6 bits, minimum Hamming distance 11).
     AprilTag36h11 = 1,
+    /// ArUco `DICT_4X4_50`.
     ArUco4x4_50 = 2,
+    /// ArUco `DICT_4X4_100`.
     ArUco4x4_100 = 3,
+    /// ArUco `DICT_6X6_250`.
     ArUco6x6_250 = 4,
+    /// ArUco MIP 36h12 (250 codes, 6x6 bits; `DICT_ARUCO_MIP_36h12`).
     ArUcoMip36h12 = 5,
 }
 
@@ -57,11 +64,16 @@ impl From<TagFamily> for locus_core::TagFamily {
     }
 }
 
+/// Pixel connectivity of the dark regions that segmentation groups into candidates.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum SegmentationConnectivity {
+    /// 4-connectivity: pixels connect horizontally and vertically only. Keeps dark squares
+    /// that touch at a corner (checkerboards, AprilGrid connectors) apart.
     Four = 0,
+    /// 8-connectivity: pixels also connect diagonally. Joins borders thinner than a pixel on
+    /// the diagonal, but fuses diagonally touching squares.
     Eight = 1,
 }
 
@@ -74,13 +86,17 @@ impl From<SegmentationConnectivity> for locus_core::config::SegmentationConnecti
     }
 }
 
+/// Sub-pixel corner refinement applied during quad extraction.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum CornerRefinementMode {
+    /// Keep the extractor's corners (EdLines' Gauss-Newton sub-pixel corners, or
+    /// `ContourRdp`'s contour vertices). Required with `AdaptivePpb` routing.
     None = 0,
+    /// Fit each edge with a PSF-blurred step (ERF) model and intersect the edge lines.
+    /// Incompatible with `EdLines` extraction.
     Erf = 1,
-    Gwlf = 2,
 }
 
 impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
@@ -88,16 +104,19 @@ impl From<CornerRefinementMode> for locus_core::config::CornerRefinementMode {
         match m {
             CornerRefinementMode::None => locus_core::config::CornerRefinementMode::None,
             CornerRefinementMode::Erf => locus_core::config::CornerRefinementMode::Erf,
-            CornerRefinementMode::Gwlf => locus_core::config::CornerRefinementMode::Gwlf,
         }
     }
 }
 
+/// Algorithm that turns a segmented component into a candidate quad.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum QuadExtractionMode {
+    /// Contour tracing, Douglas-Peucker simplification and reduction to four corners.
     ContourRdp = 0,
+    /// Edge drawing: boundary segmentation, robust line fits and a joint Gauss-Newton
+    /// corner solve. Undistorted cameras only; pair with `CornerRefinementMode.None`.
     EdLines = 1,
 }
 
@@ -110,11 +129,16 @@ impl From<QuadExtractionMode> for locus_core::config::QuadExtractionMode {
     }
 }
 
+/// EdLines axis-to-diagonal imbalance gate: when the axis-aligned boundary partition is
+/// severely unbalanced (one arc above 40 % and another below 16 % of the boundary, the
+/// signature of two corners collapsing onto one extremal), re-partition along the diagonals.
 #[cfg_attr(feature = "stub-gen", gen_stub_pyclass_enum)]
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum EdLinesImbalanceGatePolicy {
+    /// Always keep the axis-aligned partition.
     Disabled = 0,
+    /// Divert severely unbalanced partitions to the diagonal partition.
     Enabled = 1,
 }
 
@@ -145,7 +169,10 @@ impl From<locus_core::config::EdLinesImbalanceGatePolicy> for EdLinesImbalanceGa
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum ThresholdMode {
+    /// Midpoint of the min/max over a 3x3 tile neighbourhood (every shipped profile).
     TileMidExtreme = 0,
+    /// Per-pixel local mean over a `(2r+1)^2` window minus a noise-calibrated offset
+    /// `clamp(round(noise_k * sigma_n), 2, 20)`. Opt-in.
     LocalMean = 1,
 }
 
@@ -348,8 +375,6 @@ pub struct PipelineTelemetryResult {
     pub threshold_map: Py<PyArray2<u8>>,
     pub subpixel_jitter: Option<Py<PyArray3<f32>>>,
     pub reprojection_errors: Option<Py<PyArray1<f32>>>,
-    pub gwlf_fallback_count: usize,
-    pub gwlf_avg_delta: f32,
     /// Per-candidate adaptive-router route labels (0 = low, 1 = high,
     /// 255 = Static/not-routed). One entry per Phase-A candidate, populated
     /// only when `debug_telemetry=True` and `QuadExtractionPolicy::AdaptivePpb`
@@ -1126,8 +1151,6 @@ fn build_pipeline_telemetry(
         threshold_map: threshold_arr.unbind(),
         subpixel_jitter,
         reprojection_errors,
-        gwlf_fallback_count: telem.gwlf_fallback_count,
-        gwlf_avg_delta: telem.gwlf_avg_delta,
         routed_to,
         ppb_estimate,
     })
@@ -1422,12 +1445,13 @@ fn tag_family_from_i32(f: i32) -> PyResult<locus_core::TagFamily> {
 
 #[cfg_attr(feature = "stub-gen", gen_stub_pyfunction)]
 #[pyfunction]
-#[pyo3(signature = (config_json, decimation=None, threads=None, families=vec![]))]
+#[pyo3(signature = (config_json, decimation=None, threads=None, families=vec![], max_concurrent_frames=None))]
 fn _create_detector_from_config(
     config_json: &str,
     decimation: Option<usize>,
     threads: Option<usize>,
     families: Vec<i32>,
+    max_concurrent_frames: Option<usize>,
 ) -> PyResult<Detector> {
     // The Pydantic `DetectorConfig` crosses the FFI as its `model_dump_json()`
     // string — the same profile format Rust already reads — so the shipped JSON
@@ -1442,6 +1466,9 @@ fn _create_detector_from_config(
     if let Some(t) = threads {
         builder = builder.with_threads(t);
     }
+    if let Some(n) = max_concurrent_frames {
+        builder = builder.with_max_concurrent_frames(n);
+    }
     for f in families {
         builder = builder.with_family(tag_family_from_i32(f)?);
     }
@@ -1452,205 +1479,6 @@ fn _create_detector_from_config(
     Ok(Detector {
         inner: Box::new(detector),
     })
-}
-
-/// Fluent builder for constructing a [`Detector`].
-///
-/// Methods return `self` so they can be chained in Python:
-/// ```python
-/// detector = (
-///     locus.DetectorBuilder()
-///         .with_decimation(2)
-///         .with_family(locus.TagFamily.AprilTag36h11)
-///         .with_corner_refinement(locus.CornerRefinementMode.Gwlf)
-///         .build()
-/// )
-/// ```
-#[cfg_attr(feature = "stub-gen", gen_stub_pyclass)]
-#[pyclass]
-pub struct DetectorBuilder {
-    inner: Option<locus_core::DetectorBuilder>,
-}
-
-impl DetectorBuilder {
-    fn take_inner(slf: &Py<Self>, py: Python<'_>) -> PyResult<locus_core::DetectorBuilder> {
-        slf.borrow_mut(py).inner.take().ok_or_else(|| {
-            PyRuntimeError::new_err("DetectorBuilder has already been consumed by build()")
-        })
-    }
-}
-
-#[cfg_attr(feature = "stub-gen", gen_stub_pymethods)]
-#[pymethods]
-impl DetectorBuilder {
-    #[new]
-    fn new() -> Self {
-        Self {
-            inner: Some(locus_core::DetectorBuilder::new()),
-        }
-    }
-
-    fn with_decimation(slf: Py<Self>, py: Python<'_>, decimation: usize) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_decimation(decimation);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_threads(slf: Py<Self>, py: Python<'_>, threads: usize) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_threads(threads);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_family(slf: Py<Self>, py: Python<'_>, family: TagFamily) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_family(family.into());
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_upscale_factor(slf: Py<Self>, py: Python<'_>, factor: usize) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_upscale_factor(factor);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_corner_refinement(
-        slf: Py<Self>,
-        py: Python<'_>,
-        mode: CornerRefinementMode,
-    ) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_corner_refinement(mode.into());
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_connectivity(
-        slf: Py<Self>,
-        py: Python<'_>,
-        connectivity: SegmentationConnectivity,
-    ) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_connectivity(connectivity.into());
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_threshold_tile_size(slf: Py<Self>, py: Python<'_>, size: usize) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_threshold_tile_size(size);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_threshold_min_range(slf: Py<Self>, py: Python<'_>, range: u8) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_threshold_min_range(range);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_adaptive_threshold_constant(
-        slf: Py<Self>,
-        py: Python<'_>,
-        c: i16,
-    ) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_adaptive_threshold_constant(c);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_quad_min_area(slf: Py<Self>, py: Python<'_>, area: u32) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_quad_min_area(area);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_quad_min_fill_ratio(slf: Py<Self>, py: Python<'_>, ratio: f32) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_quad_min_fill_ratio(ratio);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_quad_min_edge_score(slf: Py<Self>, py: Python<'_>, score: f64) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_quad_min_edge_score(score);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_max_hamming_error(slf: Py<Self>, py: Python<'_>, errors: u32) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_max_hamming_error(errors);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_decoder_min_contrast(
-        slf: Py<Self>,
-        py: Python<'_>,
-        contrast: f64,
-    ) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_decoder_min_contrast(contrast);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_gwlf_transversal_alpha(
-        slf: Py<Self>,
-        py: Python<'_>,
-        alpha: f64,
-    ) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_gwlf_transversal_alpha(alpha);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_quad_max_elongation(
-        slf: Py<Self>,
-        py: Python<'_>,
-        elongation: f64,
-    ) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_quad_max_elongation(elongation);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_quad_min_density(slf: Py<Self>, py: Python<'_>, density: f64) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_quad_min_density(density);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_quad_extraction_mode(
-        slf: Py<Self>,
-        py: Python<'_>,
-        mode: QuadExtractionMode,
-    ) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_quad_extraction_mode(mode.into());
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_sharpening(slf: Py<Self>, py: Python<'_>, enable: bool) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_sharpening(enable);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    fn with_max_concurrent_frames(slf: Py<Self>, py: Python<'_>, n: usize) -> PyResult<Py<Self>> {
-        let b = Self::take_inner(&slf, py)?.with_max_concurrent_frames(n);
-        slf.borrow_mut(py).inner = Some(b);
-        Ok(slf)
-    }
-
-    /// Consume the builder and return a ready-to-use [`Detector`].
-    fn build(&mut self) -> PyResult<Detector> {
-        let inner = self
-            .inner
-            .take()
-            .ok_or_else(|| PyRuntimeError::new_err("DetectorBuilder has already been consumed"))?;
-        let detector = inner
-            .validated_build()
-            .map_err(|e| PyValueError::new_err(e.to_string()))?;
-        Ok(Detector {
-            inner: Box::new(detector),
-        })
-    }
 }
 
 fn validate_principal_point(
@@ -2028,7 +1856,6 @@ fn locus(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<CharucoRefiner>()?;
     // Detector
     m.add_class::<Detector>()?;
-    m.add_class::<DetectorBuilder>()?;
 
     m.add_function(wrap_pyfunction!(_create_detector_from_config, m)?)?;
     m.add_function(wrap_pyfunction!(init_tracy, m)?)?;

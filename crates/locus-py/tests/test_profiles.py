@@ -42,10 +42,10 @@ def _assert_close(actual: object, expected: object, path: str) -> None:
 
 
 def _assert_configs_equal(actual: DetectorConfig, expected: DetectorConfig, label: str) -> None:
-    # `name` / `extends` are load-time profile metadata, not detector settings;
-    # the effective config Rust reports back carries neither. Compare the
+    # `name` is load-time profile metadata, not a detector setting; the
+    # effective config Rust reports back does not carry it. Compare the
     # detector settings only.
-    exclude = {"name", "extends"}
+    exclude = {"name"}
     _assert_close(
         actual.model_dump(mode="python", exclude=exclude),
         expected.model_dump(mode="python", exclude=exclude),
@@ -84,13 +84,30 @@ def test_profile_default_is_standard() -> None:
     _assert_configs_equal(left, right, "default_vs_standard")
 
 
-def test_infinite_decisive_ratio_round_trips_through_ffi() -> None:
-    # `math.inf` disables the χ² escape clause (documented). It has no JSON
-    # number form, so it crosses the FFI as `null` and must survive construction
-    # AND config() readback rather than raising at the boundary.
-    import math
+@pytest.mark.parametrize(
+    "document",
+    [
+        "{}",
+        '{"name": "sparse"}',
+        '{"threshold": {}, "quad": {}, "decoder": {}, "pose": {}, "segmentation": {}}',
+        '{"decoder": {"min_contrast": 12.0}, "quad": {"min_area": 100}}',
+        '{"threshold": {"mode": "LocalMean"}, "pose": {"pose_consistency_fpr": 0.001}}',
+    ],
+)
+def test_omitted_keys_parse_identically_in_rust_and_python(document: str) -> None:
+    # Every profile key is optional. Rust's serde shim and the Pydantic model must fill an
+    # omitted key with the same default; Rust parses the raw document here (not Python's
+    # re-serialization of it), so a default that differs between the two shows up.
+    from locus import _create_detector_from_config
 
-    cfg = locus.DetectorConfig.from_profile("standard")
-    cfg.pose.pose_consistency_min_decisive_ratio = math.inf
-    det = locus.Detector(config=cfg)
-    assert det.config().pose.pose_consistency_min_decisive_ratio == math.inf
+    python_side = locus.DetectorConfig.from_profile_json(document)
+    rust_side = locus.DetectorConfig.model_validate_json(
+        _create_detector_from_config(config_json=document).config()
+    )
+    _assert_configs_equal(rust_side, python_side, document)
+    # The keys whose omitted value used to differ, or that profiles commonly omit.
+    assert rust_side.decoder.corner_subpix is python_side.decoder.corner_subpix
+    assert rust_side.decoder.max_border_error_rate == python_side.decoder.max_border_error_rate
+    assert rust_side.segmentation.connectivity == python_side.segmentation.connectivity
+    for gate in ("min_fill_ratio", "max_elongation", "min_density"):
+        assert getattr(rust_side.quad, gate) == getattr(python_side.quad, gate)

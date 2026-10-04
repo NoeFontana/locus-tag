@@ -18,7 +18,6 @@ __all__ = [
     "CornerRefinementMode",
     "DetectionResult",
     "Detector",
-    "DetectorBuilder",
     "DistortionModel",
     "EdLinesImbalanceGatePolicy",
     "PipelineTelemetryResult",
@@ -368,48 +367,6 @@ class Detector:
         """
 
 @typing.final
-class DetectorBuilder:
-    r"""
-    Fluent builder for constructing a [`Detector`].
-    
-    Methods return `self` so they can be chained in Python:
-    ```python
-    detector = (
-        locus.DetectorBuilder()
-            .with_decimation(2)
-            .with_family(locus.TagFamily.AprilTag36h11)
-            .with_corner_refinement(locus.CornerRefinementMode.Gwlf)
-            .build()
-    )
-    ```
-    """
-    def __new__(cls) -> DetectorBuilder: ...
-    def with_decimation(self, decimation: builtins.int) -> DetectorBuilder: ...
-    def with_threads(self, threads: builtins.int) -> DetectorBuilder: ...
-    def with_family(self, family: TagFamily) -> DetectorBuilder: ...
-    def with_upscale_factor(self, factor: builtins.int) -> DetectorBuilder: ...
-    def with_corner_refinement(self, mode: CornerRefinementMode) -> DetectorBuilder: ...
-    def with_connectivity(self, connectivity: SegmentationConnectivity) -> DetectorBuilder: ...
-    def with_threshold_tile_size(self, size: builtins.int) -> DetectorBuilder: ...
-    def with_threshold_min_range(self, range: builtins.int) -> DetectorBuilder: ...
-    def with_adaptive_threshold_constant(self, c: builtins.int) -> DetectorBuilder: ...
-    def with_quad_min_area(self, area: builtins.int) -> DetectorBuilder: ...
-    def with_quad_min_fill_ratio(self, ratio: builtins.float) -> DetectorBuilder: ...
-    def with_quad_min_edge_score(self, score: builtins.float) -> DetectorBuilder: ...
-    def with_max_hamming_error(self, errors: builtins.int) -> DetectorBuilder: ...
-    def with_decoder_min_contrast(self, contrast: builtins.float) -> DetectorBuilder: ...
-    def with_gwlf_transversal_alpha(self, alpha: builtins.float) -> DetectorBuilder: ...
-    def with_quad_max_elongation(self, elongation: builtins.float) -> DetectorBuilder: ...
-    def with_quad_min_density(self, density: builtins.float) -> DetectorBuilder: ...
-    def with_quad_extraction_mode(self, mode: QuadExtractionMode) -> DetectorBuilder: ...
-    def with_sharpening(self, enable: builtins.bool) -> DetectorBuilder: ...
-    def with_max_concurrent_frames(self, n: builtins.int) -> DetectorBuilder: ...
-    def build(self) -> Detector:
-        r"""
-        Consume the builder and return a ready-to-use [`Detector`].
-        """
-
-@typing.final
 class PipelineTelemetryResult:
     r"""
     Intermediate pipeline artifacts emitted when `debug_telemetry=True`.
@@ -422,10 +379,6 @@ class PipelineTelemetryResult:
     def subpixel_jitter(self) -> typing.Optional[numpy.typing.NDArray[numpy.float32]]: ...
     @property
     def reprojection_errors(self) -> typing.Optional[numpy.typing.NDArray[numpy.float32]]: ...
-    @property
-    def gwlf_fallback_count(self) -> builtins.int: ...
-    @property
-    def gwlf_avg_delta(self) -> builtins.float: ...
     @property
     def routed_to(self) -> typing.Optional[numpy.typing.NDArray[numpy.uint8]]:
         r"""
@@ -450,9 +403,19 @@ class PyPose:
 
 @typing.final
 class CornerRefinementMode(enum.IntEnum):
+    r"""
+    Sub-pixel corner refinement applied during quad extraction.
+    """
     None_ = ...  # runtime attribute is `None` (a Python keyword)
+    r"""
+    Keep the extractor's corners (EdLines' Gauss-Newton sub-pixel corners, or
+    `ContourRdp`'s contour vertices). Required with `AdaptivePpb` routing.
+    """
     Erf = ...
-    Gwlf = ...
+    r"""
+    Fit each edge with a PSF-blurred step (ERF) model and intersect the edge lines.
+    Incompatible with `EdLines` extraction.
+    """
 
 @typing.final
 class DistortionModel(enum.IntEnum):
@@ -478,27 +441,80 @@ class DistortionModel(enum.IntEnum):
 
 @typing.final
 class EdLinesImbalanceGatePolicy(enum.IntEnum):
+    r"""
+    EdLines axis-to-diagonal imbalance gate: when the axis-aligned boundary partition is
+    severely unbalanced (one arc above 40 % and another below 16 % of the boundary, the
+    signature of two corners collapsing onto one extremal), re-partition along the diagonals.
+    """
     Disabled = ...
+    r"""
+    Always keep the axis-aligned partition.
+    """
     Enabled = ...
+    r"""
+    Divert severely unbalanced partitions to the diagonal partition.
+    """
 
 @typing.final
 class QuadExtractionMode(enum.IntEnum):
+    r"""
+    Algorithm that turns a segmented component into a candidate quad.
+    """
     ContourRdp = ...
+    r"""
+    Contour tracing, Douglas-Peucker simplification and reduction to four corners.
+    """
     EdLines = ...
+    r"""
+    Edge drawing: boundary segmentation, robust line fits and a joint Gauss-Newton
+    corner solve. Undistorted cameras only; pair with `CornerRefinementMode.None`.
+    """
 
 @typing.final
 class SegmentationConnectivity(enum.IntEnum):
+    r"""
+    Pixel connectivity of the dark regions that segmentation groups into candidates.
+    """
     Four = ...
+    r"""
+    4-connectivity: pixels connect horizontally and vertically only. Keeps dark squares
+    that touch at a corner (checkerboards, AprilGrid connectors) apart.
+    """
     Eight = ...
+    r"""
+    8-connectivity: pixels also connect diagonally. Joins borders thinner than a pixel on
+    the diagonal, but fuses diagonally touching squares.
+    """
 
 @typing.final
 class TagFamily(enum.IntEnum):
+    r"""
+    Fiducial marker dictionary to decode.
+    """
     AprilTag16h5 = ...
+    r"""
+    AprilTag 16h5 (30 codes, 4x4 bits, minimum Hamming distance 5).
+    """
     AprilTag36h11 = ...
+    r"""
+    AprilTag 36h11 (587 codes, 6x6 bits, minimum Hamming distance 11).
+    """
     ArUco4x4_50 = ...
+    r"""
+    ArUco `DICT_4X4_50`.
+    """
     ArUco4x4_100 = ...
+    r"""
+    ArUco `DICT_4X4_100`.
+    """
     ArUco6x6_250 = ...
+    r"""
+    ArUco `DICT_6X6_250`.
+    """
     ArUcoMip36h12 = ...
+    r"""
+    ArUco MIP 36h12 (250 codes, 6x6 bits; `DICT_ARUCO_MIP_36h12`).
+    """
 
 @typing.final
 class ThresholdMode(enum.IntEnum):
@@ -506,9 +522,16 @@ class ThresholdMode(enum.IntEnum):
     How the per-pixel foreground threshold that feeds segmentation is built.
     """
     TileMidExtreme = ...
+    r"""
+    Midpoint of the min/max over a 3x3 tile neighbourhood (every shipped profile).
+    """
     LocalMean = ...
+    r"""
+    Per-pixel local mean over a `(2r+1)^2` window minus a noise-calibrated offset
+    `clamp(round(noise_k * sigma_n), 2, 20)`. Opt-in.
+    """
 
-def _create_detector_from_config(config_json: builtins.str, decimation: typing.Optional[builtins.int] = None, threads: typing.Optional[builtins.int] = None, families: typing.Sequence[builtins.int] = []) -> Detector: ...
+def _create_detector_from_config(config_json: builtins.str, decimation: typing.Optional[builtins.int] = None, threads: typing.Optional[builtins.int] = None, families: typing.Sequence[builtins.int] = [], max_concurrent_frames: typing.Optional[builtins.int] = None) -> Detector: ...
 
 def _shipped_profile_json(name: builtins.str) -> builtins.str: ...
 
