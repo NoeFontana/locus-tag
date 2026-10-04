@@ -289,5 +289,6 @@ failed) is symmetric: yank the crate, bump, re-tag.
 | `v0.7.0` | 2026-07-19 | Minor | See `docs/changelogs/v0.7.0.md` |
 | `v0.7.1` | 2026-07-19 | Patch | See `docs/changelogs/v0.7.1.md` |
 | `v0.8.0` | 2026-09-25 | Minor | `DetectorConfig::default()`/`standard` profile parity fix; see `docs/changelogs/v0.8.0.md` |
+| `v0.9.0` | 2026-10-04 | Minor | Real-camera recall, sub-pixel corners, config/API consolidation; see `docs/changelogs/v0.9.0.md` |
 
 Append new entries here as releases land.
