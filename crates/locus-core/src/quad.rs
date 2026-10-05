@@ -800,22 +800,27 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         y: crate::image::decimated_to_full(p.y, decimation),
     });
 
-    // Gate the +0.5 outward expansion on `C::IS_RECTIFIED`: corners produced
-    // by RDP in straight-space are projectively exact intersections, not
-    // integer-midpoint artifacts of a stepped pixel contour. Applying the
-    // 0.5px nudge would move them off the true edge and fight later
-    // refinement.
-    let quad_pts = if C::IS_RECTIFIED {
-        let center_x = (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
-        let center_y = (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) * 0.25;
+    // Expand 0.5 px outward from the centroid, on **both** routes.
+    //
+    // This is a pixel-lattice correction, not a projective one. The boundary trace follows the
+    // dark side of the outline, so a ContourRdp quad is about half a pixel too small whichever
+    // space its vertices were selected in: unprojecting a stepped contour is a smooth map, and
+    // a smooth map cannot remove a lattice bias — locally it is affine, so it carries the bias
+    // through. The previous gate reasoned that straight-space RDP corners are "projectively
+    // exact intersections, not integer-midpoint artifacts", which mistakes *where the vertices
+    // were chosen* for *what the contour is*.
+    //
+    // It matters under decode-first, where these corners are the quad the bit grid is sampled
+    // through: half a pixel inward shifts every sample point toward the tag centre.
+    let center_x = (quad_pts[0].x + quad_pts[1].x + quad_pts[2].x + quad_pts[3].x) * 0.25;
+    let center_y = (quad_pts[0].y + quad_pts[1].y + quad_pts[2].y + quad_pts[3].y) * 0.25;
+    let quad_pts = {
         let mut ep = quad_pts;
         for i in 0..4 {
             ep[i].x += 0.5 * (quad_pts[i].x - center_x).signum();
             ep[i].y += 0.5 * (quad_pts[i].y - center_y).signum();
         }
         ep
-    } else {
-        quad_pts
     };
 
     for i in 0..4 {
@@ -841,33 +846,40 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     let (_route_extraction, route_refinement, route_label, ppb_estimate) =
         resolve_route(config, bbox_w.min(bbox_h), min_outer_dim, true);
 
-    let (corners, out_covs) = if route_refinement == crate::config::CornerRefinementMode::None {
-        (quad_pts, [[0.0_f32; 4]; 4])
-    } else if C::IS_RECTIFIED {
-        (
-            refine_all_quad_corners(
-                arena,
-                refinement_img,
-                quad_pts,
-                config.subpixel_refinement_sigma,
-                decimation,
-            ),
-            [[0.0_f32; 4]; 4],
-        )
-    } else {
-        (
-            refine_quad_corners_with_camera(
-                refinement_img,
-                &quad_rect_full,
-                &quad_pts,
-                decimation,
-                intrinsics,
-                camera,
-                table,
-            ),
-            [[0.0_f32; 4]; 4],
-        )
-    };
+    // Decode-first ordering keeps the contour corners and lets the decoder refine only the
+    // candidates that decode or nearly do, through the same curve-aware refiner this stage
+    // would have used. Only the ERF route has that decoder-side refinement, which is the
+    // condition the pinhole extractor applies too.
+    let decoder_refines =
+        config.decode_first() && route_refinement == crate::config::CornerRefinementMode::Erf;
+    let (corners, out_covs) =
+        if decoder_refines || route_refinement == crate::config::CornerRefinementMode::None {
+            (quad_pts, [[0.0_f32; 4]; 4])
+        } else if C::IS_RECTIFIED {
+            (
+                refine_all_quad_corners(
+                    arena,
+                    refinement_img,
+                    quad_pts,
+                    config.subpixel_refinement_sigma,
+                    decimation,
+                ),
+                [[0.0_f32; 4]; 4],
+            )
+        } else {
+            (
+                refine_quad_corners_with_camera(
+                    refinement_img,
+                    &quad_rect_full,
+                    &quad_pts,
+                    decimation,
+                    intrinsics,
+                    camera,
+                    table,
+                ),
+                [[0.0_f32; 4]; 4],
+            )
+        };
 
     // Edges between distorted corners are *curved* in the image, so a
     // straight-line edge score would sample the tag interior and spuriously
@@ -1431,7 +1443,7 @@ pub(crate) fn refine_edge_erf(
 /// expensive stage of distorted extraction (measured at 48.8 % of its CPU time).
 #[cfg(feature = "non_rectified")]
 #[must_use]
-fn refine_quad_corners_with_camera<C: crate::camera::CameraModel>(
+pub(crate) fn refine_quad_corners_with_camera<C: crate::camera::CameraModel>(
     img: &ImageView,
     quad_rect: &[Point; 4],
     quad_px: &[Point; 4],

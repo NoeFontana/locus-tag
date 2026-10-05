@@ -1126,6 +1126,33 @@ pub(crate) trait Warp {
     ///
     /// The only direction that can fail, and the only one that costs an inversion.
     fn to_working(&self, x: f64, y: f64) -> Option<[f64; 2]>;
+
+    /// Refine a finalist's corners, given the quad in **raw pixel** coordinates.
+    ///
+    /// This is the one genuinely route-dependent operation in the decode loop: refinement fits
+    /// edges, and an edge is straight only in the frame this warp defines. The pinhole
+    /// implementation runs the pixel-space ERF kernels; the lens implementation fits in the
+    /// rectified frame and re-projects, because a straight-chord fit against a lens-curved edge
+    /// carries a systematic inward bias.
+    fn refine_erf(
+        &self,
+        arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        sigma: f64,
+    ) -> [[f64; 2]; 4];
+
+    /// Refine a decode-first *seed* quad, or `None` if it cannot be refined.
+    ///
+    /// Separate from [`Warp::refine_erf`] because a seed gets a wider search than a finalist:
+    /// an unrefined contour corner sits up to a pixel off a sharp edge.
+    fn refine_seed(
+        &self,
+        arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        config: &crate::config::DetectorConfig,
+    ) -> Option<[[f64; 2]; 4]>;
 }
 
 /// Identity [`Warp`] for a rectified camera: the working plane is the image plane.
@@ -1143,6 +1170,28 @@ impl Warp for NoWarp {
     #[inline]
     fn to_working(&self, x: f64, y: f64) -> Option<[f64; 2]> {
         Some([x, y])
+    }
+
+    #[inline]
+    fn refine_erf(
+        &self,
+        arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        sigma: f64,
+    ) -> [[f64; 2]; 4] {
+        refine_corners_erf(arena, img, raw, sigma)
+    }
+
+    #[inline]
+    fn refine_seed(
+        &self,
+        arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        config: &crate::config::DetectorConfig,
+    ) -> Option<[[f64; 2]; 4]> {
+        refine_decode_first_seed(arena, img, raw, config)
     }
 }
 
@@ -1177,6 +1226,58 @@ impl<C: crate::camera::CameraModel> Warp for LensWarp<'_, C> {
             self.table
                 .undistort_checked(self.model, (x - k.cx) / k.fx, (y - k.cy) / k.fy)?;
         Some([xu * k.fx + k.cx, yu * k.fy + k.cy])
+    }
+
+    fn refine_erf(
+        &self,
+        _arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        _sigma: f64,
+    ) -> [[f64; 2]; 4] {
+        self.refine_curved(img, raw).unwrap_or(*raw)
+    }
+
+    fn refine_seed(
+        &self,
+        _arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        _config: &crate::config::DetectorConfig,
+    ) -> Option<[[f64; 2]; 4]> {
+        self.refine_curved(img, raw)
+    }
+}
+
+#[cfg(feature = "non_rectified")]
+impl<C: crate::camera::CameraModel> LensWarp<'_, C> {
+    /// Fit the quad's four edges in the rectified frame and intersect them — the same routine
+    /// straight-space extraction uses, which is why this is the refiner the decoder must call
+    /// on this route rather than the pixel-space ERF kernels: a straight-chord fit against a
+    /// lens-curved edge carries a systematic inward bias.
+    ///
+    /// `decimation = 1`: the decode pass works on the original-resolution image.
+    fn refine_curved(
+        &self,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+    ) -> Option<[[f64; 2]; 4]> {
+        let mut rect = [crate::Point { x: 0.0, y: 0.0 }; 4];
+        for (slot, p) in rect.iter_mut().zip(raw) {
+            let [x, y] = self.to_working(p[0], p[1])?;
+            *slot = crate::Point { x, y };
+        }
+        let px = raw.map(|p| crate::Point { x: p[0], y: p[1] });
+        let refined = crate::quad::refine_quad_corners_with_camera(
+            img,
+            &rect,
+            &px,
+            1,
+            self.intrinsics,
+            self.model,
+            self.table,
+        );
+        Some(refined.map(|p| [p.x, p.y]))
     }
 }
 
@@ -1514,22 +1615,13 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
     let (decoder_max_h_buf, decoder_ring_rate_buf) = decoder_budgets(decoders, config);
     let decoder_max_h = &decoder_max_h_buf[..decoders.len()];
     let decoder_ring_rate = &decoder_ring_rate_buf[..decoders.len()];
-    // Who owns corner refinement on this route.
-    //
-    // The pinhole extractor can hand the decoder *unrefined* contour corners and let it refine
-    // only the candidates that decode (decode-first ordering, #433/#435). The straight-space
-    // extractor cannot: fitting a lens-curved edge needs the rectified contour, which only it
-    // has, so it refines in place and the corners arriving here are already final. Re-running
-    // the pixel-space ERF kernel on them would fit straight chords to curved edges and fight
-    // that work, so a warped route does no refinement of its own and relies on
-    // `finalize_decoded_candidate`'s local photometric passes, which need no camera model.
-    //
-    // Everything in this loop that exists *because* corners are provisional hangs off this
-    // flag: the refinement itself, the loosened seed ring budget below, and the near-miss
-    // recovery search. Those are one decision, stated once — unlike the accidental divergence
-    // that let #426/#430/#431/#432/#434 reach the pinhole route only.
-    let refine_here = W::IS_IDENTITY;
-    let decode_first = config.decode_first() && refine_here;
+    // Decode-first ordering applies on every route: both extractors hand the decoder unrefined
+    // contour corners under it, and the decoder refines only the candidates that decode or
+    // nearly do, through `Warp::refine_seed`. What differs is *which* refiner that is — the
+    // pixel-space ERF kernels for a rectified camera, a fit in the rectified frame for a lens,
+    // because a straight-chord fit against a lens-curved edge carries a systematic inward bias
+    // — and the `Warp` owns that choice, so this loop has no route-dependent policy left.
+    let decode_first = config.decode_first();
 
     // Decode-first matches come from unrefined contour corners, about a pixel off on small
     // markers, so a ring sample can land in the white surround. Such a match is verified on the
@@ -1682,16 +1774,6 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                         };
                         let mut decode_first_refined = None::<Option<[[f64; 2]; 4]>>;
 
-                        // Best match across *all* scale retries, for a route that does no
-                        // refinement of its own. Returning on the first match that clears its
-                        // budget is what the refining route must do — it has to verify that
-                        // match on a refined quad, and moving to another scale would throw
-                        // that work away. With no refinement step there is nothing to protect
-                        // and a cleaner decode is strictly better evidence: measured on the
-                        // Brown-Conrady hub, returning early raised mean Hamming from 0.020 to
-                        // 0.084 at identical recall and corner accuracy, because a scale-1.0
-                        // match was reported where a retry decoded cleanly.
-                        let mut best_across_scales: Option<(u32, u32, u8, u64, usize)> = None;
                         let scales = [1.0, 0.9, 1.1];
                         let center = [
                             (corners[0].x + corners[1].x + corners[2].x + corners[3].x) / 4.0,
@@ -1757,12 +1839,11 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                 cells = decoder.dimension() + 2;
 
                                 // Always perform ERF refinement for finalists if requested
-                                if refine_here
-                                    && config.refinement_mode
-                                        == crate::config::CornerRefinementMode::Erf
+                                if config.refinement_mode
+                                    == crate::config::CornerRefinementMode::Erf
                                 {
                                     let refined_corners = if !decode_first {
-                                        refine_corners_erf(
+                                        warp.refine_erf(
                                             arena,
                                             img,
                                             &seed_corners,
@@ -1770,12 +1851,7 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                         )
                                     } else if let Some(refined) = *decode_first_refined
                                         .get_or_insert_with(|| {
-                                            refine_decode_first_seed(
-                                                arena,
-                                                img,
-                                                &seed_corners,
-                                                config,
-                                            )
+                                            warp.refine_seed(arena, img, &seed_corners, config)
                                         })
                                     {
                                         refined
@@ -1860,22 +1936,14 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                     }
                                 }
 
-                                if refine_here {
-                                    return (
-                                        CandidateState::Valid,
-                                        id,
-                                        rot,
-                                        code,
-                                        hamming as f32,
-                                        None,
-                                    );
-                                }
-                                if best_across_scales
-                                    .is_none_or(|(_, best, _, _, _)| hamming < best)
-                                {
-                                    best_across_scales =
-                                        Some((id, hamming, rot, code, decoder_idx));
-                                }
+                                return (
+                                    CandidateState::Valid,
+                                    id,
+                                    rot,
+                                    code,
+                                    hamming as f32,
+                                    None,
+                                );
                             }
 
                             if best_h == 0 {
@@ -1883,28 +1951,9 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                             }
                         }
 
-                        if let Some((id, hamming, rot, code, decoder_idx)) = best_across_scales {
-                            cells = decoders[decoder_idx].dimension() + 2;
-                            return (
-                                CandidateState::Valid,
-                                id,
-                                rot,
-                                code,
-                                hamming as f32,
-                                None,
-                            );
-                        }
-
                         // Stage 2: Configurable Corner Refinement (Recovery for near-misses).
                         // `best_h <= recovery_max_h` implies some decoder sampled and decoded.
-                        //
-                        // Gated on `refine_here` for the reason given where that flag is
-                        // defined: this search nudges corners to rescue a decode, which pays
-                        // off when the corners are provisional and a near miss is a
-                        // seed-position artifact. When the extractor has already fitted the
-                        // corners against curved edges, a near miss is a genuinely marginal
-                        // candidate and nudging it forces the decode.
-                        if refine_here && best_h > frame_max_h_floor && best_h <= recovery_max_h && {
+                        if best_h > frame_max_h_floor && best_h <= recovery_max_h && {
                             decoders.iter().any(|d| {
                                 ring_budget_ok(
                                     sampler.ring_evidence(homography, d.as_ref()),
@@ -1924,12 +1973,7 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                     if decode_first
                                         && let Some(refined) =
                                             *decode_first_refined.get_or_insert_with(|| {
-                                                refine_decode_first_seed(
-                                                    arena,
-                                                    img,
-                                                    &seed_corners,
-                                                    config,
-                                                )
+                                                warp.refine_seed(arena, img, &seed_corners, config)
                                             })
                                         // Replay the scale retries on the refined quad, as
                                         // refine-first ordering does; the ring is checked on
