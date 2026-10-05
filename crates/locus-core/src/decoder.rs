@@ -275,7 +275,7 @@ impl Homography {
         // degenerate homography) would yield a non-finite result. Clamp to a tiny
         // sign-preserving epsilon so the divide stays finite — the projection becomes
         // large-but-finite, which callers reject via their reprojection-residual gate
-        // (mirrors the `d.abs() < 1e-8` guard in `sample_grid_values_distorted`).
+        // (mirrors the `d.abs() < 1e-8` guard in `sample_points_warped`).
         let w = res[2];
         let w = if w.abs() < 1e-12 {
             1e-12_f64.copysign(w)
@@ -605,19 +605,6 @@ fn ring_budget_ok(evidence: Option<(u32, u32)>, max_error_rate: f32) -> bool {
 /// must fit [`ring_budget_ok`].
 fn ring_ok(max_error_rate: f32, evidence: impl FnOnce() -> Option<(u32, u32)>) -> bool {
     max_error_rate >= 1.0 || ring_budget_ok(evidence(), max_error_rate)
-}
-
-/// Pinhole [`ring_ok`] for one stored homography.
-fn border_ring_ok(
-    img: &crate::image::ImageView,
-    roi: &RoiCache,
-    homography: &Matrix3x3,
-    decoder: &(impl TagDecoder + ?Sized),
-    max_error_rate: f32,
-) -> bool {
-    ring_ok(max_error_rate, || {
-        rectified_ring_evidence(img, roi, &Homography::from_matrix3x3(homography), decoder)
-    })
 }
 
 /// Border-ring error budget of a family whose decodes accept up to `max_h` errors in `bits`
@@ -1107,55 +1094,334 @@ pub fn rotate90(bits: u64, dim: usize) -> u64 {
     res
 }
 
-/// Sample the bit grid using scalar bilinear interpolation with distortion remapping.
+/// How the decode loop's *working* plane maps to raw image pixels.
 ///
-/// Projects each canonical tag sample point through the ideal homography `h_ideal`
-/// (computed from undistorted corners), then applies the camera distortion map to
-/// convert the ideal pixel coordinate to the actual coordinate in the distorted image,
-/// finally sampling the distorted image via bilinear interpolation.
+/// The loop does all of its geometry in the working plane — scale retries, corner nudges,
+/// homographies — and reads pixels through this warp. For a rectified camera the working plane
+/// *is* the image plane and [`NoWarp`] makes every call an identity the compiler erases. For a
+/// distorted camera the working plane is the ideal, lens-free plane, where a marker's edges are
+/// straight and its bit grid really is a homography, and the warp applies the lens on the way
+/// to the sensor.
 ///
-/// This path is only called for non-rectified cameras (`!C::IS_RECTIFIED`). For rectified
-/// cameras the faster SIMD path in [`sample_grid_soa_precomputed`] is used instead.
-#[cfg(feature = "non_rectified")]
-fn sample_grid_values_distorted<C: crate::camera::CameraModel>(
-    img: &crate::image::ImageView,
-    h_ideal: &Homography,
-    decoder: &(impl TagDecoder + ?Sized),
-    intrinsics: &crate::pose::CameraIntrinsics,
-    model: &C,
-    intensities: &mut [f64; MAX_BIT_COUNT],
-) -> bool {
-    let points = decoder.sample_points();
-    let n = points.len().min(MAX_BIT_COUNT);
-    sample_points_distorted(
-        img,
-        h_ideal,
-        &points[..n],
-        intrinsics,
-        model,
-        &mut intensities[..n],
-    )
+/// This is what lets [`decode_batch_soa_generic`] be written once. The loop *was* written
+/// twice, and that duplication was the mechanism by which the gradient-orthogonality corner
+/// pass (#426, #430, #431, #432), the marker-inset calibration (#434) and the decode-first
+/// ordering with its near-miss recovery search (#433, #435) all reached the pinhole route only.
+pub(crate) trait Warp {
+    /// `true` when this warp is the identity, so the ROI-cached SIMD kernels apply directly.
+    ///
+    /// A `const` rather than a method: it picks the kernel at monomorphization, so the pinhole
+    /// route compiles to exactly the code it ran before this loop was shared, and the
+    /// distorted route carries none of the SIMD path.
+    const IS_IDENTITY: bool;
+
+    /// Working-plane point to raw image pixel.
+    ///
+    /// Always defined and always cheap — it is the camera model's *forward* map, a polynomial
+    /// evaluation with no iteration. "Invert once, project many" is why the loop leans on this
+    /// direction and calls [`Warp::to_working`] only a fixed handful of times per candidate.
+    fn to_pixel(&self, x: f64, y: f64) -> [f64; 2];
+
+    /// Raw image pixel to working-plane point, or `None` when the lens has no preimage for it.
+    ///
+    /// The only direction that can fail, and the only one that costs an inversion.
+    fn to_working(&self, x: f64, y: f64) -> Option<[f64; 2]>;
+
+    /// Refine a finalist's corners, given the quad in **raw pixel** coordinates.
+    ///
+    /// This is the one genuinely route-dependent operation in the decode loop: refinement fits
+    /// edges, and an edge is straight only in the frame this warp defines. The pinhole
+    /// implementation runs the pixel-space ERF kernels; the lens implementation fits in the
+    /// rectified frame and re-projects, because a straight-chord fit against a lens-curved edge
+    /// carries a systematic inward bias.
+    fn refine_erf(
+        &self,
+        arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        sigma: f64,
+    ) -> [[f64; 2]; 4];
+
+    /// Refine a decode-first *seed* quad, or `None` if it cannot be refined.
+    ///
+    /// Separate from [`Warp::refine_erf`] because a seed gets a wider search than a finalist:
+    /// an unrefined contour corner sits up to a pixel off a sharp edge.
+    fn refine_seed(
+        &self,
+        arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        config: &crate::config::DetectorConfig,
+    ) -> Option<[[f64; 2]; 4]>;
 }
 
-/// Sample arbitrary canonical points through the ideal homography and the distortion map
-/// (see [`sample_grid_values_distorted`]).
+/// Identity [`Warp`] for a rectified camera: the working plane is the image plane.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct NoWarp;
+
+impl Warp for NoWarp {
+    const IS_IDENTITY: bool = true;
+
+    #[inline]
+    fn to_pixel(&self, x: f64, y: f64) -> [f64; 2] {
+        [x, y]
+    }
+
+    #[inline]
+    fn to_working(&self, x: f64, y: f64) -> Option<[f64; 2]> {
+        Some([x, y])
+    }
+
+    #[inline]
+    fn refine_erf(
+        &self,
+        arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        sigma: f64,
+    ) -> [[f64; 2]; 4] {
+        refine_corners_erf(arena, img, raw, sigma)
+    }
+
+    #[inline]
+    fn refine_seed(
+        &self,
+        arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        config: &crate::config::DetectorConfig,
+    ) -> Option<[[f64; 2]; 4]> {
+        refine_decode_first_seed(arena, img, raw, config)
+    }
+}
+
+/// Lens [`Warp`]: ideal pixels to sensor pixels through a camera model, inverted through the
+/// frame's tabulated radial inverse.
 #[cfg(feature = "non_rectified")]
-#[expect(
-    clippy::similar_names,
-    reason = "paired coordinate-component bindings (px/py, xn/yn, xd/yd, ix/iy, nx/ny) follow the x/y and ideal-vs-distorted math notation and are intentionally similar"
-)]
-fn sample_points_distorted<C: crate::camera::CameraModel>(
+#[derive(Clone, Copy)]
+pub(crate) struct LensWarp<'a, C: crate::camera::CameraModel> {
+    /// Intrinsics taking normalized coordinates to pixels and back.
+    pub intrinsics: &'a crate::pose::CameraIntrinsics,
+    /// The lens model.
+    pub model: &'a C,
+    /// The frame's tabulated radial inverse, so `to_working` costs a lookup, not a solve.
+    pub table: &'a crate::camera::RadialInverseTable<'a>,
+}
+
+#[cfg(feature = "non_rectified")]
+impl<C: crate::camera::CameraModel> Warp for LensWarp<'_, C> {
+    const IS_IDENTITY: bool = false;
+
+    #[inline]
+    fn to_pixel(&self, x: f64, y: f64) -> [f64; 2] {
+        let k = self.intrinsics;
+        let [xd, yd] = self.model.distort((x - k.cx) / k.fx, (y - k.cy) / k.fy);
+        [xd * k.fx + k.cx, yd * k.fy + k.cy]
+    }
+
+    #[inline]
+    fn to_working(&self, x: f64, y: f64) -> Option<[f64; 2]> {
+        let k = self.intrinsics;
+        let [xu, yu] =
+            self.table
+                .undistort_checked(self.model, (x - k.cx) / k.fx, (y - k.cy) / k.fy)?;
+        Some([xu * k.fx + k.cx, yu * k.fy + k.cy])
+    }
+
+    fn refine_erf(
+        &self,
+        _arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        _sigma: f64,
+    ) -> [[f64; 2]; 4] {
+        self.refine_curved(img, raw).unwrap_or(*raw)
+    }
+
+    fn refine_seed(
+        &self,
+        _arena: &bumpalo::Bump,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+        config: &crate::config::DetectorConfig,
+    ) -> Option<[[f64; 2]; 4]> {
+        let refined = self.refine_curved(img, raw)?;
+        // The second half of `refine_decode_first_seed`: a seed only survives if its *refined*
+        // quad still shows edge contrast. Without this the shared loop's `else { continue; }`
+        // arm is unreachable on this route, so a textured blob that decodes by chance is
+        // verified by the ring budget alone — the class of defect #435 fixed, and the widened
+        // seed band in extraction makes it reachable.
+        let quad = refined.map(|p| crate::Point { x: p[0], y: p[1] });
+        crate::quad::curved_edge_contrast_exceeds(
+            img,
+            &quad,
+            self.intrinsics,
+            self.model,
+            self.table,
+            config.quad_min_edge_score,
+        )
+        .then_some(refined)
+    }
+}
+
+#[cfg(feature = "non_rectified")]
+impl<C: crate::camera::CameraModel> LensWarp<'_, C> {
+    /// Fit the quad's four edges in the rectified frame and intersect them — the same routine
+    /// straight-space extraction uses, which is why this is the refiner the decoder must call
+    /// on this route rather than the pixel-space ERF kernels: a straight-chord fit against a
+    /// lens-curved edge carries a systematic inward bias.
+    ///
+    /// `decimation = 1`: the decode pass works on the original-resolution image.
+    fn refine_curved(
+        &self,
+        img: &crate::image::ImageView,
+        raw: &[[f64; 2]; 4],
+    ) -> Option<[[f64; 2]; 4]> {
+        let mut rect = [crate::Point { x: 0.0, y: 0.0 }; 4];
+        for (slot, p) in rect.iter_mut().zip(raw) {
+            let [x, y] = self.to_working(p[0], p[1])?;
+            *slot = crate::Point { x, y };
+        }
+        let px = raw.map(|p| crate::Point { x: p[0], y: p[1] });
+        // The refiner's minimum-edge-length gate is calibrated in pixels, and the working plane
+        // is the same rectified-pixel chart the extractor fits in — so it needs the same
+        // chart-to-pixel length conversion: sqrt|det(d p_px / d p_rect)| = sqrt|det J_distort|.
+        // The determinant is dimensionless, so evaluating it on normalized coordinates at the
+        // quad centre is the whole computation.
+        let k = self.intrinsics;
+        let centre_x = 0.25 * (rect[0].x + rect[1].x + rect[2].x + rect[3].x);
+        let centre_y = 0.25 * (rect[0].y + rect[1].y + rect[2].y + rect[3].y);
+        let j = self
+            .model
+            .distort_jacobian((centre_x - k.cx) / k.fx, (centre_y - k.cy) / k.fy);
+        let len_scale = (j[0][0] * j[1][1] - j[0][1] * j[1][0]).abs().sqrt();
+        let refined = crate::quad::refine_quad_corners_with_camera(
+            img,
+            &rect,
+            &px,
+            1,
+            self.intrinsics,
+            self.model,
+            self.table,
+            len_scale,
+        );
+        Some(refined.map(|p| [p.x, p.y]))
+    }
+}
+
+/// Per-candidate image-sampling kernel for the shared decode loop.
+///
+/// Holds the candidate's ROI copy and the frame's [`Warp`], and exposes the four operations the
+/// loop needs: a working-plane homography for a quad given in pixels, a bit-grid sample, a
+/// border-ring evidence count, and that evidence checked against a budget.
+struct CandidateSampler<'a, W: Warp> {
+    /// The raw sensor image every sample ultimately reads.
+    img: &'a crate::image::ImageView<'a>,
+    /// ROI copy of the candidate's neighbourhood for the SIMD kernels. Empty for a warped
+    /// camera, whose scalar kernel reads the full image and would pay the copy for nothing.
+    roi: RoiCache<'a>,
+    /// The frame's working-plane-to-pixel map.
+    warp: &'a W,
+}
+
+impl<W: Warp> CandidateSampler<'_, W> {
+    /// Working-plane homography of a quad given in **raw pixel** coordinates.
+    ///
+    /// For a rectified camera this is exactly `homography_matrix(quad)`. For a warped one the
+    /// quad is unprojected first — which is what lets the loop express its whole search (scale
+    /// retries, corner nudges) in pixels and still have both routes run the identical search,
+    /// with only the projection differing.
+    #[inline]
+    fn homography_of_raw(&self, raw: &[[f64; 2]; 4]) -> Option<Matrix3x3> {
+        if W::IS_IDENTITY {
+            return homography_matrix(raw);
+        }
+        homography_matrix(&self.quad_to_working(raw)?)
+    }
+
+    /// Map a quad from raw pixel space into the working plane, or `None` if any corner has no
+    /// preimage under the lens.
+    #[inline]
+    fn quad_to_working(&self, raw: &[[f64; 2]; 4]) -> Option<[[f64; 2]; 4]> {
+        if W::IS_IDENTITY {
+            return Some(*raw);
+        }
+        let mut out = [[0.0_f64; 2]; 4];
+        for (slot, p) in out.iter_mut().zip(raw) {
+            *slot = self.warp.to_working(p[0], p[1])?;
+        }
+        Some(out)
+    }
+
+    /// Bits sampled from the marker's grid through a working-plane homography.
+    #[inline]
+    fn sample_grid(&self, h: &Matrix3x3, decoder: &(impl TagDecoder + ?Sized)) -> Option<u64> {
+        if W::IS_IDENTITY {
+            return sample_grid_soa_precomputed(self.img, &self.roi, h, decoder);
+        }
+        let points = decoder.sample_points();
+        let n = points.len().min(MAX_BIT_COUNT);
+        let mut intensities = [0.0_f64; MAX_BIT_COUNT];
+        if !sample_points_warped(
+            self.img,
+            &Homography::from_matrix3x3(h),
+            &points[..n],
+            self.warp,
+            &mut intensities[..n],
+        ) {
+            return None;
+        }
+        Some(crate::strategy::bits_from_intensities(
+            &intensities[..n],
+            &compute_adaptive_thresholds(&intensities[..n], points),
+        ))
+    }
+
+    /// Border-ring evidence through a working-plane homography.
+    #[inline]
+    fn ring_evidence(
+        &self,
+        h: &Matrix3x3,
+        decoder: &(impl TagDecoder + ?Sized),
+    ) -> Option<(u32, u32)> {
+        let h = Homography::from_matrix3x3(h);
+        if W::IS_IDENTITY {
+            return rectified_ring_evidence(self.img, &self.roi, &h, decoder);
+        }
+        ring_evidence(decoder, |pts, out| {
+            sample_points_warped(self.img, &h, pts, self.warp, out)
+        })
+    }
+
+    /// [`ring_ok`] for one working-plane homography.
+    #[inline]
+    fn ring_ok(
+        &self,
+        max_error_rate: f32,
+        h: &Matrix3x3,
+        decoder: &(impl TagDecoder + ?Sized),
+    ) -> bool {
+        ring_ok(max_error_rate, || self.ring_evidence(h, decoder))
+    }
+}
+
+/// Sample canonical marker points through a working-plane homography and a [`Warp`].
+///
+/// The scalar counterpart of [`sample_grid_soa_precomputed`]: it exists because a lens makes
+/// the marker's bit grid a curved pattern on the sensor, which that kernel's DDA stepping
+/// cannot follow. Callers with `W::IS_IDENTITY` use the SIMD path instead, and this function is
+/// dead code in that monomorphization.
+fn sample_points_warped<W: Warp>(
     img: &crate::image::ImageView,
-    h_ideal: &Homography,
+    h_work: &Homography,
     points: &[(f64, f64)],
-    intrinsics: &crate::pose::CameraIntrinsics,
-    model: &C,
+    warp: &W,
     intensities: &mut [f64],
 ) -> bool {
     if points.is_empty() {
         return false;
     }
-    let hm = &h_ideal.h;
+    let hm = &h_work.h;
     let w_limit = (img.width as f64) - 1.0 - 1e-4;
     let h_limit = (img.height as f64) - 1.0 - 1e-4;
 
@@ -1171,15 +1437,8 @@ fn sample_points_distorted<C: crate::camera::CameraModel>(
             return false;
         }
 
-        let px_ideal = nx / d;
-        let py_ideal = ny / d;
-
-        // Convert ideal pixel → normalized → apply distortion → distorted pixel.
-        let xn = (px_ideal - intrinsics.cx) / intrinsics.fx;
-        let yn = (py_ideal - intrinsics.cy) / intrinsics.fy;
-        let [xd, yd] = model.distort(xn, yn);
-        let px = xd * intrinsics.fx + intrinsics.cx;
-        let py = yd * intrinsics.fy + intrinsics.cy;
+        // Working plane -> sensor pixel.
+        let [px, py] = warp.to_pixel(nx / d, ny / d);
 
         if px < 0.0 || px > w_limit || py < 0.0 || py > h_limit {
             return false;
@@ -1203,141 +1462,17 @@ fn sample_points_distorted<C: crate::camera::CameraModel>(
     true
 }
 
-/// Distortion-aware decode for a single candidate using scalar sampling.
-///
-/// Undistorts the detected corners to compute an ideal homography, then samples the
-/// distorted image at the correctly distortion-mapped coordinates for each bit sample
-/// point. Called by [`decode_batch_soa_with_camera`] for non-rectified cameras.
-#[cfg(feature = "non_rectified")]
-fn decode_candidate_distorted<C: crate::camera::CameraModel>(
-    img: &crate::image::ImageView,
-    corners: &[Point2f; 4],
-    decoders: &[Box<dyn TagDecoder + Send + Sync>],
-    config: &crate::config::DetectorConfig,
-    intrinsics: &crate::pose::CameraIntrinsics,
-    model: &C,
-) -> (crate::batch::CandidateState, u32, u8, u64, f32, usize) {
-    use crate::batch::CandidateState;
-
-    // Checked: the whole decode hangs off this homography, so a corner the lens model cannot
-    // invert must fail the candidate rather than be mapped to a non-preimage and sampled.
-    let mut ideal = [[0.0_f64; 2]; 4];
-    for (slot, corner) in ideal.iter_mut().zip(corners.iter()) {
-        match intrinsics.undistort_pixel_checked(f64::from(corner.x), f64::from(corner.y)) {
-            Some(u) => *slot = u,
-            None => return (CandidateState::FailedDecode, 0, 0, 0, 0.0, 0),
-        }
-    }
-    let ideal = ideal;
-
-    let center = [
-        (ideal[0][0] + ideal[1][0] + ideal[2][0] + ideal[3][0]) * 0.25,
-        (ideal[0][1] + ideal[1][1] + ideal[2][1] + ideal[3][1]) * 0.25,
-    ];
-
-    let mut best_h = u32::MAX;
-    let mut best_bits = 0u64;
-    // Lowest-Hamming candidate that is within its own decoder's budget and shows the
-    // border ring: `(id, rotation, code, hamming)`.
-    // The accepted decoder's grid travels with the match: `finalize_decoded_candidate` sizes
-    // its sub-pixel window from the marker that actually decoded, not from a conservative
-    // minimum over every registered family.
-    let mut accepted: Option<(u32, u8, u64, u32, usize)> = None;
-    // Ring evidence on the reported (unscaled) quad, at most once per decoder.
-    let h_report = Homography::square_to_quad(&ideal);
-    let mut ring_cache = [None::<bool>; MAX_DECODERS];
-
-    let (decoder_max_h, decoder_ring_rate) = decoder_budgets(decoders, config);
-
-    for &scale in &[1.0f64, 0.9, 1.1] {
-        let scaled: [[f64; 2]; 4] = core::array::from_fn(|j| {
-            [
-                center[0] + (ideal[j][0] - center[0]) * scale,
-                center[1] + (ideal[j][1] - center[1]) * scale,
-            ]
-        });
-
-        let Some(h_ideal) = Homography::square_to_quad(&scaled) else {
-            continue;
-        };
-
-        let mut intensities = [0.0f64; MAX_BIT_COUNT];
-
-        for (decoder_idx, decoder) in decoders.iter().enumerate() {
-            let n = decoder.bit_count();
-            if !sample_grid_values_distorted::<C>(
-                img,
-                &h_ideal,
-                decoder.as_ref(),
-                intrinsics,
-                model,
-                &mut intensities,
-            ) {
-                continue;
-            }
-
-            let pts = decoder.sample_points();
-            let thresholds = compute_adaptive_thresholds(&intensities[..n], pts);
-            let code = crate::strategy::bits_from_intensities(&intensities[..n], &thresholds);
-
-            if let Some((id, hamming, rot)) = decoder.decode_full(code, 255) {
-                if hamming < best_h {
-                    best_h = hamming;
-                    best_bits = code;
-                }
-                let improves = accepted.is_none_or(|(_, _, _, h, _)| hamming < h);
-                if improves
-                    && hamming <= decoder_max_h[decoder_idx]
-                    && *ring_cache[decoder_idx].get_or_insert_with(|| {
-                        ring_ok(decoder_ring_rate[decoder_idx], || {
-                            h_report.as_ref().and_then(|h| {
-                                ring_evidence(decoder.as_ref(), |pts, out| {
-                                    sample_points_distorted(img, h, pts, intrinsics, model, out)
-                                })
-                            })
-                        })
-                    })
-                {
-                    accepted = Some((id, rot, code, hamming, decoder.dimension() + 2));
-                }
-            }
-            if accepted.is_some_and(|(_, _, _, h, _)| h == 0) {
-                break;
-            }
-        }
-        if accepted.is_some_and(|(_, _, _, h, _)| h == 0) {
-            break;
-        }
-    }
-
-    if let Some((id, rot, code, hamming, cells)) = accepted {
-        (CandidateState::Valid, id, rot, code, hamming as f32, cells)
-    } else {
-        (
-            CandidateState::FailedDecode,
-            0,
-            0,
-            if best_h == u32::MAX { 0 } else { best_bits },
-            if best_h == u32::MAX {
-                0.0
-            } else {
-                best_h as f32
-            },
-            0,
-        )
-    }
-}
-
 /// Finish one decoded candidate's corners: sub-pixel refinement, the marker-inset photometric
 /// calibration, the frame-clipping check, the rotation reorder, and the homography recompute.
 ///
-/// **Shared by both decode loops on purpose.** `decode_batch_soa_generic` (pinhole/SIMD) and
-/// `decode_batch_soa_with_camera_inner` (distorted) are separate implementations, and this tail
-/// is where every corner-estimator change lands. It lived only in the former, so the
+/// Called from one place, by one loop. This tail used to live only in the pinhole loop while
+/// `decode_batch_soa_with_camera_inner` was a second implementation, so the
 /// gradient-orthogonality pass (#426, #430, #431, #432), the marker-inset calibration (#434)
 /// and the frame-clipping rule (#436) **all** silently skipped distorted cameras:
 /// `decoder.corner_subpix` was a no-op there, at a cost of ~5x in corner RMSE on the distortion
-/// hubs. Every pass here is a local photometric or geometric test on the raw image — none needs
+/// hubs. #443 made both loops share it; the loops themselves are now one, so there is no longer
+/// a second tail to forget. Every pass here is a local photometric or geometric test on the
+/// raw image — none needs
 /// a camera model, and a lens cannot make a corner stop being a corner. Keeping one copy is what
 /// stops the next one diverging again.
 ///
@@ -1420,99 +1555,6 @@ fn finalize_decoded_candidate(
     }
 }
 
-/// Distortion-aware batch decode for non-rectified cameras.
-#[cfg(feature = "non_rectified")]
-fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
-    batch: &mut crate::batch::DetectionBatch,
-    n: usize,
-    img: &crate::image::ImageView,
-    decoders: &[Box<dyn TagDecoder + Send + Sync>],
-    config: &crate::config::DetectorConfig,
-    intrinsics: &crate::pose::CameraIntrinsics,
-    model: &C,
-) {
-    use crate::batch::CandidateState;
-    use rayon::prelude::*;
-
-    // Split the batch into disjoint per-column mutable slices so each rayon
-    // worker can write its target SoA cells directly, eliminating the
-    // per-frame `Vec<TupleN>` heap allocation that the previous
-    // collect-then-drain pattern paid outside the arena every frame.
-    // Each worker owns its index slot via rayon's `Zip`; reads from
-    // `corners_slot` happen before writes within a single closure body.
-    let status_out = &mut batch.status_mask[..n];
-    let ids_out = &mut batch.ids[..n];
-    let payloads_out = &mut batch.payloads[..n];
-    let error_rates_out = &mut batch.error_rates[..n];
-    let corners_out = &mut batch.corners[..n];
-    let homographies_out = &mut batch.homographies[..n];
-    let refined_out = &mut batch.corner_refined[..n];
-
-    // Rayon `Zip` truncates to the shortest input; guard the disjoint-slice
-    // contract so a future off-by-one fix on any column fails loudly in
-    // debug rather than silently dropping the last candidate.
-    debug_assert_eq!(status_out.len(), n);
-    debug_assert_eq!(refined_out.len(), n);
-    debug_assert_eq!(ids_out.len(), n);
-    debug_assert_eq!(payloads_out.len(), n);
-    debug_assert_eq!(error_rates_out.len(), n);
-    debug_assert_eq!(corners_out.len(), n);
-    debug_assert_eq!(homographies_out.len(), n);
-
-    status_out
-        .par_iter_mut()
-        .zip(ids_out.par_iter_mut())
-        .zip(payloads_out.par_iter_mut())
-        .zip(error_rates_out.par_iter_mut())
-        .zip(corners_out.par_iter_mut())
-        .zip(homographies_out.par_iter_mut())
-        .zip(refined_out.par_iter_mut())
-        .for_each(
-            |(
-                (((((status_slot, id_slot), payload_slot), err_slot), corners_slot), h_slot),
-                refined_slot,
-            )| {
-                if *status_slot != CandidateState::Active {
-                    // Bypass: preserve status_mask and error_rates (no-op
-                    // writes in the original drain); zero ids/payloads to
-                    // match the `(state, 0, 0, 0, error_rates)` tuple the
-                    // original closure returned.
-                    *id_slot = 0;
-                    *payload_slot = 0;
-                    return;
-                }
-
-                let (state, id, rot, bits, err, cells) = decode_candidate_distorted::<C>(
-                    img,
-                    corners_slot,
-                    decoders,
-                    config,
-                    intrinsics,
-                    model,
-                );
-
-                *status_slot = state;
-                *id_slot = id;
-                *payload_slot = bits;
-                *err_slot = err;
-
-                // `false`: no `refinement_mode` pass runs on this route, so the corners
-                // entering the shared tail are the extraction's own.
-                finalize_decoded_candidate(
-                    img,
-                    config,
-                    cells,
-                    rot,
-                    false,
-                    status_slot,
-                    corners_slot,
-                    h_slot,
-                    refined_slot,
-                );
-            },
-        );
-}
-
 /// Distortion-aware entry point for [`decode_batch_soa`].
 ///
 /// When `C::IS_RECTIFIED = true` (i.e., [`PinholeModel`](crate::camera::PinholeModel)),
@@ -1527,6 +1569,10 @@ fn decode_batch_soa_with_camera_inner<C: crate::camera::CameraModel>(
 /// [`PinholeModel`]: crate::camera::PinholeModel
 #[cfg(feature = "non_rectified")]
 #[tracing::instrument(skip_all, name = "pipeline::decoding_pass_distortion")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "pipeline stage entry: the batch and its length, the image, the decoder set, the config, the intrinsics, the lens model and the frame's tabulated inverse"
+)]
 pub fn decode_batch_soa_with_camera<C: crate::camera::CameraModel>(
     batch: &mut crate::batch::DetectionBatch,
     n: usize,
@@ -1535,17 +1581,25 @@ pub fn decode_batch_soa_with_camera<C: crate::camera::CameraModel>(
     config: &crate::config::DetectorConfig,
     intrinsics: Option<&crate::pose::CameraIntrinsics>,
     model: &C,
+    table: &crate::camera::RadialInverseTable<'_>,
 ) {
-    if C::IS_RECTIFIED {
-        // Zero-overhead path for rectified images: delegate to the existing SIMD pipeline.
-        // The `if C::IS_RECTIFIED` is a compile-time constant; for PinholeModel the
-        // compiler eliminates the else branch entirely via dead-code elimination.
-        decode_batch_soa(batch, n, img, decoders, config);
-    } else if let Some(intrinsics) = intrinsics {
-        decode_batch_soa_with_camera_inner::<C>(batch, n, img, decoders, config, intrinsics, model);
-    } else {
-        // No intrinsics provided — fall back to the standard path.
-        decode_batch_soa(batch, n, img, decoders, config);
+    match (C::IS_RECTIFIED, intrinsics) {
+        (false, Some(intrinsics)) => decode_batch_soa_generic(
+            batch,
+            n,
+            img,
+            decoders,
+            config,
+            &LensWarp {
+                intrinsics,
+                model,
+                table,
+            },
+        ),
+        // A rectified model, or no intrinsics to unproject with: the working plane is already
+        // the image plane, so the identity warp and its SIMD kernels apply. `C::IS_RECTIFIED`
+        // is a compile-time constant, so `PinholeModel` carries none of the lens path.
+        _ => decode_batch_soa(batch, n, img, decoders, config),
     }
 }
 
@@ -1555,7 +1609,6 @@ pub fn decode_batch_soa_with_camera<C: crate::camera::CameraModel>(
 /// This phase executes SIMD bilinear interpolation and Hamming error correction, then refines
 /// the accepted corners (sub-pixel pass and photometric calibration). If a candidate fails
 /// decoding, its `status_mask` is flipped to `FailedDecode`.
-#[allow(clippy::too_many_lines, clippy::cast_possible_wrap)]
 #[tracing::instrument(skip_all, name = "pipeline::decoding_pass")]
 pub fn decode_batch_soa(
     batch: &mut crate::batch::DetectionBatch,
@@ -1563,6 +1616,24 @@ pub fn decode_batch_soa(
     img: &crate::image::ImageView,
     decoders: &[Box<dyn TagDecoder + Send + Sync>],
     config: &crate::config::DetectorConfig,
+) {
+    decode_batch_soa_generic(batch, n, img, decoders, config, &NoWarp);
+}
+
+/// The decode pass itself, shared by the pinhole and distortion-aware routes.
+///
+/// `W` selects the sampling kernel at monomorphization — see [`Warp`] for why this loop is
+/// written once. The policy here is route-independent: three scale retries, decode-first
+/// ordering with refined-quad verification, border-ring budgets, and a near-miss recovery
+/// search that replays the retries on a refined quad before falling back to a coarse nudge.
+#[allow(clippy::too_many_lines, clippy::cast_possible_wrap)]
+fn decode_batch_soa_generic<W: Warp + Sync>(
+    batch: &mut crate::batch::DetectionBatch,
+    n: usize,
+    img: &crate::image::ImageView,
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    config: &crate::config::DetectorConfig,
+    warp: &W,
 ) {
     use crate::batch::CandidateState;
     use rayon::prelude::*;
@@ -1572,12 +1643,20 @@ pub fn decode_batch_soa(
     let (decoder_max_h_buf, decoder_ring_rate_buf) = decoder_budgets(decoders, config);
     let decoder_max_h = &decoder_max_h_buf[..decoders.len()];
     let decoder_ring_rate = &decoder_ring_rate_buf[..decoders.len()];
+    // Decode-first ordering applies on every route: both extractors hand the decoder unrefined
+    // contour corners under it, and the decoder refines only the candidates that decode or
+    // nearly do, through `Warp::refine_seed`. What differs is *which* refiner that is — the
+    // pixel-space ERF kernels for a rectified camera, a fit in the rectified frame for a lens,
+    // because a straight-chord fit against a lens-curved edge carries a systematic inward bias
+    // — and the `Warp` owns that choice, so this loop has no route-dependent policy left.
+    let decode_first = config.decode_first();
+
     // Decode-first matches come from unrefined contour corners, about a pixel off on small
     // markers, so a ring sample can land in the white surround. Such a match is verified on the
     // refined quad with the full budget; the seed only has to look like a marker, with the
-    // recovery gate's tolerance.
+    // recovery gate's tolerance. A route whose corners are already final gets no such licence.
     let mut seed_ring_rate_buf = decoder_ring_rate_buf;
-    if config.decode_first() {
+    if decode_first {
         for rate in &mut seed_ring_rate_buf[..decoders.len()] {
             *rate = rate.max(RECOVERY_RING_MAX_ERROR_RATE);
         }
@@ -1620,6 +1699,9 @@ pub fn decode_batch_soa(
     debug_assert_eq!(error_rates_out.len(), n);
     debug_assert_eq!(corners_out.len(), n);
     debug_assert_eq!(homographies_out.len(), n);
+    // The seventh `zip` input, and the one the merged loop dropped: an off-by-one on
+    // `corner_refined` is exactly the case this block exists to catch loudly.
+    debug_assert_eq!(refined_out.len(), n);
 
     status_out
         .par_iter_mut()
@@ -1660,7 +1742,6 @@ pub fn decode_batch_soa(
                         arena.reset();
 
                         let corners = &input_corners;
-                        let homography = &input_homography;
 
                         // Compute AABB for RoiCache ONCE per candidate.
                         // We expand it slightly (10%) to ensure scaled versions (0.9, 1.1) still fit.
@@ -1676,16 +1757,26 @@ pub fn decode_batch_soa(
                         }
                         let w_aabb = max_x - min_x;
                         let h_aabb = max_y - min_y;
-                        let roi = RoiCache::new(
-                            img,
-                            arena,
-                            ((min_x - w_aabb * 0.1).floor() as i32).max(0) as usize,
-                            ((min_y - h_aabb * 0.1).floor() as i32).max(0) as usize,
-                            (((max_x + w_aabb * 0.1).ceil() as i32).min(img.width as i32 - 1))
+                        // The ROI copy exists to feed the SIMD gather from L1. A warped camera
+                        // samples scalar through the lens, so copying the neighbourhood would
+                        // buy nothing; `RoiCache::disabled` copies no pixels.
+                        let roi = if W::IS_IDENTITY {
+                            RoiCache::new(
+                                img,
+                                arena,
+                                ((min_x - w_aabb * 0.1).floor() as i32).max(0) as usize,
+                                ((min_y - h_aabb * 0.1).floor() as i32).max(0) as usize,
+                                (((max_x + w_aabb * 0.1).ceil() as i32)
+                                    .min(img.width as i32 - 1))
                                 .max(0) as usize,
-                            (((max_y + h_aabb * 0.1).ceil() as i32).min(img.height as i32 - 1))
+                                (((max_y + h_aabb * 0.1).ceil() as i32)
+                                    .min(img.height as i32 - 1))
                                 .max(0) as usize,
-                        );
+                            )
+                        } else {
+                            RoiCache::disabled()
+                        };
+                        let sampler = CandidateSampler { img, roi, warp };
 
                         let mut best_h = u32::MAX;
                         let mut best_code = None;
@@ -1697,6 +1788,21 @@ pub fn decode_batch_soa(
                         // The quad-stage refinement of a decode-first seed depends only on the
                         // seed corners: run it at most once per candidate.
                         let seed_corners = quad_to_f64(corners);
+                        // Working-plane homography of the quad as reported. For a rectified
+                        // camera that is the one the homography pass already computed; a warped
+                        // camera must unproject the quad first, and a corner the lens cannot
+                        // invert fails the candidate, because every homography below — and the
+                        // border-ring evidence that gates acceptance — hangs off this quad.
+                        let base_homography;
+                        let homography = if W::IS_IDENTITY {
+                            &input_homography
+                        } else {
+                            let Some(h) = sampler.homography_of_raw(&seed_corners) else {
+                                return (CandidateState::FailedDecode, 0, 0, 0, 0.0, None);
+                            };
+                            base_homography = h;
+                            &base_homography
+                        };
                         let mut decode_first_refined = None::<Option<[[f64; 2]; 4]>>;
 
                         let scales = [1.0, 0.9, 1.1];
@@ -1714,7 +1820,7 @@ pub fn decode_batch_soa(
                                     y: center[1] + (p.y - center[1]) * scale,
                                 });
                                 // Degenerate scale: skip it.
-                                let Some(h) = homography_matrix(&quad_to_f64(&scaled_corners))
+                                let Some(h) = sampler.homography_of_raw(&quad_to_f64(&scaled_corners))
                                 else {
                                     continue;
                                 };
@@ -1727,12 +1833,9 @@ pub fn decode_batch_soa(
                             let mut best_h_in_scale = u32::MAX;
                             let mut best_match_in_scale: Option<(u32, u32, u8, u64, usize)> = None;
                             for (decoder_idx, decoder) in decoders.iter().enumerate() {
-                                let Some(code) = sample_grid_soa_precomputed(
-                                    img,
-                                    &roi,
-                                    current_homography,
-                                    decoder.as_ref(),
-                                ) else {
+                                let Some(code) =
+                                    sampler.sample_grid(current_homography, decoder.as_ref())
+                                else {
                                     continue;
                                 };
                                 let Some((id, hamming, rot)) = decoder.decode_full(code, 255)
@@ -1749,12 +1852,10 @@ pub fn decode_batch_soa(
                                 if hamming <= decoder_max_h[decoder_idx]
                                     && hamming < best_h_in_scale
                                     && *ring_cache[decoder_idx].get_or_insert_with(|| {
-                                        border_ring_ok(
-                                            img,
-                                            &roi,
+                                        sampler.ring_ok(
+                                            seed_ring_rate[decoder_idx],
                                             homography,
                                             decoder.as_ref(),
-                                            seed_ring_rate[decoder_idx],
                                         )
                                     })
                                 {
@@ -1772,8 +1873,8 @@ pub fn decode_batch_soa(
                                 if config.refinement_mode
                                     == crate::config::CornerRefinementMode::Erf
                                 {
-                                    let refined_corners = if !config.decode_first() {
-                                        refine_corners_erf(
+                                    let refined_corners = if !decode_first {
+                                        warp.refine_erf(
                                             arena,
                                             img,
                                             &seed_corners,
@@ -1781,12 +1882,7 @@ pub fn decode_batch_soa(
                                         )
                                     } else if let Some(refined) = *decode_first_refined
                                         .get_or_insert_with(|| {
-                                            refine_decode_first_seed(
-                                                arena,
-                                                img,
-                                                &seed_corners,
-                                                config,
-                                            )
+                                            warp.refine_seed(arena, img, &seed_corners, config)
                                         })
                                     {
                                         refined
@@ -1796,14 +1892,14 @@ pub fn decode_batch_soa(
                                     let refined_corners_f32 = quad_to_f32(&refined_corners);
 
                                     // Verify that the refined corners still decode.
-                                    let Some(ref_h_mat) = homography_matrix(&refined_corners)
+                                    let Some(ref_h_mat) = sampler.homography_of_raw(&refined_corners)
                                     else {
                                         // Degenerate refinement. Refine-first ordering keeps
                                         // the unrefined match unless a later scale decodes; a
                                         // decode-first match stands only once its refined quad
                                         // verifies it, so it never reaches the acceptance
                                         // after the scale loop with its contour corners.
-                                        if !config.decode_first() {
+                                        if !decode_first {
                                             best_code = Some(code);
                                             best_id = id;
                                             best_rot = rot;
@@ -1811,18 +1907,16 @@ pub fn decode_batch_soa(
                                         continue;
                                     };
 
-                                    if config.decode_first() {
+                                    if decode_first {
                                         // Decode-first: the match came from unrefined corners,
                                         // so it stands only if the refined quad decodes the
                                         // same id within budget at the scale that matched and
                                         // shows its border ring; otherwise it is discarded.
-                                        let verified = homography_matrix(&scale_about_centroid(
+                                        let verified = sampler.homography_of_raw(&scale_about_centroid(
                                             &refined_corners,
                                             f64::from(scale),
                                         ))
-                                        .and_then(|m| {
-                                            sample_grid_soa_precomputed(img, &roi, &m, decoder)
-                                        })
+                                        .and_then(|m| sampler.sample_grid(&m, decoder))
                                         .and_then(|code_ref| {
                                             decoder.decode_full(code_ref, 255).map(
                                                 |(id_ref, hamming_ref, rot_ref)| {
@@ -1833,12 +1927,10 @@ pub fn decode_batch_soa(
                                         .filter(|&(_, id_ref, hamming_ref, _)| {
                                             id_ref == id
                                                 && hamming_ref <= decoder_max_h[decoder_idx]
-                                                && border_ring_ok(
-                                                    img,
-                                                    &roi,
+                                                && sampler.ring_ok(
+                                                    decoder_ring_rate[decoder_idx],
                                                     &ref_h_mat,
                                                     decoder,
-                                                    decoder_ring_rate[decoder_idx],
                                                 )
                                         });
                                         if let Some((code_ref, _, hamming_ref, rot_ref)) = verified
@@ -1858,7 +1950,7 @@ pub fn decode_batch_soa(
                                     // Keep the refined corners if they decode the same tag with
                                     // a Hamming distance that is not worse.
                                     if let Some(code_ref) =
-                                        sample_grid_soa_precomputed(img, &roi, &ref_h_mat, decoder)
+                                        sampler.sample_grid(&ref_h_mat, decoder)
                                         && let Some((id_ref, hamming_ref, _)) =
                                             decoder.decode_full(code_ref, 255)
                                         && id_ref == id
@@ -1893,10 +1985,9 @@ pub fn decode_batch_soa(
                         // Stage 2: Configurable Corner Refinement (Recovery for near-misses).
                         // `best_h <= recovery_max_h` implies some decoder sampled and decoded.
                         if best_h > frame_max_h_floor && best_h <= recovery_max_h && {
-                            let seed_h = Homography::from_matrix3x3(homography);
                             decoders.iter().any(|d| {
                                 ring_budget_ok(
-                                    rectified_ring_evidence(img, &roi, &seed_h, d.as_ref()),
+                                    sampler.ring_evidence(homography, d.as_ref()),
                                     RECOVERY_RING_MAX_ERROR_RATE,
                                 )
                             })
@@ -1910,24 +2001,19 @@ pub fn decode_batch_soa(
                                     // Decode-first ordering left these corners unrefined: a
                                     // near miss gets the refinement it skipped, then one more
                                     // decode at each scale, before the coarse nudge search.
-                                    if config.decode_first()
+                                    if decode_first
                                         && let Some(refined) =
                                             *decode_first_refined.get_or_insert_with(|| {
-                                                refine_decode_first_seed(
-                                                    arena,
-                                                    img,
-                                                    &seed_corners,
-                                                    config,
-                                                )
+                                                warp.refine_seed(arena, img, &seed_corners, config)
                                             })
                                         // Replay the scale retries on the refined quad, as
                                         // refine-first ordering does; the ring is checked on
                                         // the reported (unscaled) quad.
-                                        && let Some(h_unscaled) = homography_matrix(&refined)
+                                        && let Some(h_unscaled) = sampler.homography_of_raw(&refined)
                                     {
                                         let refined_f32 = quad_to_f32(&refined);
                                         for scale in scales {
-                                            let Some(h_mat) = homography_matrix(
+                                            let Some(h_mat) = sampler.homography_of_raw(
                                                 &scale_about_centroid(&refined, f64::from(scale)),
                                             ) else {
                                                 continue;
@@ -1935,12 +2021,9 @@ pub fn decode_batch_soa(
                                             for (decoder_idx, decoder) in
                                                 decoders.iter().enumerate()
                                             {
-                                                let Some(code) = sample_grid_soa_precomputed(
-                                                    img,
-                                                    &roi,
-                                                    &h_mat,
-                                                    decoder.as_ref(),
-                                                ) else {
+                                                let Some(code) =
+                                                    sampler.sample_grid(&h_mat, decoder.as_ref())
+                                                else {
                                                     continue;
                                                 };
                                                 let Some((id, hamming, rot)) =
@@ -1953,12 +2036,10 @@ pub fn decode_batch_soa(
                                                     current_corners = refined_f32;
                                                 }
                                                 if hamming <= decoder_max_h[decoder_idx]
-                                                    && border_ring_ok(
-                                                        img,
-                                                        &roi,
+                                                    && sampler.ring_ok(
+                                                        decoder_ring_rate[decoder_idx],
                                                         &h_unscaled,
                                                         decoder.as_ref(),
-                                                        decoder_ring_rate[decoder_idx],
                                                     )
                                                 {
                                                     cells = decoder.dimension() + 2;
@@ -1989,20 +2070,17 @@ pub fn decode_batch_soa(
                                                 test_corners[c_idx].y += dy;
 
                                                 // Must recompute homography for the nudged corners
-                                                let Some(h_mat) =
-                                                    homography_matrix(&quad_to_f64(&test_corners))
+                                                let Some(h_mat) = sampler
+                                                    .homography_of_raw(&quad_to_f64(&test_corners))
                                                 else {
                                                     continue;
                                                 };
                                                 for (decoder_idx, decoder) in
                                                     decoders.iter().enumerate()
                                                 {
-                                                    let Some(code) = sample_grid_soa_precomputed(
-                                                        img,
-                                                        &roi,
-                                                        &h_mat,
-                                                        decoder.as_ref(),
-                                                    ) else {
+                                                    let Some(code) = sampler
+                                                        .sample_grid(&h_mat, decoder.as_ref())
+                                                    else {
                                                         continue;
                                                     };
                                                     let Some((id, hamming, rot)) =
@@ -2017,12 +2095,10 @@ pub fn decode_batch_soa(
                                                     current_corners = test_corners;
                                                     pass_improved = true;
                                                     if hamming <= decoder_max_h[decoder_idx]
-                                                        && border_ring_ok(
-                                                            img,
-                                                            &roi,
+                                                        && sampler.ring_ok(
+                                                            decoder_ring_rate[decoder_idx],
                                                             &h_mat,
                                                             decoder.as_ref(),
-                                                            decoder_ring_rate[decoder_idx],
                                                         )
                                                     {
                                                         cells = decoder.dimension() + 2;
@@ -2674,10 +2750,15 @@ mod tests {
         ])
         .unwrap();
         let m = h.to_matrix3x3();
+        let sampler = CandidateSampler {
+            img: &img,
+            roi,
+            warp: &NoWarp,
+        };
         // 3 errors of 28: floor(0.1 · 28) = 2 rejects, floor(0.11 · 28) = 3 accepts.
-        assert!(!border_ring_ok(&img, &roi, &m, &AprilTag36h11, 0.1));
-        assert!(border_ring_ok(&img, &roi, &m, &AprilTag36h11, 0.11));
-        assert!(border_ring_ok(&img, &roi, &m, &AprilTag36h11, 1.0));
+        assert!(!sampler.ring_ok(0.1, &m, &AprilTag36h11));
+        assert!(sampler.ring_ok(0.11, &m, &AprilTag36h11));
+        assert!(sampler.ring_ok(1.0, &m, &AprilTag36h11));
     }
 
     #[test]
@@ -2710,8 +2791,15 @@ mod tests {
         ] {
             let data = ring_probe(white);
             let img = crate::image::ImageView::new(&data, 120, 120, 120).unwrap();
+            let arena = bumpalo::Bump::new();
+            let table = crate::camera::RadialInverseTable::build_in(&arena, &model, 2.0);
+            let warp = LensWarp {
+                intrinsics: &intrinsics,
+                model: &model,
+                table: &table,
+            };
             let got = ring_evidence(&AprilTag36h11, |pts, out| {
-                sample_points_distorted(&img, &h, pts, &intrinsics, &model, out)
+                sample_points_warped(&img, &h, pts, &warp, out)
             });
             assert_eq!(got, expect);
         }

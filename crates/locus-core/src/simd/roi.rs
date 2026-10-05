@@ -19,6 +19,9 @@ pub enum RoiCache<'a> {
         /// Height of the ROI.
         height: usize,
     },
+    /// No cache at all; see [`RoiCache::disabled`]. Reads as uniform zero so a stray lookup is
+    /// inert rather than fatal.
+    Disabled,
     /// Larger ROI stored in the arena.
     Arena {
         /// The cached pixel data.
@@ -35,6 +38,22 @@ pub enum RoiCache<'a> {
 }
 
 impl<'a> RoiCache<'a> {
+    /// An ROI that caches nothing, for samplers that read the image directly.
+    ///
+    /// Constructing one copies no pixels, which is the point: a distortion-aware decode samples
+    /// scalar through the lens and would pay the neighbourhood copy for nothing.
+    ///
+    /// Its own variant rather than a zero-sized `Arena`: with `width = 0`, `get`'s
+    /// `min(width.saturating_sub(1))` clamps every coordinate to 0 and then indexes an empty
+    /// slice, so a type documented as "every lookup falls outside it" would in fact panic on
+    /// *every* lookup. The construction site is guarded, so that was unreachable — but an
+    /// unreachable panic behind a comment claiming safety is a landmine in a crate that denies
+    /// `clippy::panic` and builds release with `panic = "abort"`.
+    #[must_use]
+    pub const fn disabled() -> Self {
+        RoiCache::Disabled
+    }
+
     /// Create a new ROI cache by copying a region from the image.
     ///
     /// If the region fits in 1024 bytes, it is stored on the stack.
@@ -89,6 +108,7 @@ impl<'a> RoiCache<'a> {
     #[must_use]
     pub fn get(&self, x: usize, y: usize) -> u8 {
         match self {
+            RoiCache::Disabled => 0,
             RoiCache::Stack {
                 data,
                 min_x,

@@ -74,6 +74,23 @@ pub enum ConfigError {
          KannalaBrandt): use QuadExtractionMode::ContourRdp"
     )]
     EdLinesUnsupportedWithDistortion,
+    /// `upscale_factor > 1` combined with a declared lens model.
+    ///
+    /// Straight-space extraction runs on the upscaled grid but is handed the **original**
+    /// intrinsics, so every normalized radius it computes is inflated by `upscale_factor` and
+    /// the lens is applied in a frame the camera never produced — silently, with every bit
+    /// sample and every unprojection wrong by that factor. Decimation has no such problem
+    /// because `ScaledIntrinsics` rescales the focals and principal point to match.
+    ///
+    /// Rejected rather than fixed because the fix is a coordinate-frame change through the
+    /// whole straight-space path, and nothing has yet needed the combination; the pipeline
+    /// already rejects the analogous distortion + static-EdLines pairing.
+    #[error(
+        "upscale_factor > 1 is not supported with a declared lens model (BrownConrady / \
+         KannalaBrandt): straight-space extraction would apply the lens on the upscaled grid \
+         using un-upscaled intrinsics"
+    )]
+    UpscaleUnsupportedWithDistortion,
     /// `AdaptivePpb` policy had `low_extraction == high_extraction`.
     ///
     /// A degenerate adaptive policy is a configuration mistake — both

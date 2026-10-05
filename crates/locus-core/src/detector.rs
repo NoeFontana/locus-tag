@@ -182,6 +182,34 @@ impl Detector {
     }
 }
 
+/// The frame's tabulated radial inverse, as built by the quad-extraction dispatch.
+///
+/// Stage 3 builds the table in the same dispatch that reaches the decode stage below, so
+/// `built` is always `Some` here. It is rebuilt rather than defaulted if that ever stops being
+/// true: silently continuing without a camera model is exactly how the distortion path
+/// disappeared from measurement in #443, and a rebuild costs tens of microseconds where a
+/// silent pinhole fallback costs correctness.
+#[cfg(feature = "non_rectified")]
+fn resolve_radial_table<'a, C: crate::camera::CameraModel>(
+    built: Option<crate::camera::RadialInverseTable<'a>>,
+    arena: &'a bumpalo::Bump,
+    model: &C,
+    intrinsics: &crate::pose::CameraIntrinsics,
+    img: &ImageView,
+) -> crate::camera::RadialInverseTable<'a> {
+    built.unwrap_or_else(|| {
+        debug_assert!(
+            false,
+            "quad extraction should have built the radial inverse table for this frame"
+        );
+        crate::camera::RadialInverseTable::build_in(
+            arena,
+            model,
+            crate::quad::frame_radius_bound(intrinsics, img.width, img.height),
+        )
+    })
+}
+
 /// Core detection pipeline — shared by [`Detector`] and [`LocusEngine`].
 ///
 /// Runs the full pipeline (thresholding → segmentation → quad extraction →
@@ -215,9 +243,31 @@ fn run_detection_pipeline<'ctx>(
     // `AdaptivePpb`-routed profile work across rectified and distorted
     // datasets without per-frame profile switching.
     let has_distortion = intrinsics.is_some_and(|k| k.distortion.is_distorted());
+    // Whether a distortion *variant* is declared, which is what the extraction and decode
+    // dispatches match on. Distinct from `has_distortion`, which tests the coefficient
+    // *values*: an all-zero `BrownConrady` is not "distorted" but still routes to the
+    // straight-space extractor, so anything gated for that extractor's benefit must use this.
+    #[cfg(feature = "non_rectified")]
+    let declares_lens_model = intrinsics.is_some_and(|k| {
+        matches!(
+            k.distortion,
+            crate::pose::DistortionCoeffs::BrownConrady { .. }
+                | crate::pose::DistortionCoeffs::KannalaBrandt { .. }
+        )
+    });
+    #[cfg(not(feature = "non_rectified"))]
+    let declares_lens_model = false;
     if has_distortion && config.static_uses_edlines() {
         return Err(DetectorError::Config(
             crate::error::ConfigError::EdLinesUnsupportedWithDistortion,
+        ));
+    }
+    // Straight-space extraction runs on the upscaled grid with un-upscaled intrinsics, so the
+    // lens would be applied in a frame the camera never produced. Rejected loudly rather than
+    // silently mis-projected; see `ConfigError::UpscaleUnsupportedWithDistortion`.
+    if declares_lens_model && config.upscale_factor > 1 {
+        return Err(DetectorError::Config(
+            crate::error::ConfigError::UpscaleUnsupportedWithDistortion,
         ));
     }
 
@@ -282,6 +332,12 @@ fn run_detection_pipeline<'ctx>(
         .arena
         .alloc_slice_fill_copy(img.width * img.height, 0u8);
 
+    // The frame's tabulated radial inverse, built by the quad-extraction dispatch below and
+    // reused by the decode pass: both stages unproject, and the table depends only on the
+    // declared lens and the frame bounds.
+    #[cfg(feature = "non_rectified")]
+    let mut radial_table = None;
+
     // 1. Thresholding & 2. Segmentation & 3. Quad Extraction
     let (n, unrefined) = {
         let mut engine = crate::threshold::ThresholdEngine::from_config(config);
@@ -317,15 +373,30 @@ fn run_detection_pipeline<'ctx>(
             threshold_map,
             config.segmentation_connectivity == crate::config::SegmentationConnectivity::Eight,
             config.quad_min_area,
-            config.may_use_edlines(),
+            // EdLines is the only consumer of the full-frame label image, and it cannot run
+            // under declared distortion: its Huber IRLS line fit and Gauss-Newton solver
+            // assume Euclidean pixel geometry, so `Static` EdLines errors above and an
+            // `AdaptivePpb` high route degrades to ContourRdp in the straight-space
+            // extractor. Materialising the label image for a consumer that can never run is
+            // pure cost — `high_accuracy` paid it on every distorted frame.
+            config.may_use_edlines() && !declares_lens_model,
         );
 
         // 3. Quad Extraction (SoA). Distorted cameras run RDP in straight
         // space via `_with_camera`; the `_` arm is the pinhole flow.
+        //
+        // The tabulated radial inverse is built here, once per frame, in the frame arena, and
+        // shared by quad extraction and the decode pass — the two stages that unproject. It
+        // replaces a per-point iterative solve that was 29 % of the extraction stage's CPU.
         #[cfg(feature = "non_rectified")]
         let (n, unrefined) = match intrinsics.map(|k| (k, k.distortion)) {
             Some((k, crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 })) => {
                 let model = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
+                let table = *radial_table.insert(crate::camera::RadialInverseTable::build_in(
+                    &state.arena,
+                    &model,
+                    crate::quad::frame_radius_bound(k, full_img.width, full_img.height),
+                ));
                 crate::quad::extract_quads_soa_with_camera(
                     &mut state.batch,
                     &sharpened_img,
@@ -337,10 +408,16 @@ fn run_detection_pipeline<'ctx>(
                     debug_telemetry,
                     &model,
                     k,
+                    &table,
                 )
             },
             Some((k, crate::pose::DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 })) => {
                 let model = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
+                let table = *radial_table.insert(crate::camera::RadialInverseTable::build_in(
+                    &state.arena,
+                    &model,
+                    crate::quad::frame_radius_bound(k, full_img.width, full_img.height),
+                ));
                 crate::quad::extract_quads_soa_with_camera(
                     &mut state.batch,
                     &sharpened_img,
@@ -352,6 +429,7 @@ fn run_detection_pipeline<'ctx>(
                     debug_telemetry,
                     &model,
                     k,
+                    &table,
                 )
             },
             _ => crate::quad::extract_quads_soa(
@@ -457,9 +535,9 @@ fn run_detection_pipeline<'ctx>(
     // 5. Decoding Pass (SoA) — dispatch on distortion model
     // For rectified cameras (PinholeModel or no intrinsics), the compiler eliminates
     // the distortion path entirely via monomorphization of CameraModel::IS_RECTIFIED.
-    match intrinsics.map(|k| &k.distortion) {
+    match intrinsics.map(|k| (k, &k.distortion)) {
         #[cfg(feature = "non_rectified")]
-        Some(crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 }) => {
+        Some((k, crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 })) => {
             let model = crate::camera::BrownConradyModel {
                 k1: *k1,
                 k2: *k2,
@@ -467,6 +545,7 @@ fn run_detection_pipeline<'ctx>(
                 p2: *p2,
                 k3: *k3,
             };
+            let table = resolve_radial_table(radial_table, &state.arena, &model, k, &full_img);
             crate::decoder::decode_batch_soa_with_camera(
                 &mut state.batch,
                 n,
@@ -475,16 +554,18 @@ fn run_detection_pipeline<'ctx>(
                 config,
                 intrinsics,
                 &model,
+                &table,
             );
         },
         #[cfg(feature = "non_rectified")]
-        Some(crate::pose::DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 }) => {
+        Some((k, crate::pose::DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 })) => {
             let model = crate::camera::KannalaBrandtModel {
                 k1: *k1,
                 k2: *k2,
                 k3: *k3,
                 k4: *k4,
             };
+            let table = resolve_radial_table(radial_table, &state.arena, &model, k, &full_img);
             crate::decoder::decode_batch_soa_with_camera(
                 &mut state.batch,
                 n,
@@ -493,6 +574,7 @@ fn run_detection_pipeline<'ctx>(
                 config,
                 intrinsics,
                 &model,
+                &table,
             );
         },
         _ => {
@@ -1046,6 +1128,44 @@ mod tests {
     use crate::config::{CornerRefinementMode, QuadExtractionMode};
     use crate::error::ConfigError;
     use crate::pose::CameraIntrinsics;
+
+    #[test]
+    fn upscale_with_a_declared_lens_model_is_rejected_at_detect_time() {
+        let config = DetectorConfig {
+            upscale_factor: 2,
+            ..DetectorConfig::default()
+        };
+        let mut detector = Detector::with_config(config);
+        let pixels = vec![0u8; 64 * 64];
+        let img = ImageView::new(&pixels, 64, 64, 64).expect("valid view");
+        // Deliberately *zero* coefficients: the extractor dispatches on the declared variant,
+        // not on whether the coefficients are non-zero, so an all-zero lens model still routes
+        // through straight-space extraction and still hits the frame mismatch.
+        let intrinsics =
+            CameraIntrinsics::with_brown_conrady(800.0, 800.0, 32.0, 32.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+
+        let err = detector
+            .detect(&img, Some(&intrinsics), None, false)
+            .expect_err("upscale + declared lens model must fail");
+        assert!(
+            matches!(
+                err,
+                DetectorError::Config(ConfigError::UpscaleUnsupportedWithDistortion)
+            ),
+            "unexpected error: {err:?}"
+        );
+
+        // A rectified camera is unaffected.
+        let mut detector = Detector::with_config(DetectorConfig {
+            upscale_factor: 2,
+            ..DetectorConfig::default()
+        });
+        let plain = CameraIntrinsics::new(800.0, 800.0, 32.0, 32.0);
+        assert!(
+            detector.detect(&img, Some(&plain), None, false).is_ok(),
+            "upscale must still work without a declared lens model"
+        );
+    }
 
     #[test]
     fn edlines_with_distortion_is_rejected_at_detect_time() {
