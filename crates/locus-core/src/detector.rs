@@ -380,6 +380,14 @@ fn run_detection_pipeline<'ctx>(
             // extractor. Materialising the label image for a consumer that can never run is
             // pure cost — `high_accuracy` paid it on every distorted frame.
             config.may_use_edlines() && !declares_lens_model,
+            // Spatial moments are consumed by `compute_moment_shape` — gated on the two
+            // moments-culling thresholds, `0.0` in every shipped profile — and by EdLines,
+            // which can only run when the label image above is built. Computing them is
+            // fifteen multiplies and three divides *per run*, around 237k runs per frame, so
+            // when nothing will read them it is worth not doing.
+            config.quad_max_elongation > 0.0
+                || config.quad_min_density > 0.0
+                || (config.may_use_edlines() && !declares_lens_model),
         );
 
         // 3. Quad Extraction (SoA). Distorted cameras run RDP in straight
