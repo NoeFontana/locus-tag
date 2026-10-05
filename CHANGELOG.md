@@ -30,13 +30,20 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     extra false positive appears on the 100-frame tag16h5 set (precision 100 -> 99 %); it is a
     single borderline candidate that flickers with the constant (absent at 9.4/20, present at
     9.6/20), not a systematic loss.
-  - Latency improves where the cut removes background speckle: Liu4K 155.9 -> 139.2 ms,
-    render-tag 4K 78.7 -> 72.6 ms, 1080p 20.5 -> 19.4 ms, tag16h5 19.7 -> 18.5 ms (1 thread).
+  - Latency improves where the cut removes background speckle. Serialised A-B-B-A on an idle
+    host (AMD EPYC-Milan, 4 cores / 8 threads, Linux 6.8.0, rustc 1.92.0, `--release`,
+    `RAYON_NUM_THREADS=1`, best of 2 `detect()` calls per image), within-arm spread in
+    parentheses: Liu4K 153.6 -> **135.5 ms** (-11.8 %, 0.76), render-tag 4K 77.7 -> **69.8 ms**
+    (-10.2 %, 0.26), 1080p 20.2 -> **18.5 ms** (-8.5 %, 0.07). EuRoC is the exception at
+    7.38 -> 7.47 ms (+1.2 %, 0.02): it now finds 6 pp more markers, and decoding them is work
+    the old cut was not doing.
   - How far below the midpoint is a stated assumption about the thinnest *dark* stroke that
     must survive, and it was measured rather than derived: the full scoreboard is flat from the
     midpoint down to 9/20 and then starts costing small and low-contrast markers their
     one-module borders (render-tag 640 falls off at 8/20, tag16h5 at 8.4/20). The constant is
-    documented at `threshold::CUT_NUM`.
+    documented at `threshold::CUT_NUM`. `regression_euroc`'s relative-recall floor moves
+    0.50 -> 0.75 to sit just under what the detector now achieves (0.699 -> 0.807 on that
+    suite's own affine-reprojection measure), so the gain cannot be lost in silence.
   - Board snapshots moved: the shift is deterministic (three consecutive runs agree bit for
     bit) and comes from marginal tags entering and leaving the board solve. It is mixed and
     small — AprilGrid tag coverage 0.99148 -> 0.99167, mean board rotation error +1.8 %,

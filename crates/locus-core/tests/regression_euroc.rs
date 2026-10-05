@@ -424,9 +424,13 @@ fn euroc_detection_baseline() {
          decoder must never report a physical tag twice within a single detection batch"
     );
 
+    // The floor tracks what the detector actually achieves (0.807 at the stride-10 default,
+    // 2026-10-05), not a number comfortably below it: a floor of 0.5 sat under the 0.699 this
+    // suite reported before `threshold::CUT_NUM` moved the dark/bright cut off the midpoint of
+    // the tile extremes, so the 10.8 pp that change recovered could be lost again in silence.
     assert!(
-        relative_recall_mean >= 0.5,
-        "Relative recall too low: {relative_recall_mean:.2} (expected ≥ 0.5) over \
+        relative_recall_mean >= 0.75,
+        "Relative recall too low: {relative_recall_mean:.2} (expected ≥ 0.75) over \
          {frames_considered} frames with a board pose estimated. This measures decoded/present \
          per frame (see the module-level doc comment on `euroc_detection_baseline`), so a low \
          number here means real, in-view tags are being missed — not that the board was out of \
