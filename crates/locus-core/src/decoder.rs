@@ -1243,9 +1243,24 @@ impl<C: crate::camera::CameraModel> Warp for LensWarp<'_, C> {
         _arena: &bumpalo::Bump,
         img: &crate::image::ImageView,
         raw: &[[f64; 2]; 4],
-        _config: &crate::config::DetectorConfig,
+        config: &crate::config::DetectorConfig,
     ) -> Option<[[f64; 2]; 4]> {
-        self.refine_curved(img, raw)
+        let refined = self.refine_curved(img, raw)?;
+        // The second half of `refine_decode_first_seed`: a seed only survives if its *refined*
+        // quad still shows edge contrast. Without this the shared loop's `else { continue; }`
+        // arm is unreachable on this route, so a textured blob that decodes by chance is
+        // verified by the ring budget alone — the class of defect #435 fixed, and the widened
+        // seed band in extraction makes it reachable.
+        let quad = refined.map(|p| crate::Point { x: p[0], y: p[1] });
+        crate::quad::curved_edge_contrast_exceeds(
+            img,
+            &quad,
+            self.intrinsics,
+            self.model,
+            self.table,
+            config.quad_min_edge_score,
+        )
+        .then_some(refined)
     }
 }
 
@@ -1268,6 +1283,18 @@ impl<C: crate::camera::CameraModel> LensWarp<'_, C> {
             *slot = crate::Point { x, y };
         }
         let px = raw.map(|p| crate::Point { x: p[0], y: p[1] });
+        // The refiner's minimum-edge-length gate is calibrated in pixels, and the working plane
+        // is the same rectified-pixel chart the extractor fits in — so it needs the same
+        // chart-to-pixel length conversion: sqrt|det(d p_px / d p_rect)| = sqrt|det J_distort|.
+        // The determinant is dimensionless, so evaluating it on normalized coordinates at the
+        // quad centre is the whole computation.
+        let k = self.intrinsics;
+        let centre_x = 0.25 * (rect[0].x + rect[1].x + rect[2].x + rect[3].x);
+        let centre_y = 0.25 * (rect[0].y + rect[1].y + rect[2].y + rect[3].y);
+        let j = self
+            .model
+            .distort_jacobian((centre_x - k.cx) / k.fx, (centre_y - k.cy) / k.fy);
+        let len_scale = (j[0][0] * j[1][1] - j[0][1] * j[1][0]).abs().sqrt();
         let refined = crate::quad::refine_quad_corners_with_camera(
             img,
             &rect,
@@ -1276,6 +1303,7 @@ impl<C: crate::camera::CameraModel> LensWarp<'_, C> {
             self.intrinsics,
             self.model,
             self.table,
+            len_scale,
         );
         Some(refined.map(|p| [p.x, p.y]))
     }
@@ -1671,6 +1699,9 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
     debug_assert_eq!(error_rates_out.len(), n);
     debug_assert_eq!(corners_out.len(), n);
     debug_assert_eq!(homographies_out.len(), n);
+    // The seventh `zip` input, and the one the merged loop dropped: an off-by-one on
+    // `corner_refined` is exactly the case this block exists to catch loudly.
+    debug_assert_eq!(refined_out.len(), n);
 
     status_out
         .par_iter_mut()

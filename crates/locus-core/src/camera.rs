@@ -205,6 +205,14 @@ pub const MAX_UNDISTORT_RESIDUAL: f64 = 2e-4;
 #[cfg(feature = "non_rectified")]
 const RADIAL_TABLE_KNOTS: usize = 1024;
 
+/// Knot storage for a disabled [`RadialInverseTable`].
+///
+/// Never read: a disabled table has `s_max = 0`, and `scale` is only reachable once a caller
+/// has established `s <= s_max`. It exists so the live table can hold a *fixed-size array*
+/// reference instead of an `Option` or a slice, which is what keeps `scale` branch-free.
+#[cfg(feature = "non_rectified")]
+static RADIAL_TABLE_UNUSED: [[f64; 2]; RADIAL_TABLE_KNOTS] = [[1.0, 0.0]; RADIAL_TABLE_KNOTS];
+
 /// Interpolation-error budget for [`RadialInverseTable`], in **normalized** units.
 ///
 /// `1e-7` normalized is ~7e-5 px at the shipped hub focal lengths: three orders below any
@@ -253,8 +261,32 @@ const RADIAL_BISECT_ITERS: usize = 64;
 const RADIAL_SOLVE_ITERS: usize = 32;
 /// Relative step tolerance for a knot solve, orders tighter than [`RADIAL_TABLE_BUDGET`] so the
 /// stored knots are exact and the verified error is interpolation alone.
+///
+/// Not sufficient on its own — see [`RADIAL_SOLVE_RESIDUAL_ULPS`]. A Newton *step* is
+/// `(g - r_d) / g'`, so where `g'` is small the step's own round-off floor exceeds this
+/// tolerance and the iteration can never report convergence however correct its answer is.
 #[cfg(feature = "non_rectified")]
 const RADIAL_SOLVE_REL_TOL: f64 = 1e-15;
+
+/// Residual tolerance for a knot solve, in ulps of the radius being matched.
+///
+/// The companion to [`RADIAL_SOLVE_REL_TOL`], and the one that actually binds at the fisheye
+/// periphery. Kannala-Brandt has `g'(r) = dθ_d/dθ · 1/(1+r²)`, which decays as `r = tan θ`
+/// grows, so around `r ≈ 14` the step `(g - r_d)/g'` has a round-off floor of ~7e-14 against a
+/// step tolerance of 1.4e-14: `solve_radial` burned all 32 iterations and returned `None`, the
+/// fill reported `Truncated`, and the table silently shrank its domain to 90.4 % of the frame
+/// radius — 2.45 % of a 1920x1080 lattice permanently falling back to the per-point solve,
+/// precisely where that solve is most expensive. Nothing signalled it: `is_enabled()` stayed
+/// true and `verified_error()` reported 1.7e-11 over the *shrunk* domain.
+///
+/// A residual test has none of that trouble: it asks whether `g(r)` actually equals `r_d`,
+/// which is the question, in units that mean something. 8 ulps leaves room for the handful of
+/// roundings in a `radial_forward` evaluation. Same correction as the pose LM's step-gate →
+/// function-tolerance change in #341, and the same class as the sub-ulp absolute tolerance
+/// fixed in the Brown-Conrady inverter in #443 — third instance, so prefer a residual or
+/// relative-cost test over a step test by default.
+#[cfg(feature = "non_rectified")]
+const RADIAL_SOLVE_RESIDUAL_ULPS: f64 = 8.0;
 
 /// Tangential fixed-point iterations used by [`RadialInverseTable::undistort_checked`].
 ///
@@ -303,7 +335,13 @@ pub struct RadialInverseTable<'a> {
     /// `[scale, dscale/ds · Δs]` per knot; the derivative is pre-scaled to the unit interval so
     /// the Hermite evaluation needs no extra multiply. Lives in the caller's frame arena, which
     /// is what keeps a 16 KiB table off the stack and out of the system allocator.
-    knots: &'a [[f64; 2]],
+    ///
+    /// A fixed-size array reference, not a slice: the length *is* the compile-time constant
+    /// `RADIAL_TABLE_KNOTS`, and spelling it that way is what lets the compiler discharge both
+    /// index checks in `scale` from `i <= KNOTS - 2`. Through a slice the length is opaque, so
+    /// every one of the ~83,600 lookups per frame carried two compare-and-panic branches in
+    /// the loop whose entire purpose is to be branch-free.
+    knots: &'a [[f64; 2]; RADIAL_TABLE_KNOTS],
     /// Worst interpolation error measured at the knot midpoints during the build, in normalized
     /// units. Reported so callers and tests can assert the accuracy actually achieved.
     verified_error: f64,
@@ -338,6 +376,10 @@ impl<'a> RadialInverseTable<'a> {
             return Self::disabled();
         }
         let knots = arena.alloc_slice_fill_copy(RADIAL_TABLE_KNOTS, [0.0_f64; 2]);
+        // Exact by construction; `try_into` is how that is spelled without an `unwrap`.
+        let Ok(knots) = <&mut [[f64; 2]; RADIAL_TABLE_KNOTS]>::try_from(knots) else {
+            return Self::disabled();
+        };
         let reach = Self::branch_reach(camera);
         // `reach` is a supremum that is only attained in the limit, so stay strictly inside it.
         let mut r_max = r_d_max.min(reach * (1.0 - f64::EPSILON.sqrt()));
@@ -379,7 +421,7 @@ impl<'a> RadialInverseTable<'a> {
         RadialInverseTable {
             inv_step: 0.0,
             s_max: 0.0,
-            knots: &[],
+            knots: &RADIAL_TABLE_UNUSED,
             verified_error: f64::INFINITY,
         }
     }
@@ -392,9 +434,18 @@ impl<'a> RadialInverseTable<'a> {
         let mut lo = 0.0_f64;
         let mut hi = RADIAL_PROBE_START;
         let mut bounded = false;
+        // One predicate, used by both the probe and the bisection below. A model whose `g`
+        // overflows before `g'` turns over (a large `k3` will do it) ends its usable branch at
+        // the overflow, so bisecting on `g' > 0` alone would test a condition that holds across
+        // the whole bracket, converge `lo` onto `hi`, and return a non-finite reach — which
+        // `f64::min` would then silently discard, voiding the clamp in exactly the case it
+        // exists for.
+        let on_branch = |r: f64| {
+            let (g, dg) = camera.radial_forward(r);
+            dg > 0.0 && g.is_finite()
+        };
         while hi <= RADIAL_PROBE_MAX {
-            let (g, dg) = camera.radial_forward(hi);
-            if dg.is_nan() || dg <= 0.0 || !g.is_finite() {
+            if !on_branch(hi) {
                 bounded = true;
                 break;
             }
@@ -406,13 +457,14 @@ impl<'a> RadialInverseTable<'a> {
         }
         for _ in 0..RADIAL_BISECT_ITERS {
             let mid = 0.5 * (lo + hi);
-            if camera.radial_forward(mid).1 > 0.0 {
+            if on_branch(mid) {
                 lo = mid;
             } else {
                 hi = mid;
             }
         }
-        camera.radial_forward(lo).0
+        let reach = camera.radial_forward(lo).0;
+        if reach.is_finite() { reach } else { 0.0 }
     }
 
     /// Solve `g(r_u) = r_d` on the branch containing `seed`, marching only outward.
@@ -426,7 +478,16 @@ impl<'a> RadialInverseTable<'a> {
             if dg.is_nan() || dg <= 0.0 {
                 return None;
             }
-            let step = (g - r_d) / dg;
+            // Converged when the *residual* is at round-off, whatever the step does. See
+            // `RADIAL_SOLVE_RESIDUAL_ULPS`: testing the step alone makes convergence
+            // unreportable wherever `g'` is small, which is the whole fisheye periphery.
+            let residual = g - r_d;
+            if residual.abs()
+                <= RADIAL_SOLVE_RESIDUAL_ULPS * f64::EPSILON * g.abs().max(r_d).max(1.0)
+            {
+                return Some(r);
+            }
+            let step = residual / dg;
             let next = r - step;
             if !next.is_finite() {
                 return None;
@@ -436,14 +497,18 @@ impl<'a> RadialInverseTable<'a> {
                 return Some(r);
             }
         }
-        // Newton missed its step tolerance within budget: refuse rather than store an
-        // unconverged knot, so the fill truncates here.
+        // Neither test was met within budget: refuse rather than store an unconverged knot, so
+        // the fill truncates here and the caller falls back to the per-point solve.
         None
     }
 
     /// Fill `knots` over `[0, s_max]` and measure the error at the knot midpoints.
-    fn fill<C: CameraModel>(camera: &C, s_max: f64, knots: &mut [[f64; 2]]) -> RadialFill {
-        let intervals = knots.len() - 1;
+    fn fill<C: CameraModel>(
+        camera: &C,
+        s_max: f64,
+        knots: &mut [[f64; 2]; RADIAL_TABLE_KNOTS],
+    ) -> RadialFill {
+        let intervals = RADIAL_TABLE_KNOTS - 1;
         let step = s_max / intervals as f64;
         // `scale(0) = 1 / g'(0)`: the forward map's linearisation at the optical axis.
         let dg0 = camera.radial_forward(NEAR_AXIS_RADIUS).1;
@@ -509,8 +574,10 @@ impl<'a> RadialInverseTable<'a> {
     fn scale(&self, s: f64) -> f64 {
         let t = s * self.inv_step;
         // `s <= s_max` bounds `t` by the interval count; the clamp keeps the top interval in
-        // range when `t` lands exactly on it, and costs a `min` rather than a branch.
-        let i = (t as usize).min(self.knots.len().saturating_sub(2));
+        // range when `t` lands exactly on it, and costs a `min` against a *constant* rather
+        // than a branch — which is also what lets the two indexes below compile without bounds
+        // checks.
+        let i = (t as usize).min(RADIAL_TABLE_KNOTS - 2);
         let u = t - i as f64;
         let [v0, m0] = self.knots[i];
         let [v1, m1] = self.knots[i + 1];

@@ -243,9 +243,31 @@ fn run_detection_pipeline<'ctx>(
     // `AdaptivePpb`-routed profile work across rectified and distorted
     // datasets without per-frame profile switching.
     let has_distortion = intrinsics.is_some_and(|k| k.distortion.is_distorted());
+    // Whether a distortion *variant* is declared, which is what the extraction and decode
+    // dispatches match on. Distinct from `has_distortion`, which tests the coefficient
+    // *values*: an all-zero `BrownConrady` is not "distorted" but still routes to the
+    // straight-space extractor, so anything gated for that extractor's benefit must use this.
+    #[cfg(feature = "non_rectified")]
+    let declares_lens_model = intrinsics.is_some_and(|k| {
+        matches!(
+            k.distortion,
+            crate::pose::DistortionCoeffs::BrownConrady { .. }
+                | crate::pose::DistortionCoeffs::KannalaBrandt { .. }
+        )
+    });
+    #[cfg(not(feature = "non_rectified"))]
+    let declares_lens_model = false;
     if has_distortion && config.static_uses_edlines() {
         return Err(DetectorError::Config(
             crate::error::ConfigError::EdLinesUnsupportedWithDistortion,
+        ));
+    }
+    // Straight-space extraction runs on the upscaled grid with un-upscaled intrinsics, so the
+    // lens would be applied in a frame the camera never produced. Rejected loudly rather than
+    // silently mis-projected; see `ConfigError::UpscaleUnsupportedWithDistortion`.
+    if declares_lens_model && config.upscale_factor > 1 {
+        return Err(DetectorError::Config(
+            crate::error::ConfigError::UpscaleUnsupportedWithDistortion,
         ));
     }
 
@@ -357,7 +379,7 @@ fn run_detection_pipeline<'ctx>(
             // `AdaptivePpb` high route degrades to ContourRdp in the straight-space
             // extractor. Materialising the label image for a consumer that can never run is
             // pure cost — `high_accuracy` paid it on every distorted frame.
-            config.may_use_edlines() && !has_distortion,
+            config.may_use_edlines() && !declares_lens_model,
         );
 
         // 3. Quad Extraction (SoA). Distorted cameras run RDP in straight
@@ -1106,6 +1128,44 @@ mod tests {
     use crate::config::{CornerRefinementMode, QuadExtractionMode};
     use crate::error::ConfigError;
     use crate::pose::CameraIntrinsics;
+
+    #[test]
+    fn upscale_with_a_declared_lens_model_is_rejected_at_detect_time() {
+        let config = DetectorConfig {
+            upscale_factor: 2,
+            ..DetectorConfig::default()
+        };
+        let mut detector = Detector::with_config(config);
+        let pixels = vec![0u8; 64 * 64];
+        let img = ImageView::new(&pixels, 64, 64, 64).expect("valid view");
+        // Deliberately *zero* coefficients: the extractor dispatches on the declared variant,
+        // not on whether the coefficients are non-zero, so an all-zero lens model still routes
+        // through straight-space extraction and still hits the frame mismatch.
+        let intrinsics =
+            CameraIntrinsics::with_brown_conrady(800.0, 800.0, 32.0, 32.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+
+        let err = detector
+            .detect(&img, Some(&intrinsics), None, false)
+            .expect_err("upscale + declared lens model must fail");
+        assert!(
+            matches!(
+                err,
+                DetectorError::Config(ConfigError::UpscaleUnsupportedWithDistortion)
+            ),
+            "unexpected error: {err:?}"
+        );
+
+        // A rectified camera is unaffected.
+        let mut detector = Detector::with_config(DetectorConfig {
+            upscale_factor: 2,
+            ..DetectorConfig::default()
+        });
+        let plain = CameraIntrinsics::new(800.0, 800.0, 32.0, 32.0);
+        assert!(
+            detector.detect(&img, Some(&plain), None, false).is_ok(),
+            "upscale must still work without a declared lens model"
+        );
+    }
 
     #[test]
     fn edlines_with_distortion_is_rejected_at_detect_time() {

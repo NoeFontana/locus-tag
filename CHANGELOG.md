@@ -177,6 +177,67 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   test asserting the sub-pixel pass is live on the distorted route (mutation-checked: disabling
   the pass fails it).
 
+#### Review findings addressed
+
+A principal-level review of the above turned up fifteen findings; fourteen are fixed here, all
+accuracy-neutral (every suite, including both distortion hubs, is bit-identical to the state
+before this batch).
+
+The one that mattered: **`RadialInverseTable` was silently truncating its domain on the fisheye
+hub.** `RADIAL_SOLVE_REL_TOL` is a relative *step* tolerance, and a Newton step is
+`(g - r_d)/g'` — so where `g'` is small the step's own round-off floor exceeds the tolerance and
+the solve can never report convergence however correct its answer is. Kannala-Brandt has
+`g' = dθ_d/dθ · 1/(1+r²)`, which decays as `r = tan θ` grows, so the knot fill truncated at
+**90.4 % of the frame radius: 2.45 % of a 1920x1080 lattice — the frame corners, where fisheye
+markers sit — permanently falling back to the per-point solve, precisely where that solve is
+most expensive.** Nothing signalled it: `is_enabled()` stayed true, `verified_error()` reported
+1.7e-11 over the *shrunk* domain, and the unit test asserted only "≥95 % tabulated". The fix is
+a residual test alongside the step test; coverage is now 100 % with zero fallbacks and a
+verified error of 8.2e-9. This is the **third** instance of the same bug class after the pose
+LM's step gate (#341) and the Brown-Conrady inverter's sub-ulp absolute tolerance (#443) —
+prefer a residual or relative-cost test over a step test.
+
+Also fixed: `branch_reach` bisected on `g' > 0` while its probe also broke on `!g.is_finite()`,
+so an overflowing model returned a non-finite reach that `f64::min` then silently discarded,
+voiding the clamp in exactly the case it exists for. `RoiCache::disabled()` was a zero-width
+`Arena`, whose `get` clamps every coordinate to 0 and indexes an empty slice — so a type
+documented as "every lookup falls outside it" would panic on *every* lookup; it is now its own
+variant that reads as zero. `fit_edge_line_curved` indexed a fixed 16-element buffer with
+`2·(decimation+1)+1`, which panics for any `decimation >= 7` that `validate()` happily accepts.
+The two minimum-edge-length gates still compared a *chart* length against a pixel-calibrated
+4.0, loosening by ~6.5x at the Kannala-Brandt periphery — the same correction as the area gate,
+with a square root. The label-image gate keyed on coefficient *values* while the extractor
+dispatch keys on the declared *variant*, so an all-zero `BrownConrady` still allocated an 8.3 MB
+label image for a consumer that can never run. `RadialInverseTable::scale` held a slice rather
+than a fixed-size array reference, so the hot loop's two index operations each carried a
+compare-and-panic branch LLVM could not elide — in the function whose whole purpose is to be
+branch-free. `LensWarp::refine_seed` could never return `None`, making the shared loop's
+`continue` arm unreachable on that route. And the merged decode loop had dropped one of seven
+disjoint-slice `debug_assert`s — `corner_refined`, the most recently added column.
+
+**`upscale_factor > 1` with a declared lens model is now rejected** rather than silently
+mis-projected: straight-space extraction runs on the upscaled grid but is handed the
+un-upscaled intrinsics, so every normalized radius it computes is inflated by `upscale_factor`.
+Decimation has no such problem because `ScaledIntrinsics` rescales to match. New
+`ConfigError::UpscaleUnsupportedWithDistortion`, mirroring the existing distortion +
+static-EdLines rejection.
+
+One finding was **measured and rejected**: adding the pinhole extractor's +/-1 px seed band to
+the curved edge gate. The reasoning was sound — an unrefined decode-first seed sits up to a
+pixel off the edge — but it cost **0.63 pp of precision on Kannala-Brandt and 0.12 pp on
+Brown-Conrady for 0.20 pp and 0.11 pp of recall**, and pairing it with the post-refinement
+re-gate recovered only 0.06 pp of that. Unlike the pinhole chord, this one is already sampled
+along the *curved* edge, so it does not miss the gradient ridge the same way and the band is
+close to pure loosening. The plumbing is kept so the trade can be re-measured on a wider lens.
+
+One finding is **not addressed**: the shared loop returns on the first match that clears its
+budget rather than keeping the lowest-Hamming match across all three scale retries, and the
+review correctly notes that a cross-scale best could be kept for *both* routes rather than
+diverging. Measured in isolation the early return is worth mean Hamming 0.0182 → 0.0844. It is
+left for its own change because deferring acceptance past verification on all three scales is a
+behavioural change to the **pinhole** route, which needs its own measured PR rather than a
+late amendment to this one.
+
 #### Measured
 
 50 frames per hub, `standard`, pose mode Accurate, `--release --features

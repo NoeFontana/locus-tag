@@ -445,6 +445,13 @@ fn extract_single_quad(
     None
 }
 
+/// Capacity of the per-sample gradient-magnitude scratch buffer in [`fit_edge_line_curved`].
+#[cfg(feature = "non_rectified")]
+const EDGE_SCAN_BUF: usize = 16;
+/// Largest normal-scan half-width that fits [`EDGE_SCAN_BUF`] (`2r + 1 <= BUF`).
+#[cfg(feature = "non_rectified")]
+const EDGE_SCAN_MAX_RADIUS: i32 = ((EDGE_SCAN_BUF - 1) / 2) as i32;
+
 /// Quads with isoperimetric compactness `4π·area / perimeter²` at or below this are rejected.
 const MIN_QUAD_COMPACTNESS: f64 = 0.1;
 /// The `4π` of the isoperimetric compactness, to three decimals (the gates were tuned with it).
@@ -788,15 +795,15 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
 
     let area = polygon_area(&reduced);
 
-    // `area` is a **chart** area, while `quad_min_area` and the compactness floor are calibrated
-    // in pixels and `perimeter` is a pixel-space point count. The chart stretches by
-    // |det(d p_rect / d p_px)| — measured up to 42x in area at the Kannala-Brandt periphery,
-    // where one chart unit spans 1/133 of a pixel — so comparing the two directly makes both
-    // gates that much looser exactly where junk is most likely. Convert with the forward
-    // Jacobian determinant at the candidate, which is `det(J_distort)`: the focal-length
-    // conjugation `S · J · S^-1` leaves a determinant unchanged. One evaluation per candidate.
-    let area_px = if C::IS_RECTIFIED {
-        area.abs()
+    // Every gate from here down is calibrated in **pixels**, while the quad is in chart units.
+    // The chart stretches by |det(d p_rect / d p_px)| — measured up to 42x in *area* at the
+    // Kannala-Brandt periphery, where one chart unit spans 1/133 of a pixel — so comparing the
+    // two directly makes each gate that much looser exactly where junk is most likely. One
+    // Jacobian per candidate converts them all: `det(J_distort)` for areas and its square root
+    // for lengths. It is `det(J_distort)` rather than anything involving the focal lengths
+    // because the conjugation `S · J · S^-1` leaves a determinant unchanged.
+    let area_scale = if C::IS_RECTIFIED {
+        1.0
     } else {
         let cx_r = (reduced[0].x + reduced[1].x + reduced[2].x + reduced[3].x) * 0.25;
         let cy_r = (reduced[0].y + reduced[1].y + reduced[2].y + reduced[3].y) * 0.25;
@@ -804,8 +811,18 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
             (cx_r - scaled.cx) / scaled.fx,
             (cy_r - scaled.cy) / scaled.fy,
         );
-        area.abs() * (j[0][0] * j[1][1] - j[0][1] * j[1][0]).abs()
+        (j[0][0] * j[1][1] - j[0][1] * j[1][0]).abs()
     };
+    // Isotropic chart-unit-to-pixel factor for lengths. The chart is anisotropic (17:1 at the
+    // Kannala-Brandt periphery), so this is a geometric mean rather than an exact conversion —
+    // enough to stop a minimum-length gate calibrated at 4 px from effectively meaning 0.6 px,
+    // which is what comparing a chart length against it directly did.
+    let len_scale = if C::IS_RECTIFIED {
+        1.0
+    } else {
+        area_scale.sqrt()
+    };
+    let area_px = area.abs() * area_scale;
     let compactness = (ISOPERIMETRIC_SCALE * area_px) / (perimeter * perimeter);
 
     if area_px <= f64::from(config.quad_min_area) || compactness <= MIN_QUAD_COMPACTNESS {
@@ -915,6 +932,7 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
                     intrinsics,
                     camera,
                     table,
+                    len_scale,
                 ),
                 [[0.0_f32; 4]; 4],
             )
@@ -928,8 +946,29 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         edge_contrast_exceeds(refinement_img, corners, &[0.0], config.quad_min_edge_score)
     } else {
         // `<=` rejects, so a NaN score passes, as in the rectified gate.
-        let score =
-            calculate_edge_score_curved(refinement_img, &quad_rect, camera, scaled, decimation);
+        // Single chord, not the pinhole extractor's +/-1 px seed band.
+        //
+        // The band exists there because an unrefined decode-first seed sits up to a pixel off a
+        // sharp edge, so the chord can miss the gradient ridge — the same argument applies to
+        // this route's seeds, and `calculate_edge_score_curved` takes the offsets so the
+        // experiment is a one-line change. It was run: widening the band cost **0.63 pp of
+        // precision on the Kannala-Brandt hub and 0.12 pp on Brown-Conrady, for 0.20 pp and
+        // 0.11 pp of recall**, and pairing it with a post-refinement re-gate in
+        // `LensWarp::refine_seed` (the other half of what `refine_decode_first_seed` does)
+        // recovered only 0.06 pp of that precision. Unlike the pinhole chord, this one is
+        // already sampled along the *curved* edge, so it does not miss the ridge the same way
+        // and the band is close to pure loosening. Precision is the harder-guarded metric here,
+        // so the band stays off; the plumbing stays so the trade can be re-measured on a wider
+        // lens, where the premise may hold.
+        let score = calculate_edge_score_curved(
+            refinement_img,
+            &quad_rect,
+            camera,
+            scaled,
+            decimation,
+            len_scale,
+            &[0.0],
+        );
         score > config.quad_min_edge_score || score.is_nan()
     };
     if !passes {
@@ -1482,6 +1521,10 @@ pub(crate) fn refine_edge_erf(
 /// expensive stage of distorted extraction (measured at 48.8 % of its CPU time).
 #[cfg(feature = "non_rectified")]
 #[must_use]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one refinement stage: the image, the quad in both spaces, decimation, intrinsics, the camera model, its tabulated inverse and the chart-to-pixel length scale its gates are calibrated in"
+)]
 pub(crate) fn refine_quad_corners_with_camera<C: crate::camera::CameraModel>(
     img: &ImageView,
     quad_rect: &[Point; 4],
@@ -1490,6 +1533,7 @@ pub(crate) fn refine_quad_corners_with_camera<C: crate::camera::CameraModel>(
     intrinsics: &crate::pose::CameraIntrinsics,
     camera: &C,
     table: &crate::camera::RadialInverseTable<'_>,
+    len_scale: f64,
 ) -> [Point; 4] {
     // `lines[i]` is the edge from rectified corner `i` to corner `i + 1`.
     let lines: [Option<(f64, f64, f64)>; 4] = core::array::from_fn(|i| {
@@ -1501,6 +1545,7 @@ pub(crate) fn refine_quad_corners_with_camera<C: crate::camera::CameraModel>(
             intrinsics,
             camera,
             table,
+            len_scale,
         )
     });
     // Corner `i` is where its trailing edge (`i - 1 -> i`) meets its leading edge (`i -> i + 1`).
@@ -1569,6 +1614,10 @@ fn intersect_curved_edges<C: crate::camera::CameraModel>(
 /// picks up a systematic inward bias. Rectifying each peak sample removes
 /// it.
 #[cfg(feature = "non_rectified")]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "one edge fit: the image, the edge's two rectified endpoints, decimation, intrinsics, the camera model, its tabulated inverse and the chart-to-pixel length scale"
+)]
 fn fit_edge_line_curved<C: crate::camera::CameraModel>(
     img: &ImageView,
     p1_rect: Point,
@@ -1577,17 +1626,27 @@ fn fit_edge_line_curved<C: crate::camera::CameraModel>(
     intrinsics: &crate::pose::CameraIntrinsics,
     camera: &C,
     table: &crate::camera::RadialInverseTable<'_>,
+    len_scale: f64,
 ) -> Option<(f64, f64, f64)> {
     let dx_r = p2_rect.x - p1_rect.x;
     let dy_r = p2_rect.y - p1_rect.y;
     let len_r = (dx_r * dx_r + dy_r * dy_r).sqrt();
-    if len_r < 4.0 {
+    // The 4.0 floor and the sample count are calibrated in **pixels**, but `len_r` is a chart
+    // length, and one chart unit is well under a pixel at the periphery (~6.5x in length on the
+    // Kannala-Brandt hub). Converting here is the same correction the area gate applies, with
+    // the square root because this is a length rather than an area.
+    let len_px = len_r * len_scale;
+    if len_px < 4.0 {
         return None;
     }
 
-    let n_samples = (len_r as usize).clamp(5, 15);
+    let n_samples = (len_px as usize).clamp(5, 15);
+    // Half-width of the normal scan, in pixels. Bounded by `mag_buf`'s capacity: the buffer is
+    // a fixed `[f64; EDGE_SCAN_BUF]`, and `window = 2r + 1` must fit it. `DetectorConfig`
+    // validates only `decimation >= 1`, so without the clamp a configured `decimation >= 7`
+    // panicked here with a slice-range error on the first candidate with a long enough edge.
     let r = if decimation > 1 {
-        (decimation as i32) + 1
+        ((decimation as i32) + 1).min(EDGE_SCAN_MAX_RADIUS)
     } else {
         3
     };
@@ -1624,7 +1683,7 @@ fn fit_edge_line_curved<C: crate::camera::CameraModel>(
         // Window scan along the normal. Cache magnitudes so the parabolic
         // sub-pixel refine can reuse samples that coincide with integer steps.
         let window = (2 * r + 1) as usize;
-        let mut mag_buf = [0.0f64; 16];
+        let mut mag_buf = [0.0f64; EDGE_SCAN_BUF];
         let mag_slice = &mut mag_buf[..window];
         let mut best_idx: usize = 0;
         let mut best_mag = 0.0;
@@ -1717,6 +1776,8 @@ fn calculate_edge_score_curved<C: crate::camera::CameraModel>(
     camera: &C,
     scaled: ScaledIntrinsics,
     decimation: usize,
+    len_scale: f64,
+    normal_offsets: &[f64],
 ) -> f64 {
     let d = decimation as f64;
     let mut min_score = f64::MAX;
@@ -1726,29 +1787,99 @@ fn calculate_edge_score_curved<C: crate::camera::CameraModel>(
         let dx = p2.x - p1.x;
         let dy = p2.y - p1.y;
         let len = (dx * dx + dy * dy).sqrt();
-        if len < 4.0 {
+        // Calibrated in pixels; `len` is a chart length. See `fit_edge_line_curved`.
+        if len * len_scale < 4.0 {
             return 0.0;
         }
-        let n_samples = (len as usize).clamp(3, 10);
-        let mut edge_mag_sum = 0.0;
-        for k in 1..=n_samples {
-            let t = k as f64 / (n_samples + 1) as f64;
-            let rx = p1.x + dx * t;
-            let ry = p1.y + dy * t;
-            let xn = (rx - scaled.cx) / scaled.fx;
-            let yn = (ry - scaled.cy) / scaled.fy;
-            let [xd, yd] = camera.distort(xn, yn);
-            let px = (xd * scaled.fx + scaled.cx) * d;
-            let py = (yd * scaled.fy + scaled.cy) * d;
-            let g = img.sample_gradient_bilinear(px, py);
-            edge_mag_sum += (g[0] * g[0] + g[1] * g[1]).sqrt();
+        let n_samples = ((len * len_scale) as usize).clamp(3, 10);
+        // Best score over the band. An unrefined seed corner sits up to ~1 px off the edge, so
+        // the chord between two of them can run parallel to the gradient ridge a pixel away
+        // from it; searching the offsets recovers the edge instead of scoring the flat beside
+        // it. Offsets are in pixels, applied along the edge normal in pixel space, which is
+        // where "one pixel" means something.
+        let mut best = 0.0_f64;
+        for &offset in normal_offsets {
+            let mut edge_mag_sum = 0.0;
+            for k in 1..=n_samples {
+                let t = k as f64 / (n_samples + 1) as f64;
+                let rx = p1.x + dx * t;
+                let ry = p1.y + dy * t;
+                let xn = (rx - scaled.cx) / scaled.fx;
+                let yn = (ry - scaled.cy) / scaled.fy;
+                let [xdd, ydd] = camera.distort(xn, yn);
+                let mut px = (xdd * scaled.fx + scaled.cx) * d;
+                let mut py = (ydd * scaled.fy + scaled.cy) * d;
+                if offset != 0.0 {
+                    // Edge tangent in *pixel* space, via the forward Jacobian, so the normal
+                    // offset is applied where it is calibrated rather than in the chart.
+                    let j = camera.distort_jacobian(xn, yn);
+                    let tx = j[0][0] * dx + j[0][1] * dy * (scaled.fx / scaled.fy);
+                    let ty = j[1][0] * dx * (scaled.fy / scaled.fx) + j[1][1] * dy;
+                    let tlen = (tx * tx + ty * ty).sqrt();
+                    if tlen > 1e-12 {
+                        px += (ty / tlen) * offset;
+                        py += (-tx / tlen) * offset;
+                    }
+                }
+                let g = img.sample_gradient_bilinear(px, py);
+                edge_mag_sum += (g[0] * g[0] + g[1] * g[1]).sqrt();
+            }
+            let avg_mag = edge_mag_sum / n_samples as f64;
+            if avg_mag > best {
+                best = avg_mag;
+            }
         }
-        let avg_mag = edge_mag_sum / n_samples as f64;
-        if avg_mag < min_score {
-            min_score = avg_mag;
+        if best < min_score {
+            min_score = best;
         }
     }
     min_score
+}
+
+/// Curve-aware edge-contrast gate for a quad given in **full-resolution pixel** coordinates.
+///
+/// The lens-route counterpart of `edge_contrast_exceeds`, and the second half of what
+/// `refine_decode_first_seed` does on the pinhole route: the extraction gate is widened to a
+/// +/-1 px band for an unrefined seed, so something has to re-gate the quad once it *has* been
+/// refined, or that widening is a pure loosening. Measured without it, on the Kannala-Brandt
+/// hub, the band cost 0.63 pp of precision for 0.20 pp of recall.
+///
+/// `None` from unprojection means a corner has no preimage, which fails the gate.
+#[cfg(feature = "non_rectified")]
+#[must_use]
+pub(crate) fn curved_edge_contrast_exceeds<C: crate::camera::CameraModel>(
+    img: &ImageView,
+    quad_px: &[Point; 4],
+    intrinsics: &crate::pose::CameraIntrinsics,
+    camera: &C,
+    table: &crate::camera::RadialInverseTable<'_>,
+    threshold: f64,
+) -> bool {
+    let scaled = ScaledIntrinsics::from_intrinsics(intrinsics, 1);
+    let mut rect = [Point { x: 0.0, y: 0.0 }; 4];
+    for (slot, p) in rect.iter_mut().zip(quad_px) {
+        let Some([xn, yn]) = table.undistort_checked(
+            camera,
+            (p.x - scaled.cx) / scaled.fx,
+            (p.y - scaled.cy) / scaled.fy,
+        ) else {
+            return false;
+        };
+        *slot = Point {
+            x: xn * scaled.fx + scaled.cx,
+            y: yn * scaled.fy + scaled.cy,
+        };
+    }
+    let cx_r = 0.25 * (rect[0].x + rect[1].x + rect[2].x + rect[3].x);
+    let cy_r = 0.25 * (rect[0].y + rect[1].y + rect[2].y + rect[3].y);
+    let j = camera.distort_jacobian(
+        (cx_r - scaled.cx) / scaled.fx,
+        (cy_r - scaled.cy) / scaled.fy,
+    );
+    let len_scale = (j[0][0] * j[1][1] - j[0][1] * j[1][0]).abs().sqrt();
+    // Band `[0.0]`: the quad is refined now, so the chord is on the edge.
+    let score = calculate_edge_score_curved(img, &rect, camera, scaled, 1, len_scale, &[0.0]);
+    score > threshold || score.is_nan()
 }
 
 /// Reducing a polygon to a quad (4 vertices + 1 closing) by iteratively removing
