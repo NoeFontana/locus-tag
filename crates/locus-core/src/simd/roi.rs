@@ -35,6 +35,22 @@ pub enum RoiCache<'a> {
 }
 
 impl<'a> RoiCache<'a> {
+    /// An ROI that caches nothing, for samplers that read the image directly.
+    ///
+    /// Zero-sized, so every lookup falls outside it and the caller must not route samples
+    /// through it. Constructing one copies no pixels, which is the point: a distortion-aware
+    /// decode samples scalar through the lens and would pay the neighbourhood copy for nothing.
+    #[must_use]
+    pub const fn disabled() -> Self {
+        RoiCache::Arena {
+            data: &[],
+            min_x: 0,
+            min_y: 0,
+            width: 0,
+            height: 0,
+        }
+    }
+
     /// Create a new ROI cache by copying a region from the image.
     ///
     /// If the region fits in 1024 bytes, it is stored on the stack.

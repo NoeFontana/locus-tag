@@ -182,6 +182,34 @@ impl Detector {
     }
 }
 
+/// The frame's tabulated radial inverse, as built by the quad-extraction dispatch.
+///
+/// Stage 3 builds the table in the same dispatch that reaches the decode stage below, so
+/// `built` is always `Some` here. It is rebuilt rather than defaulted if that ever stops being
+/// true: silently continuing without a camera model is exactly how the distortion path
+/// disappeared from measurement in #443, and a rebuild costs tens of microseconds where a
+/// silent pinhole fallback costs correctness.
+#[cfg(feature = "non_rectified")]
+fn resolve_radial_table<'a, C: crate::camera::CameraModel>(
+    built: Option<crate::camera::RadialInverseTable<'a>>,
+    arena: &'a bumpalo::Bump,
+    model: &C,
+    intrinsics: &crate::pose::CameraIntrinsics,
+    img: &ImageView,
+) -> crate::camera::RadialInverseTable<'a> {
+    built.unwrap_or_else(|| {
+        debug_assert!(
+            false,
+            "quad extraction should have built the radial inverse table for this frame"
+        );
+        crate::camera::RadialInverseTable::build_in(
+            arena,
+            model,
+            crate::quad::frame_radius_bound(intrinsics, img.width, img.height),
+        )
+    })
+}
+
 /// Core detection pipeline — shared by [`Detector`] and [`LocusEngine`].
 ///
 /// Runs the full pipeline (thresholding → segmentation → quad extraction →
@@ -282,6 +310,12 @@ fn run_detection_pipeline<'ctx>(
         .arena
         .alloc_slice_fill_copy(img.width * img.height, 0u8);
 
+    // The frame's tabulated radial inverse, built by the quad-extraction dispatch below and
+    // reused by the decode pass: both stages unproject, and the table depends only on the
+    // declared lens and the frame bounds.
+    #[cfg(feature = "non_rectified")]
+    let mut radial_table = None;
+
     // 1. Thresholding & 2. Segmentation & 3. Quad Extraction
     let (n, unrefined) = {
         let mut engine = crate::threshold::ThresholdEngine::from_config(config);
@@ -326,8 +360,6 @@ fn run_detection_pipeline<'ctx>(
         // The tabulated radial inverse is built here, once per frame, in the frame arena, and
         // shared by quad extraction and the decode pass — the two stages that unproject. It
         // replaces a per-point iterative solve that was 29 % of the extraction stage's CPU.
-        #[cfg(feature = "non_rectified")]
-        let mut radial_table = None;
         #[cfg(feature = "non_rectified")]
         let (n, unrefined) = match intrinsics.map(|k| (k, k.distortion)) {
             Some((k, crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 })) => {
@@ -475,9 +507,9 @@ fn run_detection_pipeline<'ctx>(
     // 5. Decoding Pass (SoA) — dispatch on distortion model
     // For rectified cameras (PinholeModel or no intrinsics), the compiler eliminates
     // the distortion path entirely via monomorphization of CameraModel::IS_RECTIFIED.
-    match intrinsics.map(|k| &k.distortion) {
+    match intrinsics.map(|k| (k, &k.distortion)) {
         #[cfg(feature = "non_rectified")]
-        Some(crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 }) => {
+        Some((k, crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 })) => {
             let model = crate::camera::BrownConradyModel {
                 k1: *k1,
                 k2: *k2,
@@ -485,6 +517,7 @@ fn run_detection_pipeline<'ctx>(
                 p2: *p2,
                 k3: *k3,
             };
+            let table = resolve_radial_table(radial_table, &state.arena, &model, k, &full_img);
             crate::decoder::decode_batch_soa_with_camera(
                 &mut state.batch,
                 n,
@@ -493,16 +526,18 @@ fn run_detection_pipeline<'ctx>(
                 config,
                 intrinsics,
                 &model,
+                &table,
             );
         },
         #[cfg(feature = "non_rectified")]
-        Some(crate::pose::DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 }) => {
+        Some((k, crate::pose::DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 })) => {
             let model = crate::camera::KannalaBrandtModel {
                 k1: *k1,
                 k2: *k2,
                 k3: *k3,
                 k4: *k4,
             };
+            let table = resolve_radial_table(radial_table, &state.arena, &model, k, &full_img);
             crate::decoder::decode_batch_soa_with_camera(
                 &mut state.batch,
                 n,
@@ -511,6 +546,7 @@ fn run_detection_pipeline<'ctx>(
                 config,
                 intrinsics,
                 &model,
+                &table,
             );
         },
         _ => {

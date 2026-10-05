@@ -205,7 +205,7 @@ fn kannala_brandt_recovers_tag_corners() {
 
 /// The sub-pixel corner pass must run on the **distortion-aware** decode route.
 ///
-/// `decode_batch_soa_with_camera_inner` is a second implementation of the decode loop, and
+/// `decode_batch_soa_with_camera_inner` *was* a second implementation of the decode loop, and
 /// this pass (plus every corner improvement before it) existed only in the pinhole
 /// `decode_batch_soa_generic`. Its absence was invisible: toggling `decoder.corner_subpix`
 /// under declared distortion produced byte-identical output, and on the shipped distortion

@@ -14,7 +14,7 @@ summary:
   p50_rotation_error: 0.0533
   p90_rotation_error: 0.4136
   p99_rotation_error: 1.2669
-  mean_hamming: 0.0066
+  mean_hamming: 0.0069
   mean_total_ms: "[DURATION]"
   worst_offenders:
     - filename: scene_0043_cam_0000.png

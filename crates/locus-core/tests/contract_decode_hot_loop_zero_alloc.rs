@@ -14,8 +14,9 @@
 //! per-candidate SoA write-back.
 //!
 //! Before this contract was enforced, three rayon-driven map+collect+drain
-//! patterns in the production hot-path (`decode_batch_soa_generic`,
-//! `decode_batch_soa_with_camera_inner`, and `refine_poses_soa_with_config`)
+//! patterns in the production hot-path (`decode_batch_soa_generic` on both
+//! its pinhole and its distortion-aware instantiation, and
+//! `refine_poses_soa_with_config`)
 //! materialised a per-frame `Vec<TupleN>` outside the workspace arena, just
 //! to be drained sequentially into the SoA columns. The fix writes
 //! directly into the SoA columns from the rayon workers (rayon's `Zip`
@@ -366,13 +367,17 @@ fn contract_refine_poses_soa_zero_alloc_steady_state() {
     });
 }
 
-/// Companion contract for `decode_batch_soa_with_camera` on the non-rectified
-/// inner path (Brown-Conrady model with mild distortion forces the inner
-/// path; the rectified `PinholeModel` would short-circuit to
-/// `decode_batch_soa`, which is covered by the first test).
+/// Companion contract for `decode_batch_soa_generic`'s distortion-aware instantiation
+/// (a Brown-Conrady model with mild distortion selects the `LensWarp` monomorphization; a
+/// rectified `PinholeModel` would short-circuit to `decode_batch_soa`, covered by the first
+/// test).
+///
+/// The frame's `RadialInverseTable` is built *outside* the measured closure, as the detector
+/// builds it once per frame in the frame arena — so this still asserts that the per-candidate
+/// decode itself allocates nothing.
 #[cfg(feature = "non_rectified")]
 #[test]
-fn contract_decode_batch_soa_with_camera_inner_zero_alloc_steady_state() {
+fn contract_decode_batch_soa_warped_zero_alloc_steady_state() {
     let _serial = CONTRACT_SERIAL
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -401,8 +406,14 @@ fn contract_decode_batch_soa_with_camera_inner_zero_alloc_steady_state() {
         &mut batch.homographies[0..n],
     );
     let original_homographies: Vec<Matrix3x3> = batch.homographies[..n].to_vec();
+    let arena = bumpalo::Bump::new();
+    let table = RadialInverseTable::build_in(&arena, &model, 2.0);
+    assert!(
+        table.is_enabled(),
+        "the fixture's lens must tabulate, or this test would measure the fallback path"
+    );
 
-    assert_zero_alloc("decode_batch_soa_with_camera (non_rectified inner)", || {
+    assert_zero_alloc("decode_batch_soa_with_camera (warped)", || {
         for i in 0..n {
             batch.corners[i] = original_corners[i];
             batch.homographies[i] = original_homographies[i];
@@ -420,6 +431,7 @@ fn contract_decode_batch_soa_with_camera_inner_zero_alloc_steady_state() {
             &config,
             Some(&intrinsics),
             &model,
+            &table,
         );
     });
 }
