@@ -486,6 +486,34 @@ struct ScaledIntrinsics {
     cy: f64,
 }
 
+/// Largest normalized distorted radius the frame can produce, with a margin for the
+/// off-image taps that gradient sampling and the edge-line fit reach for.
+///
+/// Normalized coordinates are `((px - cx) / fx, (py - cy) / fy)`, which is invariant under the
+/// decimation rescale — `ScaledIntrinsics` divides focals and principal point by the same
+/// factor the pixel coordinates are divided by — so one table serves the decimated contour
+/// loop and the full-resolution edge fits alike.
+#[cfg(feature = "non_rectified")]
+pub(crate) fn frame_radius_bound(
+    intrinsics: &crate::pose::CameraIntrinsics,
+    width: usize,
+    height: usize,
+) -> f64 {
+    let w = width as f64;
+    let h = height as f64;
+    let dx = (intrinsics.cx.abs()).max((w - intrinsics.cx).abs()) + RADIUS_BOUND_MARGIN_PX;
+    let dy = (intrinsics.cy.abs()).max((h - intrinsics.cy).abs()) + RADIUS_BOUND_MARGIN_PX;
+    let xn = dx / intrinsics.fx;
+    let yn = dy / intrinsics.fy;
+    (xn * xn + yn * yn).sqrt()
+}
+
+/// Pixels of slack added to the frame radius bound. The widest off-image reach in this module
+/// is the edge-line normal scan (`decimation + 1`, 3 at the shipped `decimation = 1`) plus a
+/// bilinear tap; 8 px covers it at every supported decimation.
+#[cfg(feature = "non_rectified")]
+const RADIUS_BOUND_MARGIN_PX: f64 = 8.0;
+
 #[cfg(feature = "non_rectified")]
 impl ScaledIntrinsics {
     #[inline]
@@ -527,6 +555,7 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
     debug_telemetry: bool,
     camera: &C,
     intrinsics: &crate::pose::CameraIntrinsics,
+    table: &crate::camera::RadialInverseTable<'_>,
 ) -> (usize, Option<Vec<[Point; 4]>>) {
     use rayon::prelude::*;
 
@@ -567,6 +596,7 @@ pub fn extract_quads_soa_with_camera<C: crate::camera::CameraModel>(
                     camera,
                     scaled,
                     intrinsics,
+                    table,
                 )
             })
         })
@@ -638,6 +668,7 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     camera: &C,
     scaled: ScaledIntrinsics,
     intrinsics: &crate::pose::CameraIntrinsics,
+    table: &crate::camera::RadialInverseTable<'_>,
 ) -> Option<ExtractionResult> {
     // EdLines is geometrically incompatible with distorted cameras; this path
     // is ContourRdp-only. The upstream guard in `run_detection_pipeline`
@@ -718,7 +749,7 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
             // Non-convergence and out-of-domain radii are rejected here, once, for the whole
             // candidate: a contour point whose inverse is not a preimage would otherwise enter
             // the rectified contour and bend the straight-space fit.
-            let [xn, yn] = camera.undistort_checked(xd, yd)?;
+            let [xn, yn] = table.undistort_checked(camera, xd, yd)?;
             rect.push(Point {
                 x: xn * scaled.fx + scaled.cx,
                 y: yn * scaled.fy + scaled.cy,
@@ -825,48 +856,15 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         )
     } else {
         (
-            [
-                refine_corner_with_camera(
-                    refinement_img,
-                    quad_rect_full[0],
-                    quad_rect_full[3],
-                    quad_rect_full[1],
-                    quad_pts[0],
-                    decimation,
-                    intrinsics,
-                    camera,
-                ),
-                refine_corner_with_camera(
-                    refinement_img,
-                    quad_rect_full[1],
-                    quad_rect_full[0],
-                    quad_rect_full[2],
-                    quad_pts[1],
-                    decimation,
-                    intrinsics,
-                    camera,
-                ),
-                refine_corner_with_camera(
-                    refinement_img,
-                    quad_rect_full[2],
-                    quad_rect_full[1],
-                    quad_rect_full[3],
-                    quad_pts[2],
-                    decimation,
-                    intrinsics,
-                    camera,
-                ),
-                refine_corner_with_camera(
-                    refinement_img,
-                    quad_rect_full[3],
-                    quad_rect_full[2],
-                    quad_rect_full[0],
-                    quad_pts[3],
-                    decimation,
-                    intrinsics,
-                    camera,
-                ),
-            ],
+            refine_quad_corners_with_camera(
+                refinement_img,
+                &quad_rect_full,
+                &quad_pts,
+                decimation,
+                intrinsics,
+                camera,
+                table,
+            ),
             [[0.0_f32; 4]; 4],
         )
     };
@@ -1422,25 +1420,66 @@ pub(crate) fn refine_edge_erf(
 ///
 /// `p_px` (the current distorted pixel-space corner) is used only for the
 /// "stay near the original" sanity check, matching `refine_corner`.
+/// Refine all four corners of a quad whose image edges are curved by the lens.
+///
+/// Fits each of the four rectified edge lines **once**, then intersects consecutive pairs.
+/// The previous per-corner helper fitted both of a corner's edges, so every edge was fitted
+/// twice: corner `i`'s leading edge and corner `i-1`'s trailing edge were the same
+/// `fit_edge_line_curved` call with *identical arguments* (`fit(rect[i], rect[i+1])`), so
+/// 8 fits produced 4 distinct lines. Sharing them is therefore exact, not an approximation —
+/// the intersections consume bit-identical inputs — and halves the cost of the single most
+/// expensive stage of distorted extraction (measured at 48.8 % of its CPU time).
 #[cfg(feature = "non_rectified")]
 #[must_use]
-#[expect(
-    clippy::too_many_arguments,
-    reason = "corner refinement in rectified space; needs the corner plus its two rectified neighbours, the original pixel-space corner, decimation, intrinsics and camera model to fit the two edge lines and re-distort their intersection"
-)]
-fn refine_corner_with_camera<C: crate::camera::CameraModel>(
+fn refine_quad_corners_with_camera<C: crate::camera::CameraModel>(
     img: &ImageView,
-    p_rect: Point,
-    p_prev_rect: Point,
-    p_next_rect: Point,
+    quad_rect: &[Point; 4],
+    quad_px: &[Point; 4],
+    decimation: usize,
+    intrinsics: &crate::pose::CameraIntrinsics,
+    camera: &C,
+    table: &crate::camera::RadialInverseTable<'_>,
+) -> [Point; 4] {
+    // `lines[i]` is the edge from rectified corner `i` to corner `i + 1`.
+    let lines: [Option<(f64, f64, f64)>; 4] = core::array::from_fn(|i| {
+        fit_edge_line_curved(
+            img,
+            quad_rect[i],
+            quad_rect[(i + 1) % 4],
+            decimation,
+            intrinsics,
+            camera,
+            table,
+        )
+    });
+    // Corner `i` is where its trailing edge (`i - 1 -> i`) meets its leading edge (`i -> i + 1`).
+    core::array::from_fn(|i| {
+        intersect_curved_edges(
+            lines[(i + 3) % 4],
+            lines[i],
+            quad_px[i],
+            decimation,
+            intrinsics,
+            camera,
+        )
+    })
+}
+
+/// Intersect two rectified edge lines and bring the result back to pixel space.
+///
+/// Falls back to `p_px` (the extraction's own corner) when either line is missing, the lines
+/// are near-parallel, or the refined point moved implausibly far — the same guards the
+/// per-corner routine applied.
+#[cfg(feature = "non_rectified")]
+#[must_use]
+fn intersect_curved_edges<C: crate::camera::CameraModel>(
+    line1: Option<(f64, f64, f64)>,
+    line2: Option<(f64, f64, f64)>,
     p_px: Point,
     decimation: usize,
     intrinsics: &crate::pose::CameraIntrinsics,
     camera: &C,
 ) -> Point {
-    let line1 = fit_edge_line_curved(img, p_prev_rect, p_rect, decimation, intrinsics, camera);
-    let line2 = fit_edge_line_curved(img, p_rect, p_next_rect, decimation, intrinsics, camera);
-
     if let (Some(l1), Some(l2)) = (line1, line2) {
         // Intersect in rectified space, then re-distort to pixel space.
         let det = l1.0 * l2.1 - l2.0 * l1.1;
@@ -1486,6 +1525,7 @@ fn fit_edge_line_curved<C: crate::camera::CameraModel>(
     decimation: usize,
     intrinsics: &crate::pose::CameraIntrinsics,
     camera: &C,
+    table: &crate::camera::RadialInverseTable<'_>,
 ) -> Option<(f64, f64, f64)> {
     let dx_r = p2_rect.x - p1_rect.x;
     let dy_r = p2_rect.y - p1_rect.y;
@@ -1584,7 +1624,13 @@ fn fit_edge_line_curved<C: crate::camera::CameraModel>(
         let refined_px = best_px + nx * sub_offset;
         let refined_py = best_py + ny * sub_offset;
 
-        let [xn_r, yn_r] = camera.undistort((refined_px - cx) / fx, (refined_py - cy) / fy);
+        // Checked: a gradient peak the lens cannot invert is not a preimage, and feeding it
+        // to the straight-space fit would bend the line. Skipping it costs one sample.
+        let Some([xn_r, yn_r]) =
+            table.undistort_checked(camera, (refined_px - cx) / fx, (refined_py - cy) / fy)
+        else {
+            continue;
+        };
         moments.add(xn_r * fx + cx, yn_r * fy + cy, 1.0);
     }
 
