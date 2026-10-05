@@ -787,9 +787,28 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
     reduced.push(corners[0]);
 
     let area = polygon_area(&reduced);
-    let compactness = (ISOPERIMETRIC_SCALE * area.abs()) / (perimeter * perimeter);
 
-    if area.abs() <= f64::from(config.quad_min_area) || compactness <= MIN_QUAD_COMPACTNESS {
+    // `area` is a **chart** area, while `quad_min_area` and the compactness floor are calibrated
+    // in pixels and `perimeter` is a pixel-space point count. The chart stretches by
+    // |det(d p_rect / d p_px)| — measured up to 42x in area at the Kannala-Brandt periphery,
+    // where one chart unit spans 1/133 of a pixel — so comparing the two directly makes both
+    // gates that much looser exactly where junk is most likely. Convert with the forward
+    // Jacobian determinant at the candidate, which is `det(J_distort)`: the focal-length
+    // conjugation `S · J · S^-1` leaves a determinant unchanged. One evaluation per candidate.
+    let area_px = if C::IS_RECTIFIED {
+        area.abs()
+    } else {
+        let cx_r = (reduced[0].x + reduced[1].x + reduced[2].x + reduced[3].x) * 0.25;
+        let cy_r = (reduced[0].y + reduced[1].y + reduced[2].y + reduced[3].y) * 0.25;
+        let j = camera.distort_jacobian(
+            (cx_r - scaled.cx) / scaled.fx,
+            (cy_r - scaled.cy) / scaled.fy,
+        );
+        area.abs() * (j[0][0] * j[1][1] - j[0][1] * j[1][0]).abs()
+    };
+    let compactness = (ISOPERIMETRIC_SCALE * area_px) / (perimeter * perimeter);
+
+    if area_px <= f64::from(config.quad_min_area) || compactness <= MIN_QUAD_COMPACTNESS {
         return None;
     }
 
