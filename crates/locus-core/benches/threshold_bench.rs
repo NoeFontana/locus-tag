@@ -95,3 +95,31 @@ fn bench_threshold_real_icra_local_mean(bencher: divan::Bencher) {
         engine.apply_threshold_with_map(&arena, &img, &stats, &mut [], &mut threshold_map);
     });
 }
+
+/// The tile threshold map as production builds it: telemetry off, so `binary_output` is empty.
+/// This is the shape `detect()` calls (`detector.rs` sizes the binarized buffer to zero unless
+/// debug telemetry is on), and the one the pipeline's latency actually depends on —
+/// `bench_threshold_real_icra_apply` above measures the telemetry shape instead, which also
+/// binarizes the whole frame and expands a per-tile validity mask nothing else reads.
+#[bench]
+fn bench_threshold_real_icra_apply_map(bencher: divan::Bencher) {
+    let dataset = BenchDataset::icra_forward_0();
+    let img = ImageView::new(
+        &dataset.raw_data,
+        dataset.width,
+        dataset.height,
+        dataset.width,
+    )
+    .unwrap();
+    let config = DetectorConfig::default();
+    let engine = ThresholdEngine::from_config(&config);
+    let arena_init = bumpalo::Bump::new();
+    let stats = engine.compute_tile_stats(&arena_init, &img).to_vec();
+    let mut threshold_map = vec![0u8; dataset.width * dataset.height];
+    let mut arena = bumpalo::Bump::new();
+
+    bencher.bench_local(move || {
+        arena.reset();
+        engine.apply_threshold_with_map(&arena, &img, &stats, &mut [], &mut threshold_map);
+    });
+}

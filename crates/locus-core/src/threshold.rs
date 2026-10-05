@@ -17,7 +17,7 @@
 //!    `(2r+1)²` window, minus a noise-calibrated offset, from a sliding column-sum
 //!    accumulator. Tracks the local background level instead of the extremes.
 
-#![allow(unsafe_code, clippy::cast_sign_loss)]
+#![allow(clippy::cast_sign_loss)]
 use crate::config::{DetectorConfig, ThresholdMode};
 use crate::image::ImageView;
 use bumpalo::Bump;
@@ -51,14 +51,33 @@ pub const NOISE_OFFSET_MAX: i32 = 20;
 /// render-tag low-key 66 → 96 %, 2026-10-05). Below 0.45 small and low-contrast markers start
 /// to lose their one-module borders — render-tag 640 falls off at 0.40, tag16h5 at 0.42 — so
 /// the gains past it are not free and are not taken here. See
-/// `docs/explanation/architecture.md`.
+/// `docs/explanation/pipeline.md`.
+///
+/// The cut is applied with rounding, not truncation. A truncated `CUT_NUM·range/CUT_DEN`
+/// biases the cut downward by up to one grey level, and that bias is proportionally largest
+/// where the range is smallest — the low-contrast tiles where erosion costs a marker its
+/// border. At a range of 2 it reaches the whole fraction: the threshold would equal the
+/// neighbourhood minimum, and a `pixel < threshold` rule makes that tile background entirely.
 ///
 /// Public because it is observable contract — it decides which markers are one component —
 /// not a private tuning knob.
 pub const CUT_NUM: u16 = 9;
-/// Denominator of [`CUT_NUM`]. Twenty keeps the cut exact in integer arithmetic for every
-/// `(min, max)` pair, so the map is bit-identical across targets.
+/// Denominator of [`CUT_NUM`]. Twenty expresses the measured frontier at the granularity it
+/// was measured on (0.05 steps) and halves exactly, so the rounded cut below needs no wider
+/// arithmetic than the `u16` the tile loop already multiplies in. The cut is *not* exact for
+/// most ranges — `9·range` is a multiple of 20 only one time in twenty — but it is integer
+/// throughout, so the map is bit-identical across targets and SIMD widths.
 pub const CUT_DEN: u16 = 20;
+
+/// A mis-tuned cut must be a compile error, not a frame with no foreground in it: the tile
+/// loop multiplies in `u16` and divides by [`CUT_DEN`], and a numerator above the denominator
+/// would put the threshold above the neighbourhood maximum (every pixel foreground).
+const _: () = assert!(
+    CUT_DEN != 0
+        && CUT_NUM <= CUT_DEN
+        && (CUT_NUM as u32) * 255 + (CUT_DEN as u32) / 2 <= u16::MAX as u32,
+    "the cut must be a fraction in [0, 1] whose numerator times the widest 8-bit range fits a u16"
+);
 
 /// Minimum intensity range over a 3×3-tile neighbourhood for the centre tile to count as
 /// valid in [`ThresholdMode::TileMidExtreme`]. Telemetry-scoped: flat (invalid) tiles are
@@ -97,6 +116,114 @@ impl Default for ThresholdEngine {
     }
 }
 
+/// Fill `thresholds` and `valid` from the extremes over each tile's 3x3 tile neighbourhood,
+/// cutting at [`CUT_NUM`]/[`CUT_DEN`] of the range. `valid` marks the tiles whose range clears
+/// [`TILE_MIN_RANGE`] and is read only by the binarized telemetry image.
+fn tile_cut_and_validity(
+    arena: &Bump,
+    stats: &[TileStats],
+    tiles_wide: usize,
+    tiles_high: usize,
+    thresholds: &mut [u8],
+    valid: &mut [u8],
+) {
+    // The 3x3 tile reduction, as three vectorisable passes over packed `(min, !max)` pairs.
+    //
+    // `!max` is `255 - max`, which turns the maximum into a *minimum*, so both reductions
+    // become one byte-wise minimum and a single `pminub` lane carries both fields. And the
+    // minimum over a clamped 3x3 window is exactly the minimum over the clamped rows
+    // followed by the minimum over the clamped columns, so the window separates into a
+    // horizontal and a vertical 3-tap over contiguous bytes. Reducing `TileStats` where it
+    // lies cannot vectorise: it interleaves the two fields, so every lane would want a
+    // strided gather, and the maximum would want the opposite instruction from the minimum.
+    let stride = 2 * tiles_wide;
+    let mut packed = BumpVec::with_capacity_in(stride * tiles_high, arena);
+    packed.resize(stride * tiles_high, 0u8);
+    packed
+        .par_chunks_mut(stride)
+        .enumerate()
+        .for_each(|(ty, row)| {
+            let src = &stats[ty * tiles_wide..(ty + 1) * tiles_wide];
+            for (pair, s) in row.chunks_exact_mut(2).zip(src) {
+                pair[0] = s.min;
+                pair[1] = !s.max;
+            }
+        });
+
+    let mut horiz = BumpVec::with_capacity_in(stride * tiles_high, arena);
+    horiz.resize(stride * tiles_high, 0u8);
+    {
+        let packed_rows = packed.as_slice();
+        horiz
+            .par_chunks_mut(stride)
+            .enumerate()
+            .for_each(|(ty, h_row)| {
+                let p = &packed_rows[ty * stride..(ty + 1) * stride];
+                if stride == 2 {
+                    h_row.copy_from_slice(p);
+                    return;
+                }
+                // Clamped ends, then the interior as one three-input minimum.
+                h_row[0] = p[0].min(p[2]);
+                h_row[1] = p[1].min(p[3]);
+                h_row[stride - 2] = p[stride - 4].min(p[stride - 2]);
+                h_row[stride - 1] = p[stride - 3].min(p[stride - 1]);
+                if stride > 4 {
+                    min3_into(
+                        &mut h_row[2..stride - 2],
+                        &p[0..stride - 4],
+                        &p[2..stride - 2],
+                        &p[4..stride],
+                    );
+                }
+            });
+    }
+
+    // Vertical 3-tap, back into `packed`: the pass above has fully consumed it, and each
+    // worker writes only its own row while reading `horiz` immutably.
+    {
+        let horiz_rows = horiz.as_slice();
+        packed
+            .par_chunks_mut(stride)
+            .enumerate()
+            .for_each(|(ty, v_row)| {
+                let row = |i: usize| &horiz_rows[i * stride..(i + 1) * stride];
+                min3_into(
+                    v_row,
+                    row(ty.saturating_sub(1)),
+                    row(ty),
+                    row((ty + 1).min(tiles_high - 1)),
+                );
+            });
+    }
+
+    let extremes = packed.as_slice();
+    thresholds
+        .par_chunks_mut(tiles_wide)
+        .zip(valid.par_chunks_mut(tiles_wide))
+        .enumerate()
+        .for_each(|(ty, (t_row, v_row))| {
+            let row = &extremes[ty * stride..(ty + 1) * stride];
+            for ((t, v), pair) in t_row
+                .iter_mut()
+                .zip(v_row.iter_mut())
+                .zip(row.chunks_exact(2))
+            {
+                let nmin = pair[0];
+                let nmax = !pair[1];
+                // `stats` is caller-supplied and its unfilled sentinel is
+                // `min: 255, max: 0`, so saturate rather than underflow a `u8`.
+                let range = u16::from(nmax.saturating_sub(nmin));
+                *t = (u16::from(nmin) + (CUT_NUM * range + CUT_DEN / 2) / CUT_DEN) as u8;
+                *v = if range < u16::from(TILE_MIN_RANGE) {
+                    0
+                } else {
+                    255
+                };
+            }
+        });
+}
+
 impl ThresholdEngine {
     /// Create a ThresholdEngine with the settings of [`DetectorConfig::default`].
     #[must_use]
@@ -130,6 +257,11 @@ impl ThresholdEngine {
         let tiles_high = img.height / ts;
         let mut stats = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
         stats.resize(tiles_wide * tiles_high, TileStats { min: 255, max: 0 });
+        if tiles_wide == 0 || tiles_high == 0 {
+            // Fewer than `tile_size` pixels across or down: no tile grid, and `par_chunks_mut`
+            // rejects a chunk size of zero.
+            return stats;
+        }
 
         stats
             .par_chunks_mut(tiles_wide)
@@ -170,14 +302,6 @@ impl ThresholdEngine {
     /// never be foreground". `binary_output` may be empty when the binarized image (telemetry)
     /// is not needed: the local-mean thresholder then skips it, the tile thresholder writes it
     /// to arena scratch.
-    #[expect(
-        clippy::needless_range_loop,
-        reason = "tx indexes both the tile-neighbourhood min/max scan and the t_row write, so the range loop is clearer than a zipped iterator here"
-    )]
-    #[expect(
-        clippy::too_many_lines,
-        reason = "one cohesive routine: mode dispatch, tile threshold, tile validity and row expansion share the tile-grid geometry computed at the top"
-    )]
     #[tracing::instrument(skip_all, name = "pipeline::threshold_apply_map")]
     pub fn apply_threshold_with_map(
         &self,
@@ -191,134 +315,90 @@ impl ThresholdEngine {
             self.apply_local_mean(arena, img, binary_output, threshold_output);
             return;
         }
-        // The tile kernel produces the binarized image as a by-product of the same SIMD pass
-        // and drives its rows from that buffer: back an empty one with scratch so the threshold
-        // map is still written.
-        let binary_output = if binary_output.is_empty() {
-            arena.alloc_slice_fill_copy(img.width * img.height, 0u8)
-        } else {
-            binary_output
-        };
         let ts = self.tile_size;
         let tiles_wide = img.width / ts;
         let tiles_high = img.height / ts;
+        if tiles_wide == 0 || tiles_high == 0 {
+            // No whole tile fits, so there are no statistics to threshold against. Leave the
+            // map as the caller supplied it — zero is "never foreground" — rather than ask
+            // rayon for chunks of size zero, which panics.
+            return;
+        }
 
         let mut tile_thresholds = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
         tile_thresholds.resize(tiles_wide * tiles_high, 0u8);
         let mut tile_valid = BumpVec::with_capacity_in(tiles_wide * tiles_high, arena);
         tile_valid.resize(tiles_wide * tiles_high, 0u8);
 
-        tile_thresholds
-            .par_chunks_mut(tiles_wide)
-            .enumerate()
-            .for_each(|(ty, t_row)| {
-                let y_start = ty.saturating_sub(1);
-                let y_end = (ty + 1).min(tiles_high - 1);
+        tile_cut_and_validity(
+            arena,
+            stats,
+            tiles_wide,
+            tiles_high,
+            &mut tile_thresholds,
+            &mut tile_valid,
+        );
 
-                for tx in 0..tiles_wide {
-                    let mut nmin = 255u8;
-                    let mut nmax = 0u8;
-
-                    let x_start = tx.saturating_sub(1);
-                    let x_end = (tx + 1).min(tiles_wide - 1);
-
-                    for ny in y_start..=y_end {
-                        let row_off = ny * tiles_wide;
-                        for nx in x_start..=x_end {
-                            let s = stats[row_off + nx];
-                            if s.min < nmin {
-                                nmin = s.min;
-                            }
-                            if s.max > nmax {
-                                nmax = s.max;
-                            }
-                        }
-                    }
-
-                    t_row[tx] =
-                        (u16::from(nmin) + CUT_NUM * u16::from(nmax - nmin) / CUT_DEN) as u8;
-                }
-            });
-
-        // Compute tile_valid
-        for ty in 0..tiles_high {
-            for tx in 0..tiles_wide {
-                let mut nmin = 255;
-                let mut nmax = 0;
-                let y_start = ty.saturating_sub(1);
-                let y_end = (ty + 1).min(tiles_high - 1);
-                let x_start = tx.saturating_sub(1);
-                let x_end = (tx + 1).min(tiles_wide - 1);
-
-                for ny in y_start..=y_end {
-                    let row_off = ny * tiles_wide;
-                    for nx in x_start..=x_end {
-                        let s = stats[row_off + nx];
-                        if s.min < nmin {
-                            nmin = s.min;
-                        }
-                        if s.max > nmax {
-                            nmax = s.max;
-                        }
-                    }
-                }
-                let idx = ty * tiles_wide + tx;
-                tile_valid[idx] = if nmax.saturating_sub(nmin) < TILE_MIN_RANGE {
-                    0
-                } else {
-                    255
-                };
-            }
-        }
-
-        // Write thresholds and binary output in parallel
         let thresholds_slice = tile_thresholds.as_slice();
         let valid_slice = tile_valid.as_slice();
+        let w = img.width;
 
-        binary_output
-            .par_chunks_mut(ts * img.width)
+        // Expand one tile band of the threshold map. The band's rows are identical, so build
+        // the first one in place and replicate it: writing straight into the map keeps the
+        // production path free of the per-worker scratch row the old loop allocated, and lets
+        // the map — not the binarized image — drive the iteration.
+        let expand_band = |ty: usize, thresh_band: &mut [u8]| {
+            let (first, rest) = thresh_band.split_at_mut(w);
+            let t_row = &thresholds_slice[ty * tiles_wide..(ty + 1) * tiles_wide];
+            for (tx, &thresh) in t_row.iter().enumerate() {
+                first[tx * ts..(tx + 1) * ts].fill(thresh);
+            }
+            // Columns past the last whole tile have no statistics: never foreground.
+            first[tiles_wide * ts..].fill(0);
+            for dy in 1..ts {
+                rest[(dy - 1) * w..dy * w].copy_from_slice(first);
+            }
+        };
+
+        if binary_output.is_empty() {
+            // Production. Segmentation reads the threshold map alone, so the binarized image,
+            // the full-frame buffer that holds it and the compare-and-store pass that fills it
+            // are all skipped — as is the tile-validity expansion, which only that pass reads.
+            threshold_output
+                .par_chunks_mut(ts * w)
+                .enumerate()
+                .for_each(|(ty, thresh_band)| {
+                    if ty < tiles_high {
+                        expand_band(ty, thresh_band);
+                    }
+                });
+            return;
+        }
+
+        // Telemetry. `par_chunks_mut` on both buffers gives each worker its own band of each,
+        // so the two writes are disjoint by construction rather than by a safety argument.
+        threshold_output
+            .par_chunks_mut(ts * w)
+            .zip(binary_output.par_chunks_mut(ts * w))
             .enumerate()
             .for_each_init(
-                || (vec![0u8; img.width], vec![0u8; img.width]),
-                |(row_thresholds, row_valid), (ty, bin_tile_rows)| {
+                || vec![0u8; w],
+                |row_valid, (ty, (thresh_band, bin_band))| {
                     if ty >= tiles_high {
                         return;
                     }
-                    // SAFETY: `binary_output.par_chunks_mut(ts * img.width)`
-                    // yields one `ty` per worker; the parallel `threshold_output`
-                    // tile slice for the same `ty` is therefore disjoint from
-                    // every other worker's write set. The `ty < tiles_high`
-                    // guard above keeps `ty * ts * img.width + ts * img.width`
-                    // within the original `threshold_output` length.
-                    let thresh_tile_rows = unsafe {
-                        let ptr = threshold_output.as_ptr().cast_mut();
-                        std::slice::from_raw_parts_mut(ptr.add(ty * ts * img.width), ts * img.width)
-                    };
-
-                    row_thresholds.fill(0);
-                    row_valid.fill(0);
-
-                    for tx in 0..tiles_wide {
-                        let idx = ty * tiles_wide + tx;
-                        let thresh = thresholds_slice[idx];
-                        let valid = valid_slice[idx];
-                        for i in 0..ts {
-                            row_thresholds[tx * ts + i] = thresh;
-                            row_valid[tx * ts + i] = valid;
-                        }
+                    expand_band(ty, thresh_band);
+                    let v_row = &valid_slice[ty * tiles_wide..(ty + 1) * tiles_wide];
+                    for (tx, &valid) in v_row.iter().enumerate() {
+                        row_valid[tx * ts..(tx + 1) * ts].fill(valid);
                     }
+                    row_valid[tiles_wide * ts..].fill(0);
 
+                    let row_thresholds = &thresh_band[..w];
                     for dy in 0..ts {
-                        let py = ty * ts + dy;
-                        let src_row = img.get_row(py);
-
-                        // Write binary output
-                        let bin_row = &mut bin_tile_rows[dy * img.width..(dy + 1) * img.width];
+                        let src_row = img.get_row(ty * ts + dy);
+                        let bin_row = &mut bin_band[dy * w..(dy + 1) * w];
                         threshold_row_simd(src_row, bin_row, row_thresholds, row_valid);
-
-                        // Write threshold map
-                        thresh_tile_rows[dy * img.width..(dy + 1) * img.width]
-                            .copy_from_slice(row_thresholds);
                     }
                 },
             );
@@ -658,6 +738,19 @@ fn compute_row_tile_stats_simd(src_row: &[u8], stats: &mut [TileStats], tile_siz
     }
 }
 
+/// `dst[i] = min(a[i], b[i], c[i])` over equal-length byte runs — one `pminub` chain per
+/// vector lane. The three-input form is what the separable tile reduction needs, and a clamped
+/// edge of the window is expressed by passing the same row twice, since `min(a, a, b)` is
+/// `min(a, b)`.
+#[multiversion(targets = "simd")]
+fn min3_into(dst: &mut [u8], a: &[u8], b: &[u8], c: &[u8]) {
+    let n = dst.len();
+    assert!(a.len() == n && b.len() == n && c.len() == n);
+    for i in 0..n {
+        dst[i] = a[i].min(b[i]).min(c[i]);
+    }
+}
+
 #[multiversion(targets(
     "x86_64+avx2+bmi1+bmi2+popcnt+lzcnt",
     "x86_64+avx512f+avx512bw+avx512dq+avx512vl",
@@ -765,7 +858,8 @@ mod tests {
         let mut output = vec![0u8; width * height];
         engine.apply_threshold(&arena, &img, &stats, &mut output);
 
-        // At (8,8), it should be black (0) because it's 50 and thresh should be around (50+200)/2 = 125
+        // At (8,8) it should be foreground (0): the pixel is 50 and the cut over a
+        // neighbourhood of (50, 200) is 50 + round(9 * 150 / 20) = 118.
         assert_eq!(output[8 * width + 8], 0);
         // At (1,1), it should be white (255)
         assert_eq!(output[width + 1], 255);
@@ -864,8 +958,10 @@ mod tests {
         (binary, map)
     }
 
-    /// Blur `data` in place with `passes` applications of the separable `[1, 2, 1]/4` kernel,
-    /// a stand-in for a lens point-spread function about one pixel wide per pass.
+    /// Blur `data` in place with `passes` applications of the 5-tap cross
+    /// `{centre 1/2, each 4-neighbour 1/8}` — the mean of a horizontal and a vertical
+    /// `[1, 2, 1]/4`, which is *not* their separable product. It stands in for a lens
+    /// point-spread function roughly one pixel wide per pass.
     fn blur(data: &mut [u8], w: usize, h: usize, passes: usize) {
         for _ in 0..passes {
             let src = data.to_vec();
@@ -882,72 +978,230 @@ mod tests {
         }
     }
 
-    /// The premise of [`CUT_NUM`]/[`CUT_DEN`]: two dark regions separated by a bright gap one
-    /// pixel wide must land on opposite sides of the cut from the gap, so segmentation sees
-    /// two markers rather than one.
-    ///
-    /// A gap narrower than the point-spread function never reaches the bright level — here its
-    /// peak comes out one grey level *below* the midpoint of the two levels, which is where
-    /// this stage used to cut, so the two regions fused and the pair was lost. The assertion is
-    /// two-sided: the gap must clear the shipped cut *and* sit below the midpoint, or the test
-    /// has stopped exercising the case it was written for.
-    #[test]
-    fn the_cut_holds_open_a_gap_the_lens_closed() {
-        let (w, h) = (64usize, 64usize);
-        let (dark, bright) = (20u8, 220u8);
-        let mut data = vec![bright; w * h];
-        for y in 16..48 {
-            data[y * w + 8..y * w + 30].fill(dark);
-            data[y * w + 31..y * w + 52].fill(dark);
+    /// Per-pixel threshold map for an arbitrary `(nmin, nmax) -> threshold` rule, by the same
+    /// tile geometry as [`ThresholdEngine::apply_threshold_with_map`]. It exists so a fixture
+    /// can be scored against cuts the detector does *not* ship — above all the midpoint this
+    /// stage used to use — and `counterfactual_map_reproduces_the_shipped_cut` pins it to the
+    /// real thing so it cannot drift away from what production does.
+    fn counterfactual_map(data: &[u8], w: usize, h: usize, cut: impl Fn(u8, u8) -> u8) -> Vec<u8> {
+        let ts = 8usize;
+        let img = ImageView::new(data, w, h, w).unwrap();
+        let engine = ThresholdEngine {
+            tile_size: ts,
+            mode: ThresholdMode::TileMidExtreme,
+            local_mean_radius: 2,
+            noise_k: 2.0,
+            noise_sigma: Some(1.0),
+        };
+        let arena = Bump::new();
+        let stats = engine.compute_tile_stats(&arena, &img);
+        let (tiles_wide, tiles_high) = (w / ts, h / ts);
+        let mut map = vec![0u8; w * h];
+        for ty in 0..tiles_high {
+            for tx in 0..tiles_wide {
+                let (mut nmin, mut nmax) = (255u8, 0u8);
+                for ny in ty.saturating_sub(1)..=(ty + 1).min(tiles_high - 1) {
+                    for nx in tx.saturating_sub(1)..=(tx + 1).min(tiles_wide - 1) {
+                        let st = stats[ny * tiles_wide + nx];
+                        nmin = nmin.min(st.min);
+                        nmax = nmax.max(st.max);
+                    }
+                }
+                let t = cut(nmin, nmax);
+                for dy in 0..ts {
+                    let row = (ty * ts + dy) * w + tx * ts;
+                    map[row..row + ts].fill(t);
+                }
+            }
         }
-        blur(&mut data, w, h, 3);
+        map
+    }
 
-        let (_, map) = run_mode(ThresholdMode::TileMidExtreme, 8, 2, &data, w, h);
-        let midpoint = u16::midpoint(u16::from(dark), u16::from(bright));
-        let gap = 32 * w + 30;
-        assert!(
-            u16::from(data[gap]) < midpoint,
-            "gap peak {} is not below the midpoint {midpoint}: the premise does not hold",
-            data[gap]
-        );
-        assert!(
-            data[gap] >= map[gap],
-            "gap peak {} is foreground at threshold {}: the two regions stay fused",
-            data[gap],
-            map[gap]
-        );
-        for (label, idx) in [("left", 32 * w + 16), ("right", 32 * w + 44)] {
-            assert!(
-                data[idx] < map[idx],
-                "{label} region interior is not foreground ({} vs {})",
-                data[idx],
-                map[idx]
-            );
+    /// The cut this stage ships, as a `(nmin, nmax)` rule.
+    fn cut_at(num: u16) -> impl Fn(u8, u8) -> u8 {
+        move |nmin, nmax| {
+            let range = u16::from(nmax.saturating_sub(nmin));
+            (u16::from(nmin) + (num * range + CUT_DEN / 2) / CUT_DEN) as u8
         }
     }
 
-    /// The other side of the same trade: a one-pixel dark stroke at full contrast must stay
-    /// foreground. Cutting further below the midpoint than [`CUT_NUM`]/[`CUT_DEN`] is what
-    /// costs small and low-contrast markers their one-module borders.
+    /// The rule this stage used before [`CUT_NUM`]: the midpoint of the neighbourhood extremes,
+    /// written exactly as it was (`(nmin + nmax) >> 1`), so the comparisons below are against
+    /// what shipped and not against a rounded restatement of it.
+    fn midpoint_cut(nmin: u8, nmax: u8) -> u8 {
+        ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8
+    }
+
+    /// [`counterfactual_map`] must agree with the detector wherever the detector has tiles,
+    /// or every comparison built on it is measuring the test's arithmetic instead of the
+    /// shipped cut.
+    ///
+    /// It also pins the separable reduction in `tile_cut_and_validity` to the naive 3x3 scan
+    /// written here: the packed `(min, !max)` passes must be bit-identical to it, including on
+    /// grids one and two tiles wide, where the horizontal 3-tap is all clamped ends and no
+    /// interior.
     #[test]
-    fn the_cut_keeps_a_one_pixel_dark_stroke() {
+    fn counterfactual_map_reproduces_the_shipped_cut() {
+        // Tile size is 8, so these cover grids 1, 2, 3, 8 and 40 tiles wide and 1..6 tall,
+        // plus dimensions that are not whole multiples of the tile size.
+        let shapes = [
+            (64usize, 48usize),
+            (8, 8),
+            (16, 8),
+            (24, 16),
+            (8, 48),
+            (320, 24),
+            (71, 43),
+            (17, 9),
+        ];
+        for (w, h) in shapes {
+            for seed in [7u32, 11, 29] {
+                let data = lcg_image(w, h, seed);
+                let (_, production) = run_mode(ThresholdMode::TileMidExtreme, 2, 2, &data, w, h);
+                let mirror = counterfactual_map(&data, w, h, cut_at(CUT_NUM));
+                assert_eq!(production, mirror, "{w}x{h} seed {seed}");
+            }
+        }
+    }
+
+    /// A frame with no whole tile in it has no statistics to threshold against. It must come
+    /// back as "never foreground" rather than ask rayon for zero-sized chunks, which panics.
+    #[test]
+    fn a_frame_smaller_than_one_tile_is_not_a_panic() {
+        for (w, h) in [
+            (1usize, 1usize),
+            (4, 4),
+            (7, 7),
+            (4, 8),
+            (8, 4),
+            (16, 3),
+            (3, 16),
+        ] {
+            let data = lcg_image(w, h, 5);
+            let (binary, map) = run_mode(ThresholdMode::TileMidExtreme, 2, 2, &data, w, h);
+            assert!(
+                map.iter().all(|&t| t == 0),
+                "{w}x{h}: threshold map must stay at 'never foreground'"
+            );
+            assert_eq!(binary.len(), w * h);
+        }
+    }
+
+    /// Two dark squares separated by a bright gap one pixel wide, over a sweep of contrasts and
+    /// point-spread widths. A gap narrower than the PSF never reaches the bright level, so past
+    /// some PSF width the midpoint rule puts the gap on the dark side of the cut and the two
+    /// squares arrive at segmentation as one component — and one component is reduced to one
+    /// quadrilateral, so the pair is lost.
+    ///
+    /// The assertion is that the shipped cut separates **strictly more** of the sweep than the
+    /// midpoint does, and never fewer. It is deliberately not "all of it": the widest PSF here
+    /// closes a one-pixel gap for any cut, which is the limit of choosing a single scalar and
+    /// the reason the frontier below [`CUT_NUM`] is not free either. Reverting the cut to the
+    /// midpoint makes the two counts equal and fails this test.
+    #[test]
+    fn the_cut_holds_open_gaps_the_midpoint_closed() {
+        let (w, h) = (64usize, 64usize);
+        let half = 7usize;
+        let gap_x = 20 + half;
+        let (probe_y, interior_x) = (28usize, 23usize);
+
+        let mut separated_by_cut = 0usize;
+        let mut separated_by_midpoint = 0usize;
+        let mut fused_by_midpoint = 0usize;
+        let mut cases = 0usize;
+
+        for dark in [10u8, 20, 30, 40] {
+            for bright in [200u8, 220, 240] {
+                for passes in 1..=4 {
+                    let mut data = vec![bright; w * h];
+                    for y in 20..36 {
+                        data[y * w + 20..y * w + gap_x].fill(dark);
+                        data[y * w + gap_x + 1..y * w + gap_x + 1 + half].fill(dark);
+                    }
+                    blur(&mut data, w, h, passes);
+
+                    let shipped = counterfactual_map(&data, w, h, cut_at(CUT_NUM));
+                    let midpoint = counterfactual_map(&data, w, h, midpoint_cut);
+                    let gap = probe_y * w + gap_x;
+                    let interior = probe_y * w + interior_x;
+
+                    cases += 1;
+                    // Background at the gap is what keeps the two squares apart.
+                    separated_by_cut += usize::from(data[gap] >= shipped[gap]);
+                    separated_by_midpoint += usize::from(data[gap] >= midpoint[gap]);
+                    fused_by_midpoint += usize::from(data[gap] < midpoint[gap]);
+
+                    // The other half of the contract: eroding the gap open must not erode the
+                    // squares themselves away, at any contrast or PSF width in the sweep.
+                    assert!(
+                        data[interior] < shipped[interior],
+                        "square interior stopped being foreground at dark={dark} \
+                         bright={bright} passes={passes} ({} vs {})",
+                        data[interior],
+                        shipped[interior]
+                    );
+                }
+            }
+        }
+
+        assert!(
+            fused_by_midpoint > 0,
+            "premise gone: no case in the sweep fuses the pair at the midpoint, so this \
+             fixture family no longer exercises the failure the cut exists to fix"
+        );
+        assert!(
+            separated_by_cut > separated_by_midpoint,
+            "the shipped cut separates {separated_by_cut}/{cases} of the sweep and the midpoint \
+             separates {separated_by_midpoint}/{cases}: the cut is buying nothing here"
+        );
+        assert!(
+            separated_by_cut >= separated_by_midpoint,
+            "the shipped cut re-fused a pair the midpoint held open, which a lower cut cannot do"
+        );
+    }
+
+    /// The other side of the trade, bracketed. A one-pixel dark stroke under a two-pixel PSF
+    /// survives at [`CUT_NUM`]/[`CUT_DEN`] and is **lost** one twentieth lower, so this test
+    /// pins the shipped cut as the lowest one that still keeps a stroke this thin — which is
+    /// what the one-module borders of a small marker are made of.
+    ///
+    /// The stroke is placed in the same 3×3 tile neighbourhood as a solid dark block, so the
+    /// neighbourhood minimum comes from the block. Without it the stroke *is* the minimum and
+    /// the assertion degenerates into `nmin < nmin + something`, which holds for every cut.
+    #[test]
+    fn the_cut_is_the_lowest_that_keeps_a_one_pixel_dark_stroke() {
         let (w, h) = (64usize, 64usize);
         let mut data = vec![220u8; w * h];
         for y in 8..56 {
             data[y * w + 32] = 20;
+            data[y * w + 40..y * w + 48].fill(20);
         }
         blur(&mut data, w, h, 2);
 
-        let (_, map) = run_mode(ThresholdMode::TileMidExtreme, 8, 2, &data, w, h);
+        let (_, production) = run_mode(ThresholdMode::TileMidExtreme, 2, 2, &data, w, h);
+        let lower = counterfactual_map(&data, w, h, cut_at(CUT_NUM - 1));
+
+        let mut lost_one_lower = 0usize;
         for y in 16..48 {
             let idx = y * w + 32;
             assert!(
-                data[idx] < map[idx],
-                "stroke pixel at row {y} is background ({} vs {})",
+                data[idx] < production[idx],
+                "stroke row {y} is not foreground at the shipped cut ({} vs {})",
                 data[idx],
-                map[idx]
+                production[idx]
             );
+            lost_one_lower += usize::from(data[idx] >= lower[idx]);
+            // The block that supplies the neighbourhood minimum stays foreground either way.
+            let block = y * w + 44;
+            assert!(data[block] < production[block], "block row {y} lost");
         }
+        assert_eq!(
+            lost_one_lower,
+            32,
+            "the stroke survives a cut of {}/{CUT_DEN} too, so this fixture does not bracket \
+             the shipped cut from below and would not notice it being lowered",
+            CUT_NUM - 1
+        );
     }
 
     /// The sliding column accumulator and the [`ExactDiv`] reciprocal reproduce the exact

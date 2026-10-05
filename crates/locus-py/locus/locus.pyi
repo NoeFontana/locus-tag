@@ -523,7 +523,8 @@ class ThresholdMode(enum.IntEnum):
     """
     TileMidExtreme = ...
     r"""
-    Midpoint of the min/max over a 3x3 tile neighbourhood (every shipped profile).
+    A fixed fraction (9/20) of the min/max range over a 3x3 tile neighbourhood,
+    below the midpoint the name records (every shipped profile).
     """
     LocalMean = ...
     r"""
