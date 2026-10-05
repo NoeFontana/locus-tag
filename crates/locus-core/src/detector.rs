@@ -351,7 +351,13 @@ fn run_detection_pipeline<'ctx>(
             threshold_map,
             config.segmentation_connectivity == crate::config::SegmentationConnectivity::Eight,
             config.quad_min_area,
-            config.may_use_edlines(),
+            // EdLines is the only consumer of the full-frame label image, and it cannot run
+            // under declared distortion: its Huber IRLS line fit and Gauss-Newton solver
+            // assume Euclidean pixel geometry, so `Static` EdLines errors above and an
+            // `AdaptivePpb` high route degrades to ContourRdp in the straight-space
+            // extractor. Materialising the label image for a consumer that can never run is
+            // pure cost — `high_accuracy` paid it on every distorted frame.
+            config.may_use_edlines() && !has_distortion,
         );
 
         // 3. Quad Extraction (SoA). Distorted cameras run RDP in straight

@@ -731,19 +731,41 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         None => trace_boundary(arena, labels, img.width, img.height, sx, sy, label, cap),
     };
 
-    if contour.len() < 12 || contour_fill(&contour) < min_fill {
+    if contour.len() < 12 {
         return None;
     }
 
-    // Rectify the boundary in decimated-pixel units so downstream pixel
-    // thresholds (RDP epsilon, min edge length) still apply. Newton
-    // divergence is the only failure signal since `CameraModel::undistort`
-    // is infallible; we detect it by re-distorting and bailing on drift.
+    // Cheap rejections before the O(n log n) vertex selection and, on this path, before a
+    // single point is unprojected. Area and perimeter are both pixel-space quantities here, so
+    // the gate means the same thing at every field angle — unlike the post-simplification
+    // compactness test below, which compares a chart area against a pixel-space point count.
+    // Ragged texture outlines are long for their area and fail the quad compactness floor
+    // anyway; rejecting them at half that floor skips the work they would cost the most.
+    let fill = contour_fill(&contour);
+    let perimeter = contour.len() as f64;
+    if fill < min_fill
+        || ISOPERIMETRIC_SCALE * fill / (perimeter * perimeter) < 0.5 * MIN_QUAD_COMPACTNESS
+    {
+        return None;
+    }
+
+    // Simplify on the pixel lattice, then unproject the survivors.
+    //
+    // `chain_approximation` drops a point when its two adjacent segments are exactly
+    // collinear, which is a meaningful test only where the coordinates are integers: adjacent
+    // traced boundary points are a pixel apart, so a collinear triple gives a cross product of
+    // exactly zero. Rectified coordinates are real-valued, and the same test then compares a
+    // curvature residual against an absolute epsilon and keeps nearly every point — so running
+    // it first is both *more correct* and much cheaper, since simplification is what removes
+    // the staircase redundancy that would otherwise be unprojected point by point.
+    let simplified = chain_approximation(arena, &contour);
+
+    // Unproject into decimated-pixel units so downstream pixel thresholds still apply.
     let rectified = if C::IS_RECTIFIED {
-        contour
+        simplified
     } else {
-        let mut rect = BumpVec::with_capacity_in(contour.len(), arena);
-        for p in &contour {
+        let mut rect = BumpVec::with_capacity_in(simplified.len(), arena);
+        for p in &simplified {
             let xd = (p.x - scaled.cx) / scaled.fx;
             let yd = (p.y - scaled.cy) / scaled.fy;
             // Non-convergence and out-of-domain radii are rejected here, once, for the whole
@@ -758,9 +780,7 @@ fn extract_single_quad_with_camera<C: crate::camera::CameraModel>(
         rect
     };
 
-    let simple_contour = chain_approximation(arena, &rectified);
-    let perimeter = rectified.len() as f64;
-    let corners = select_dominant_vertices(arena, &simple_contour, 4)?;
+    let corners = select_dominant_vertices(arena, &rectified, 4)?;
 
     let mut reduced = BumpVec::new_in(arena);
     reduced.extend_from_slice(&corners);
