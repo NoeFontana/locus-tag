@@ -15,18 +15,31 @@ use bumpalo::collections::Vec as BumpVec;
 #[cfg(any(test, feature = "bench-internals"))]
 use rayon::prelude::*;
 
-/// A disjoint-set forest (Union-Find) with path compression and rank optimization.
+/// A disjoint-set forest (Union-Find) with path compression, attaching by **minimum index**.
+///
+/// Minimum-index attachment rather than by rank, which makes a set's root always its smallest
+/// member — so the forest is a function of the *set partition alone*, not of the order the
+/// unions happened to be applied in. Two consequences:
+///
+/// * **Determinism.** Component numbering follows scan order (topmost-leftmost first) instead
+///   of whichever index rank-balancing happened to pick.
+/// * **Parallelism.** Labelling can be striped: a worker that only unions runs within its own
+///   stripe only ever writes parent entries within that stripe, and the cross-stripe
+///   boundaries can be merged afterwards without changing the result. Rank attachment makes
+///   that impossible, because the roots would depend on the interleaving.
+///
+/// Rank attachment bounds tree height at O(log n); minimum-index attachment does not, so
+/// [`UnionFind::union`] compresses its inputs onto the new root as it goes — free, since both
+/// roots are already in hand, and it is what keeps [`UnionFind::parents`]'s walks short.
 pub struct UnionFind<'a> {
     parent: &'a mut [u32],
-    rank: &'a mut [u8],
 }
 
 impl<'a> UnionFind<'a> {
     /// Create a new UnionFind structure backed by the provided arena.
     pub fn new_in(arena: &'a Bump, size: usize) -> Self {
         let parent = arena.alloc_slice_fill_with(size, |i| i as u32);
-        let rank = arena.alloc_slice_fill_copy(size, 0u8);
-        Self { parent, rank }
+        Self { parent }
     }
 
     /// Read-only view of the parent array.
@@ -43,6 +56,15 @@ impl<'a> UnionFind<'a> {
         self.parent
     }
 
+    /// Mutable view of the parent array, for callers that drive the forest themselves.
+    ///
+    /// Striped labelling needs to hand disjoint sub-slices to several workers, which it does by
+    /// splitting this and wrapping each piece in a [`UnionFindSlice`].
+    #[inline]
+    pub fn parents_mut(&mut self) -> &mut [u32] {
+        self.parent
+    }
+
     /// Find the representative (root) of the set containing `i`.
     #[inline]
     pub fn find(&mut self, i: u32) -> u32 {
@@ -55,20 +77,82 @@ impl<'a> UnionFind<'a> {
     }
 
     /// Unite the sets containing `i` and `j`.
+    ///
+    /// The merged set keeps the smaller of the two roots, which by induction is the smallest
+    /// member of the union: each root was already its own set's minimum, so `min` of the two is
+    /// the minimum of the whole. That invariant is what makes the result independent of union
+    /// order — see [`UnionFind`].
     #[inline]
     pub fn union(&mut self, i: u32, j: u32) {
         let root_i = self.find(i);
         let root_j = self.find(j);
-        if root_i != root_j {
-            match self.rank[root_i as usize].cmp(&self.rank[root_j as usize]) {
-                std::cmp::Ordering::Less => self.parent[root_i as usize] = root_j,
-                std::cmp::Ordering::Greater => self.parent[root_j as usize] = root_i,
-                std::cmp::Ordering::Equal => {
-                    self.parent[root_i as usize] = root_j;
-                    self.rank[root_j as usize] += 1;
-                },
-            }
+        let (lo, hi) = if root_i <= root_j {
+            (root_i, root_j)
+        } else {
+            (root_j, root_i)
+        };
+        if lo != hi {
+            self.parent[hi as usize] = lo;
         }
+        // Compress the inputs onto the new root. Both roots are already resolved, so this costs
+        // two stores and no traversal, and it is what bounds the walks that minimum-index
+        // attachment would otherwise leave unbounded.
+        self.parent[i as usize] = lo;
+        self.parent[j as usize] = lo;
+    }
+}
+
+/// A [`UnionFind`] restricted to one contiguous range of ids.
+///
+/// Exists so labelling can be striped. A worker given rows `[y0, y1)` only ever unions runs
+/// from those rows, and — because [`UnionFind`] attaches by minimum index and no union has yet
+/// crossed the stripe's edges — every root it can reach is also inside the stripe. So its parent
+/// writes stay inside one contiguous sub-slice, and `S` workers over `S` disjoint sub-slices
+/// need no synchronisation and no `unsafe`. The cross-stripe row pairs are merged afterwards,
+/// on the whole array, and the result does not depend on the interleaving.
+///
+/// Ids are **absolute** run indices, as everywhere else; `base` translates them.
+pub struct UnionFindSlice<'a> {
+    parent: &'a mut [u32],
+    base: u32,
+}
+
+impl<'a> UnionFindSlice<'a> {
+    /// Wrap `parent` as the id range starting at `base`.
+    #[must_use]
+    pub fn new(parent: &'a mut [u32], base: u32) -> Self {
+        Self { parent, base }
+    }
+
+    /// [`UnionFind::find`], on absolute ids.
+    #[inline]
+    pub fn find(&mut self, i: u32) -> u32 {
+        let base = self.base;
+        let mut root = i;
+        while self.parent[(root - base) as usize] != root {
+            let grandparent = self.parent[(self.parent[(root - base) as usize] - base) as usize];
+            self.parent[(root - base) as usize] = grandparent;
+            root = grandparent;
+        }
+        root
+    }
+
+    /// [`UnionFind::union`], on absolute ids.
+    #[inline]
+    pub fn union(&mut self, i: u32, j: u32) {
+        let base = self.base;
+        let root_i = self.find(i);
+        let root_j = self.find(j);
+        let (lo, hi) = if root_i <= root_j {
+            (root_i, root_j)
+        } else {
+            (root_j, root_i)
+        };
+        if lo != hi {
+            self.parent[(hi - base) as usize] = lo;
+        }
+        self.parent[(i - base) as usize] = lo;
+        self.parent[(j - base) as usize] = lo;
     }
 }
 

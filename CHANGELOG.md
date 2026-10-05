@@ -238,6 +238,35 @@ left for its own change because deferring acceptance past verification on all th
 behavioural change to the **pinhole** route, which needs its own measured PR rather than a
 late amendment to this one.
 
+### Changed
+
+- **Segmentation was 65 % of the frame; it is now 45 % of a much shorter frame.** It is
+  camera-independent, so this lands on every dataset. Phase timers first, because the obvious
+  suspect was wrong: the threshold + RLE pixel scan is **7.6 %** of segmentation, and the other
+  92 % is run/component bookkeeping. The counts say why — a 1920x1080 frame averages **237k runs
+  resolving to 63k components, of which 940 survive `min_area`** (326k components at worst).
+  - **Describe the survivors, not everything.** `ComponentStats` is 56 bytes, so the stats
+    scatter was a `num_components`-sized array (3.5 MB per frame, 18 MB at worst) written at one
+    random offset per run — a cache miss per run, for data discarded 98.5 % of the time. Only
+    `pixel_count` decides survival, so the pass over every run now accumulates just that, into a
+    `u32` per component (253 KB, L2-resident); the full description runs over the survivors alone
+    (940 x 56 B, L1-resident). The counting sort that groups runs by component asked every run
+    the same question, so it is now the same pass.
+  - **Spatial moments are opt-in.** `accumulate_run` computed five integer moments per run —
+    fifteen multiplies and three divides — that nothing reads on the default path:
+    `compute_moment_shape` is gated on `quad_max_elongation` / `quad_min_density`, both `0.0` in
+    every shipped profile, and EdLines reads `m10`/`m01` only when it can run at all.
+  - **Union-find attaches by minimum index, not by rank.** A set's root is then always its
+    smallest member, so the forest is a function of the partition alone rather than of the order
+    unions were applied in. That buys determinism (component numbering follows scan order) and,
+    more importantly, parallelism.
+  - **Labelling is striped.** A worker given a row range only unions runs from those rows, and
+    because roots are minima it can only ever write parent entries inside its own contiguous id
+    range — so `S` workers take `S` disjoint sub-slices with no synchronisation and no `unsafe`.
+    The row pairs that straddle a stripe edge are merged afterwards on the whole array, and the
+    result does not depend on the interleaving. 32 rows per stripe gives ~34 stripes at 1080p,
+    several per worker, so rayon can balance rows of very different run density.
+
 #### Measured
 
 50 frames per hub, `standard`, pose mode Accurate, `--release --features
@@ -278,10 +307,33 @@ freedom at the high incidence angles those tags sit at. Proving that needs per-t
 between the two arms, which the harness does not expose; adding it is the follow-up, not an
 assertion.
 
-Latency is now dominated by a stage the lens never touches: segmentation is 8.59 ms of
-Brown-Conrady's 13.25 ms of instrumented spans (64.9 %), against quad extraction at 2.14 ms
-(down from 5.49 ms) and decode at 1.43 ms. Further distortion-path latency work has little left
-to take.
+Segmentation, which the lens never touches, was then the dominant stage at 8.59 ms of
+Brown-Conrady's 13.25 ms of instrumented spans (64.9 %). After the work above it is **4.53 ms**,
+and the frame is:
+
+| | `main` | now |
+| :-- | --: | --: |
+| Brown-Conrady hub | 17.96 ms | **9.73 ms** |
+| Kannala-Brandt hub | 16.50 ms | **8.51 ms** |
+
+Segmentation phase by phase, Brown-Conrady hub, measured with temporary timers inside
+`label_components_lsl_opts`:
+
+| phase | before | after |
+| :-- | --: | --: |
+| union | 3.219 ms | striped across workers |
+| stats | 1.779 ms | survivors only |
+| run grouping | 1.451 ms | fused with stats |
+| root resolution | 1.420 ms | shorter walks |
+| threshold + RLE scan | 0.647 ms | unchanged |
+| **total** | **8.52 ms** | **4.53 ms** |
+
+Every suite is bit-identical except `regression_board_hub`, whose six snapshots are re-blessed
+for a last-digit shift: minimum-index attachment renumbers some components, which changes the
+order the board LM accumulates its residuals in. Verified deterministic — three consecutive runs
+agree to the 17th digit — and confined to *mean* and *std* aggregates plus one p99 that moves
+from 0.4904113 deg to 0.4904126 deg; every other percentile, the tag coverage and the frame
+counts are unchanged. `regression_render_tag`, the byte-stable gate, is untouched.
 
 ## Released versions
 

@@ -14,6 +14,7 @@
 use crate::image::ImageView;
 use crate::segmentation::{ComponentStats, LabelResult, UnionFind};
 use bumpalo::Bump;
+use bumpalo::collections::Vec as BumpVec;
 use rayon::prelude::*;
 
 /// A 1D Run-Length Encoded (RLE) segment representing contiguous foreground pixels.
@@ -163,6 +164,55 @@ fn resolve_root(parent: &[u32], i: u32) -> u32 {
     }
     root
 }
+
+/// Union every vertically adjacent pair of runs between two rows.
+///
+/// Shared verbatim by the striped pass and the boundary merge, so the two cannot disagree about
+/// which pairs are adjacent. `prev` and `curr` are run-index ranges for rows `y - 1` and `y`,
+/// both already in ascending `start_x` order, which is what lets `p_idx` advance monotonically
+/// across the whole row instead of rescanning per run.
+#[inline]
+fn union_row_pair(
+    uf: &mut crate::segmentation::UnionFindSlice<'_>,
+    runs: &[RleSegment],
+    prev: core::ops::Range<usize>,
+    curr: core::ops::Range<usize>,
+    use_8_connectivity: bool,
+) {
+    let mut p_idx = prev.start;
+    for c_idx in curr {
+        let curr_run = &runs[c_idx];
+        if use_8_connectivity {
+            // 8-connectivity: overlap diagonally when prev.end_x >= curr.start_x and
+            // prev.start_x <= curr.end_x.
+            while p_idx < prev.end && runs[p_idx].end_x < curr_run.start_x {
+                p_idx += 1;
+            }
+            let mut temp_p = p_idx;
+            while temp_p < prev.end && runs[temp_p].start_x <= curr_run.end_x {
+                uf.union(curr_run.label, runs[temp_p].label);
+                temp_p += 1;
+            }
+        } else {
+            // 4-connectivity: strict column overlap.
+            while p_idx < prev.end && runs[p_idx].end_x <= curr_run.start_x {
+                p_idx += 1;
+            }
+            let mut temp_p = p_idx;
+            while temp_p < prev.end && runs[temp_p].start_x < curr_run.end_x {
+                uf.union(curr_run.label, runs[temp_p].label);
+                temp_p += 1;
+            }
+        }
+    }
+}
+
+/// Rows per stripe in the parallel union pass.
+///
+/// Small enough that a 1080-row frame yields ~34 stripes — several per worker, so rayon can
+/// balance rows of very different run density — and large enough that the serial boundary
+/// merges (one row pair per stripe edge) stay a rounding error.
+const ROWS_PER_UNION_STRIPE: usize = 32;
 
 /// Folds one run into its component's statistics.
 ///
@@ -409,45 +459,85 @@ pub fn label_components_lsl_opts<'a>(
     }
 
     let mut uf = UnionFind::new_in(arena, runs.len());
-    let mut curr_row_range = 0..0;
-    let mut i = 0;
 
-    while i < runs.len() {
-        let y = runs[i].y;
-        let start = i;
-        while i < runs.len() && runs[i].y == y {
-            i += 1;
-        }
-        let prev_row_range = curr_row_range;
-        curr_row_range = start..i;
+    // Row index -> first run index, by counting sort. The union pass needs to address rows
+    // directly (a stripe is a row range), and deriving the boundaries by scanning for `y`
+    // changes — what the serial loop did — cannot be done independently per stripe.
+    let row_start = arena.alloc_slice_fill_copy(img.height + 2, 0u32);
+    for run in runs {
+        row_start[run.y as usize + 1] += 1;
+    }
+    for y in 1..row_start.len() {
+        row_start[y] += row_start[y - 1];
+    }
+    let row_start: &[u32] = row_start;
+    let row_range = |y: usize| row_start[y] as usize..row_start[y + 1] as usize;
 
-        if y > 0 && !prev_row_range.is_empty() && runs[prev_row_range.start].y == y - 1 {
-            let mut p_idx = prev_row_range.start;
-            for c_idx in curr_row_range.clone() {
-                let curr = &runs[c_idx];
-                if use_8_connectivity {
-                    // 8-connectivity: [start_x, end_x)
-                    // overlap diagonally if prev.end_x >= curr.start_x and prev.start_x <= curr.end_x
-                    while p_idx < prev_row_range.end && runs[p_idx].end_x < curr.start_x {
-                        p_idx += 1;
-                    }
-                    let mut temp_p = p_idx;
-                    while temp_p < prev_row_range.end && runs[temp_p].start_x <= curr.end_x {
-                        uf.union(curr.label, runs[temp_p].label);
-                        temp_p += 1;
-                    }
-                } else {
-                    // 4-connectivity
-                    while p_idx < prev_row_range.end && runs[p_idx].end_x <= curr.start_x {
-                        p_idx += 1;
-                    }
-                    let mut temp_p = p_idx;
-                    while temp_p < prev_row_range.end && runs[temp_p].start_x < curr.end_x {
-                        uf.union(curr.label, runs[temp_p].label);
-                        temp_p += 1;
-                    }
-                }
+    // Stripe the row pairs. Within a stripe every union stays inside the stripe's own
+    // contiguous id range (see `UnionFindSlice`), so the workers write disjoint sub-slices of
+    // `parent` and need no synchronisation. The pairs that straddle a stripe edge are merged
+    // afterwards on the whole array, and because unions attach by minimum index the result does
+    // not depend on the order any of it happened in.
+    let mut bounds = BumpVec::new_in(arena);
+    let mut y0 = 0usize;
+    while y0 < img.height {
+        bounds.push(y0);
+        y0 += ROWS_PER_UNION_STRIPE;
+    }
+    bounds.push(img.height);
+
+    if rayon::current_num_threads() > 1 && bounds.len() > 2 {
+        // Scoped so the sub-slice borrows end before the boundary merge reclaims the whole
+        // array.
+        {
+            let mut stripes = BumpVec::new_in(arena);
+            let mut rest: &mut [u32] = uf.parents_mut();
+            let mut consumed = 0usize;
+            for w in bounds.windows(2) {
+                let end = row_start[w[1]] as usize;
+                let (head, tail) = rest.split_at_mut(end - consumed);
+                stripes.push((w[0], w[1], consumed as u32, head));
+                rest = tail;
+                consumed = end;
             }
+            stripes
+                .par_iter_mut()
+                .for_each(|(stripe_y0, stripe_y1, base, parent)| {
+                    let mut view = crate::segmentation::UnionFindSlice::new(parent, *base);
+                    // Row pairs strictly inside the stripe; `(*stripe_y0 - 1, *stripe_y0)` is a
+                    // boundary and is merged below.
+                    for y in (*stripe_y0 + 1)..*stripe_y1 {
+                        union_row_pair(
+                            &mut view,
+                            runs,
+                            row_range(y - 1),
+                            row_range(y),
+                            use_8_connectivity,
+                        );
+                    }
+                });
+        }
+        // Boundary merges, on the whole array: these are the only unions that may cross.
+        let mut all = crate::segmentation::UnionFindSlice::new(uf.parents_mut(), 0);
+        for w in &bounds[1..bounds.len() - 1] {
+            union_row_pair(
+                &mut all,
+                runs,
+                row_range(*w - 1),
+                row_range(*w),
+                use_8_connectivity,
+            );
+        }
+    } else {
+        let mut view = crate::segmentation::UnionFindSlice::new(uf.parents_mut(), 0);
+        for y in 1..img.height {
+            union_row_pair(
+                &mut view,
+                runs,
+                row_range(y - 1),
+                row_range(y),
+                use_8_connectivity,
+            );
         }
     }
 
