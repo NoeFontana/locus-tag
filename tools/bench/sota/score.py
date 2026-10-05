@@ -500,6 +500,17 @@ def score_euroc(runs_dir: Path) -> dict[str, Any]:
     # The reference is pooled from the detectors whose corners fit a plane among themselves;
     # corners biased per tag (OpenCV NONE/SUBPIX on Kalibr's 2-bit border: about 1.5 px)
     # would otherwise set it, and the verdict would depend on which runs share the directory.
+    #
+    # KNOWN GAP (2026-10-05): `names` is every run in the directory, so a Locus run also joins
+    # the pool whenever it is self-consistent -- which it always is, at ~0.28 px against the
+    # 1.0 px gate, while OpenCV NONE/SUBPIX at 1.2-1.7 px never does. The detector under test
+    # therefore helps define the presence set it is scored against, and the goal stated just
+    # above is not met: absolute EuRoC recall moves at the ~0.01 pp level with the number of
+    # Locus runs present, and more when many exploratory runs share the directory. Deltas
+    # measured within a single scoring pass are unaffected, which is how the reported numbers
+    # are produced. Closing this means filtering `LOCUS_PREFIX` out here, as the common-tag
+    # sets already do (see `_common` and `score_euroc`'s LOO set) -- that shifts every
+    # historical EuRoC figure, so it needs its own re-baselining pass.
     consistency = {n: _self_consistency(runs[n], perms[n]) for n in names}
     pool = [n for n in names if consistency[n] <= REFERENCE_MAX_SELF_ERROR_PX] or names
     st: dict[str, dict[str, float]] = {n: defaultdict(float) for n in names}
