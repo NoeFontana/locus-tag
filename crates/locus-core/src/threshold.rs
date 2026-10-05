@@ -8,8 +8,9 @@
 //! `0` means "never foreground". [`crate::config::ThresholdMode`] selects how
 //! the map is built:
 //! 1. **Tile-based** (`TileMidExtreme`, the default): one threshold per
-//!    `tile_size` tile from the min/max over its 3×3 tile neighbourhood, then
-//!    expanded to pixels. Cheap — stats are computed once per tile, not per
+//!    `tile_size` tile from the min/max over its 3×3 tile neighbourhood, cut at
+//!    [`CUT_NUM`]/[`CUT_DEN`] of the range rather than at the midpoint (see there),
+//!    then expanded to pixels. Cheap — stats are computed once per tile, not per
 //!    pixel — but the threshold follows the local *extremes*, which speckles
 //!    flat regions and lets a dark background fuse with a marker.
 //! 2. **Local mean** (`LocalMean`): a true per-pixel local mean over a
@@ -31,6 +32,33 @@ pub const NOISE_OFFSET_MIN: i32 = 2;
 /// (low-key exposure, long range) stop reaching the foreground at all, so a very noisy
 /// frame is better served by speckle the quad stage rejects than by missing markers.
 pub const NOISE_OFFSET_MAX: i32 = 20;
+
+/// Numerator of the cut [`ThresholdMode::TileMidExtreme`] places between the extremes of a
+/// tile's 3×3 neighbourhood: `threshold = min + CUT_NUM/CUT_DEN · (max - min)`.
+///
+/// The midpoint is the unbiased cut for an edge the optics resolved, and it is where this
+/// stage used to cut. It is the wrong cut for *topology*, because segmentation reads this map
+/// to decide which pixels are one marker. Two markers whose dark regions touch — diagonally
+/// adjacent ones on a calibration board, or any two whose blurred skirts overlap — are a
+/// single connected component at the midpoint, and nothing downstream can take them apart: a
+/// component is traced once and reduced to one quadrilateral. Cutting below the midpoint
+/// shrinks every dark region by a fraction of the blur width, which breaks those contacts.
+///
+/// How far below is a stated assumption about the thinnest dark stroke that must survive, and
+/// it is measured, not derived: the `standard` profile's recall over the SOTA benchmarks is
+/// flat from the midpoint down to about 0.45 on the suites that have no touching markers, and
+/// rises steeply on the ones that do (EuRoC cam_april 86.0 → 92.0 %, Liu4K 37.2 → 44.8 %,
+/// render-tag low-key 66 → 96 %, 2026-10-05). Below 0.45 small and low-contrast markers start
+/// to lose their one-module borders — render-tag 640 falls off at 0.40, tag16h5 at 0.42 — so
+/// the gains past it are not free and are not taken here. See
+/// `docs/explanation/architecture.md`.
+///
+/// Public because it is observable contract — it decides which markers are one component —
+/// not a private tuning knob.
+pub const CUT_NUM: u16 = 9;
+/// Denominator of [`CUT_NUM`]. Twenty keeps the cut exact in integer arithmetic for every
+/// `(min, max)` pair, so the map is bit-identical across targets.
+pub const CUT_DEN: u16 = 20;
 
 /// Minimum intensity range over a 3×3-tile neighbourhood for the centre tile to count as
 /// valid in [`ThresholdMode::TileMidExtreme`]. Telemetry-scoped: flat (invalid) tiles are
@@ -207,7 +235,8 @@ impl ThresholdEngine {
                         }
                     }
 
-                    t_row[tx] = ((u16::from(nmin) + u16::from(nmax)) >> 1) as u8;
+                    t_row[tx] =
+                        (u16::from(nmin) + CUT_NUM * u16::from(nmax - nmin) / CUT_DEN) as u8;
                 }
             });
 
@@ -833,6 +862,92 @@ mod tests {
         let mut map = vec![0u8; w * h];
         engine.apply_threshold_with_map(&arena, &img, &stats, &mut binary, &mut map);
         (binary, map)
+    }
+
+    /// Blur `data` in place with `passes` applications of the separable `[1, 2, 1]/4` kernel,
+    /// a stand-in for a lens point-spread function about one pixel wide per pass.
+    fn blur(data: &mut [u8], w: usize, h: usize, passes: usize) {
+        for _ in 0..passes {
+            let src = data.to_vec();
+            for y in 0..h {
+                let (ym, yp) = (y.saturating_sub(1), (y + 1).min(h - 1));
+                for x in 0..w {
+                    let (xm, xp) = (x.saturating_sub(1), (x + 1).min(w - 1));
+                    let at = |xx: usize, yy: usize| u32::from(src[yy * w + xx]);
+                    let hsum = at(xm, y) + 2 * at(x, y) + at(xp, y);
+                    let vsum = at(x, ym) + 2 * at(x, y) + at(x, yp);
+                    data[y * w + x] = ((hsum + vsum + 4) / 8) as u8;
+                }
+            }
+        }
+    }
+
+    /// The premise of [`CUT_NUM`]/[`CUT_DEN`]: two dark regions separated by a bright gap one
+    /// pixel wide must land on opposite sides of the cut from the gap, so segmentation sees
+    /// two markers rather than one.
+    ///
+    /// A gap narrower than the point-spread function never reaches the bright level — here its
+    /// peak comes out one grey level *below* the midpoint of the two levels, which is where
+    /// this stage used to cut, so the two regions fused and the pair was lost. The assertion is
+    /// two-sided: the gap must clear the shipped cut *and* sit below the midpoint, or the test
+    /// has stopped exercising the case it was written for.
+    #[test]
+    fn the_cut_holds_open_a_gap_the_lens_closed() {
+        let (w, h) = (64usize, 64usize);
+        let (dark, bright) = (20u8, 220u8);
+        let mut data = vec![bright; w * h];
+        for y in 16..48 {
+            data[y * w + 8..y * w + 30].fill(dark);
+            data[y * w + 31..y * w + 52].fill(dark);
+        }
+        blur(&mut data, w, h, 3);
+
+        let (_, map) = run_mode(ThresholdMode::TileMidExtreme, 8, 2, &data, w, h);
+        let midpoint = u16::midpoint(u16::from(dark), u16::from(bright));
+        let gap = 32 * w + 30;
+        assert!(
+            u16::from(data[gap]) < midpoint,
+            "gap peak {} is not below the midpoint {midpoint}: the premise does not hold",
+            data[gap]
+        );
+        assert!(
+            data[gap] >= map[gap],
+            "gap peak {} is foreground at threshold {}: the two regions stay fused",
+            data[gap],
+            map[gap]
+        );
+        for (label, idx) in [("left", 32 * w + 16), ("right", 32 * w + 44)] {
+            assert!(
+                data[idx] < map[idx],
+                "{label} region interior is not foreground ({} vs {})",
+                data[idx],
+                map[idx]
+            );
+        }
+    }
+
+    /// The other side of the same trade: a one-pixel dark stroke at full contrast must stay
+    /// foreground. Cutting further below the midpoint than [`CUT_NUM`]/[`CUT_DEN`] is what
+    /// costs small and low-contrast markers their one-module borders.
+    #[test]
+    fn the_cut_keeps_a_one_pixel_dark_stroke() {
+        let (w, h) = (64usize, 64usize);
+        let mut data = vec![220u8; w * h];
+        for y in 8..56 {
+            data[y * w + 32] = 20;
+        }
+        blur(&mut data, w, h, 2);
+
+        let (_, map) = run_mode(ThresholdMode::TileMidExtreme, 8, 2, &data, w, h);
+        for y in 16..48 {
+            let idx = y * w + 32;
+            assert!(
+                data[idx] < map[idx],
+                "stroke pixel at row {y} is background ({} vs {})",
+                data[idx],
+                map[idx]
+            );
+        }
     }
 
     /// The sliding column accumulator and the [`ExactDiv`] reciprocal reproduce the exact

@@ -7,6 +7,44 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **The dark/bright cut no longer sits on the midpoint of the tile extremes.**
+  `ThresholdMode::TileMidExtreme` thresholded at `(min + max) / 2` over a tile's 3x3
+  neighbourhood. That is the unbiased cut for an edge the optics resolved, and it is the wrong
+  cut for *topology*: segmentation reads this map to decide which pixels are one marker, and a
+  bright separation narrower than the point-spread function never reaches the bright level, so
+  two markers either side of it come out as one connected component. Nothing downstream can
+  take them apart — a component is traced once and reduced to one quadrilateral — so both
+  markers are lost. The cut is now at **9/20 of the range** (exact in integer arithmetic for
+  every `(min, max)` pair, so the map stays bit-identical across targets), which shrinks every
+  dark region by a fraction of the blur width and holds those separations open.
+  - On **EuRoC `cam_april`**, the only real-camera dataset in the suite, the board's tags are
+    separated from the connector squares by a strip that closes under motion blur and
+    obliquity; whole frames were resolving to a single black lattice. Recall **86.0 -> 92.0 %**
+    with precision rising 99.996 -> **100.000 %** (1450 frames, 27.6k markers, `standard`,
+    1 thread). Leave-one-tag-out corner error is unchanged (0.2833 -> 0.2846 px median), which
+    is the expected result: the cut decides topology, corners come from the grey-scale
+    refinement either way.
+  - Elsewhere: **Liu4K 37.2 -> 44.8 %** recall (precision 100 %), **render-tag low-key
+    66 -> 96 %**, **render-tag raw-pipeline 96 -> 100 %**, AprilGrid 99.09 -> 99.11 %,
+    ICRA random 99.99 -> 100.00 %. Every other benchmark holds at its previous recall. One
+    extra false positive appears on the 100-frame tag16h5 set (precision 100 -> 99 %); it is a
+    single borderline candidate that flickers with the constant (absent at 9.4/20, present at
+    9.6/20), not a systematic loss.
+  - Latency improves where the cut removes background speckle: Liu4K 155.9 -> 139.2 ms,
+    render-tag 4K 78.7 -> 72.6 ms, 1080p 20.5 -> 19.4 ms, tag16h5 19.7 -> 18.5 ms (1 thread).
+  - How far below the midpoint is a stated assumption about the thinnest *dark* stroke that
+    must survive, and it was measured rather than derived: the full scoreboard is flat from the
+    midpoint down to 9/20 and then starts costing small and low-contrast markers their
+    one-module borders (render-tag 640 falls off at 8/20, tag16h5 at 8.4/20). The constant is
+    documented at `threshold::CUT_NUM`.
+  - Board snapshots moved: the shift is deterministic (three consecutive runs agree bit for
+    bit) and comes from marginal tags entering and leaving the board solve. It is mixed and
+    small — AprilGrid tag coverage 0.99148 -> 0.99167, mean board rotation error +1.8 %,
+    p95 -5.7 %, p99 +20 % at 0.17 degrees; ChArUco mean translation error -6.6 %. The
+    `high_accuracy` AprilGrid arm improves markedly (mean rotation -39 %, p99 -78 %) while
+    losing two of 150 frames to `frames_no_estimate`. ICRA's fixture corner RMSE improves
+    0.1312 -> 0.1048 px. **Every render-tag snapshot is byte-identical.**
+
 - **The distortion path is one pipeline again, and ~20 % faster.** `decode_batch_soa_with_camera_inner`
   was a second implementation of the decode loop; that duplication was the *mechanism* by which
   every corner-estimator change since #426 reached the pinhole route only. It is gone. The loop
