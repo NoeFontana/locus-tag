@@ -211,8 +211,12 @@ const RADIAL_TABLE_KNOTS: usize = 1024;
 /// corner accuracy this pipeline has ever measured, and three orders inside
 /// [`MAX_UNDISTORT_RESIDUAL`]. The build *verifies* this rather than assuming it, at the knot
 /// midpoints where Hermite interpolation is worst, and shrinks its domain until it holds.
+///
+/// Public because it is observable contract, not a private tuning knob: it is the bound
+/// [`RadialInverseTable::build_in`] guarantees and the value
+/// [`RadialInverseTable::verified_error`] is meaningful against.
 #[cfg(feature = "non_rectified")]
-const RADIAL_TABLE_BUDGET: f64 = 1e-7;
+pub const RADIAL_TABLE_BUDGET: f64 = 1e-7;
 
 /// Domain shrink factor applied when a built table misses [`RADIAL_TABLE_BUDGET`].
 #[cfg(feature = "non_rectified")]

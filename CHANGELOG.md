@@ -5,7 +5,67 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Changed
+
+- **The distortion path is one pipeline again, and ~20 % faster.** `decode_batch_soa_with_camera_inner`
+  was a second implementation of the decode loop; that duplication was the *mechanism* by which
+  every corner-estimator change since #426 reached the pinhole route only. It is gone. The loop
+  now holds the decode policy once — scale retries, decode-first ordering with refined-quad
+  verification, border-ring budgets, the near-miss recovery search — and routes image reads
+  through a `Warp`: the identity for a rectified camera, which monomorphizes to the ROI-cached
+  SIMD kernels unchanged, and the lens for a distorted one, whose working plane is the ideal
+  plane where a marker's edges are straight. `decoder.rs` is net shorter despite gaining the
+  trait, two implementations and a per-candidate sampler.
+  - The one genuinely route-dependent operation is corner refinement, because refinement fits
+    edges and an edge is straight only in the frame the warp defines. `Warp::refine_seed` and
+    `Warp::refine_erf` supply it, so **decode-first ordering now applies on the straight-space
+    route too**: refinement runs on the tags that decode (~32 per frame on the Brown-Conrady
+    hub) instead of on every surviving candidate (~250).
+  - **BREAKING:** `decode_batch_soa_with_camera` takes the frame's `RadialInverseTable`.
+    `RoiCache::disabled()` is new.
+
+- **The radial inverse is tabulated once per frame instead of solved per point.** Straight-space
+  extraction unprojected 83,623 contour points per frame at 122.7 ns each — 29 % of that
+  stage's CPU, almost all of it iteration and division (up to eight radial Newton steps, a 2-D
+  polish, a verification evaluation; around nine `f64` divisions). Because the radial forward
+  map is odd, `scale(s) = r_u/r_d` is smooth in `s = r_d²`, so `RadialInverseTable` indexes by
+  `s` and a lookup needs **no square root and no division**. Tangential terms are then removed
+  by a fixed point that reuses the same table, also division-free. Accuracy is *verified at
+  build time* at the knot midpoints against a 1e-7 normalized budget (achieved 2.1e-7 px
+  Brown-Conrady, 2.0e-5 px Kannala-Brandt), and the table is also structurally safer than the
+  solve it replaces: knots are filled outward from the origin along one monotone branch, so a
+  lookup cannot reach the mirrored far branch that an unguarded polish converges onto.
+  Outside the verified domain lookups fall back to the iterative solve.
+
 ### Fixed
+
+- **Every quad edge was being line-fitted twice.** `refine_corner_with_camera` fitted both of a
+  corner's edges, so each of the four edges was fitted once as corner `i`'s trailing edge and
+  again as corner `i+1`'s leading edge — with *identical arguments*, making the dedupe exact
+  rather than an approximation. This was the single most expensive part of distorted extraction,
+  48.8 % of its CPU time.
+
+- **The +0.5 px lattice expansion was wrongly gated off for distorted cameras**, on the grounds
+  that straight-space RDP corners are "projectively exact intersections, not integer-midpoint
+  artifacts". That mistakes where the vertices were *chosen* for what the contour *is*: the
+  boundary trace follows the dark side of the outline, and unprojecting a stepped contour is a
+  smooth map, which locally is affine and therefore carries the half-pixel bias straight
+  through. Under decode-first it stops being cosmetic, since those corners are the quad the bit
+  grid is sampled through.
+
+- **The contour was rectified before being simplified.** `chain_approximation` rejects a point
+  when its two adjacent segments are exactly collinear — meaningful only on the pixel lattice,
+  where adjacent traced points are an integer apart. On the rectified contour the same test
+  compared a curvature residual against an absolute epsilon and kept nearly every point. It now
+  simplifies first and unprojects the survivors, which is both more correct and much cheaper.
+  The reordering also lets this route use the pinhole extractor's cheap compactness pre-gate,
+  with area and perimeter both in pixel space so the gate means the same thing at every field
+  angle.
+
+- **`high_accuracy` built a full-frame label image on every distorted frame for a consumer that
+  can never run.** `may_use_edlines()` did not know about distortion, and EdLines is
+  geometrically incompatible with a declared lens.
+
 
 - **`regression_distortion_hub` measured the pinhole detector on fisheye frames.** The harness's
   `build_intrinsics` falls through to `CameraIntrinsics::new` (no distortion) whenever the
@@ -116,6 +176,51 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   distortion-aware extraction and decode routes. It now runs as its own step, and it gained a
   test asserting the sub-pixel pass is live on the distorted route (mutation-checked: disabling
   the pass fails it).
+
+#### Measured
+
+50 frames per hub, `standard`, pose mode Accurate, `--release --features
+bench-internals,non_rectified`, `--test-threads=1`, rayon default pool, `RAYON_NUM_THREADS`
+unset, AMD EPYC-Milan x86_64 4c/8t via `lscpu` in the same session. Latency is a serialised
+A-B-B-A comparison of `Detector::detect` on an otherwise idle host; within-arm spread was
+0.07–0.15 ms.
+
+| | before | after |
+| :-- | --: | --: |
+| Brown-Conrady recall | 89.40 % | **91.39 %** |
+| Brown-Conrady precision | 99.671 % | **99.825 %** |
+| Brown-Conrady corner RMSE | 0.2335 px | **0.2163 px** |
+| Brown-Conrady reprojection RMSE | 0.2246 px | **0.2038 px** |
+| Brown-Conrady translation p99 | 0.3989 m | **0.3470 m** |
+| Brown-Conrady latency | 17.96 ms | **14.27 ms** |
+| Kannala-Brandt precision | 99.145 % | **99.231 %** |
+| Kannala-Brandt corner RMSE | 0.3056 px | **0.2847 px** |
+| Kannala-Brandt reprojection RMSE | 0.2899 px | **0.2720 px** |
+| Kannala-Brandt translation p99 | 0.0439 m | **0.0347 m** |
+| Kannala-Brandt rotation p99 | 1.2669 deg | **1.0241 deg** |
+| Kannala-Brandt latency | 16.50 ms | **13.55 ms** |
+
+Every pinhole regression suite is **bit-identical** throughout: `regression_render_tag`,
+`regression_render_tag_robustness`, `regression_board_hub`, `regression_icra2020`,
+`regression_euroc`, `regression_pose_consistency_roc`, `regression_straight_space`.
+
+Not improved, and recorded rather than hidden: mean Hamming rose (Brown-Conrady 0.0196 →
+0.1053, Kannala-Brandt 0.0069 → 0.0557) and Brown-Conrady's rotation p90/p99 rose (0.2687 →
+0.2977 deg, 98.57 → 103.01 deg). About half of the Hamming rise is the shared acceptance policy
+— returning on the first match that clears its budget rather than searching all three scale
+retries for the lowest-Hamming one, worth 0.0182 → 0.0844 on its own at unchanged recall and
+corner accuracy — and keeping a cross-scale best for one route only would reintroduce exactly
+the divergence this work removed. The rest, and the rotation percentiles, are consistent with
+composition: corner RMSE *improved* 7 % while recall rose 2 pp, so the newly recovered tags are
+not degrading the corner population, and rotation is this pipeline's ill-conditioned degree of
+freedom at the high incidence angles those tags sit at. Proving that needs per-tag matching
+between the two arms, which the harness does not expose; adding it is the follow-up, not an
+assertion.
+
+Latency is now dominated by a stage the lens never touches: segmentation is 8.59 ms of
+Brown-Conrady's 13.25 ms of instrumented spans (64.9 %), against quad extraction at 2.14 ms
+(down from 5.49 ms) and decode at 1.43 ms. Further distortion-path latency work has little left
+to take.
 
 ## Released versions
 
