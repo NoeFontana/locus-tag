@@ -46,27 +46,16 @@ use locus_core::{
 /// `rich_truth.json` — these datasets do not use `provenance.json`. This
 /// suite exercises the undistortion path only.
 fn run_distortion_hub_test(config_name: &str, family: TagFamily) {
-    let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") else {
-        println!("Skipping distortion hub tests. Set LOCUS_HUB_DATASET_DIR to run.");
+    let Some(dataset_path) = common::datasets::HUB.require(config_name) else {
         return;
     };
-
-    let root = common::resolve_hub_root(&hub_dir);
-    let dataset_path = root.join(config_name);
-
-    assert!(
-        dataset_path.exists(),
-        "hub dataset subdir '{}' not found under '{}' \
-         (LOCUS_HUB_DATASET_DIR was set — refusing to silent-skip; \
-         re-run `tools/cli.py bench prepare` to refresh the cache)",
-        config_name,
-        root.display()
-    );
-
-    let Some(provider) = HubProvider::new(&dataset_path) else {
-        println!("Failed to load dataset: {config_name}. Skipping.");
-        return;
-    };
+    let provider = HubProvider::new(&dataset_path).unwrap_or_else(|| {
+        panic!(
+            "hub dataset '{config_name}' exists at '{}' but would not load -- a corrupt or \
+             half-fetched cache, not a missing one",
+            dataset_path.display()
+        )
+    });
 
     // Distortion datasets embed intrinsics + distortion coefficients in
     // rich_truth.json. Build a fallback for the options in case any image
@@ -181,43 +170,33 @@ fn regression_hub_distortion_kannala_brandt() {
 fn test_adaptive_ppb_falls_back_under_distortion() {
     let _guard = common::telemetry::init("test_adaptive_ppb_falls_back_under_distortion");
 
-    let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") else {
-        println!("Skipping: set LOCUS_HUB_DATASET_DIR to run.");
-        return;
-    };
-
     let config_name = "aprilgrid_distortion_brown_conrady_v1_1920x1080";
-    let root = common::resolve_hub_root(&hub_dir);
-    let dataset_path = root.join(config_name);
-    assert!(
-        dataset_path.exists(),
-        "hub dataset subdir '{}' not found under '{}' \
-         (LOCUS_HUB_DATASET_DIR was set — refusing to silent-skip; \
-         re-run `tools/cli.py bench prepare` to refresh the cache)",
-        config_name,
-        root.display()
-    );
+    let Some(dataset_path) = common::datasets::HUB.require(config_name) else {
+        return;
+    };
+    let provider = HubProvider::new(&dataset_path).unwrap_or_else(|| {
+        panic!(
+            "hub dataset '{config_name}' exists at '{}' but would not load -- a corrupt or \
+             half-fetched cache, not a missing one",
+            dataset_path.display()
+        )
+    });
 
-    let Some(provider) = HubProvider::new(&dataset_path) else {
-        println!("Failed to load dataset. Skipping.");
-        return;
-    };
-
-    let entries = match load_rich_truth_entries(&dataset_path.join("rich_truth.json")) {
-        Some(e) => e,
-        None => {
-            println!("Failed to load rich_truth.json. Skipping.");
-            return;
-        },
-    };
-    let Some(first_entry) = entries.first() else {
-        println!("rich_truth.json is empty. Skipping.");
-        return;
-    };
-    let Some(k) = first_entry.k_matrix else {
-        println!("rich_truth.json missing k_matrix. Skipping.");
-        return;
-    };
+    // Past this point the dataset is present, so every one of these is a broken premise
+    // rather than an absent one: skipping would assert the fallback behaviour this test
+    // exists to check, while reporting success.
+    let truth = dataset_path.join("rich_truth.json");
+    let entries = load_rich_truth_entries(&truth)
+        .unwrap_or_else(|| panic!("{} did not parse", truth.display()));
+    let first_entry = entries
+        .first()
+        .unwrap_or_else(|| panic!("{} is empty", truth.display()));
+    let k = first_entry.k_matrix.unwrap_or_else(|| {
+        panic!(
+            "{} has no k_matrix; this suite needs intrinsics",
+            truth.display()
+        )
+    });
     let intrinsics = build_intrinsics(
         k,
         first_entry.distortion_model.as_deref(),

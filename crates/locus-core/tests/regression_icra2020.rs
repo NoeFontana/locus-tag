@@ -565,13 +565,23 @@ macro_rules! test_icra {
         #[test]
         fn $name() {
             let _guard = common::telemetry::init(stringify!($name));
-            if let Some(provider) = IcraProvider::new($subfolder, $img_subfolder) {
-                let snapshot = provider.name().to_string();
-                let harness = RegressionHarness::new(snapshot);
-                apply_profile(harness, $profile)
-                    .with_families(vec![$family])
-                    .run(provider);
-            }
+            // `require` fails unless the absence is declared, so the `None` arm is now a
+            // deliberate opt-out rather than the silent default it used to be.
+            let Some(_root) = common::datasets::ICRA.require($subfolder) else {
+                return;
+            };
+            let provider = IcraProvider::new($subfolder, $img_subfolder).unwrap_or_else(|| {
+                panic!(
+                    "ICRA subfolder '{}' is present but yielded no provider: ground truth or \
+                     images are missing inside it, so this suite would have verified nothing",
+                    $subfolder
+                )
+            });
+            let snapshot = provider.name().to_string();
+            let harness = RegressionHarness::new(snapshot);
+            apply_profile(harness, $profile)
+                .with_families(vec![$family])
+                .run(provider);
         }
     };
     (IGNORED $name:ident, $subfolder:expr, $img_subfolder:expr, $profile:expr, $family:expr) => {
@@ -656,13 +666,23 @@ test_icra!(
 #[test]
 fn regression_icra_forward_highaccuracy() {
     let _guard = common::telemetry::init("regression_icra_forward_highaccuracy");
-    if let Some(provider) = IcraProvider::new("forward", Some("pure_tags_images")) {
-        let snapshot = "icra_forward_pure_default_highaccuracy".to_string();
-        RegressionHarness::new(snapshot)
-            .with_profile("high_accuracy")
-            .with_families(vec![TagFamily::AprilTag36h11])
-            .run(provider);
-    }
+    // Same gate as `test_icra!`: these two are hand-written rather than macro-generated,
+    // which is exactly how they kept the silent-skip after the macro lost it -- and they are
+    // two of the three ICRA snapshots that drifted unnoticed.
+    let Some(_root) = common::datasets::ICRA.require("forward") else {
+        return;
+    };
+    let provider = IcraProvider::new("forward", Some("pure_tags_images")).unwrap_or_else(|| {
+        panic!(
+            "ICRA 'forward' is present but yielded no provider for pure_tags_images: ground truth \
+             or images are missing inside it"
+        )
+    });
+    let snapshot = "icra_forward_pure_default_highaccuracy".to_string();
+    RegressionHarness::new(snapshot)
+        .with_profile("high_accuracy")
+        .with_families(vec![TagFamily::AprilTag36h11])
+        .run(provider);
 }
 
 // ── Grid (icra_grid fixture, checkerboard corners) ────────────────────────────
@@ -670,11 +690,21 @@ fn regression_icra_forward_highaccuracy() {
 #[test]
 fn regression_icra_forward_grid() {
     let _guard = common::telemetry::init("regression_icra_forward_grid");
-    if let Some(provider) = IcraProvider::new("forward", Some("checkerboard_corners_images")) {
-        let snapshot = "icra_forward_checkerboard_grid".to_string();
-        RegressionHarness::new(snapshot)
-            .with_profile_json(ICRA_GRID_JSON)
-            .with_families(vec![TagFamily::AprilTag36h11])
-            .run(provider);
-    }
+    // Same gate as `test_icra!`: these two are hand-written rather than macro-generated,
+    // which is exactly how they kept the silent-skip after the macro lost it -- and they are
+    // two of the three ICRA snapshots that drifted unnoticed.
+    let Some(_root) = common::datasets::ICRA.require("forward") else {
+        return;
+    };
+    let provider = IcraProvider::new("forward", Some("checkerboard_corners_images")).unwrap_or_else(|| {
+        panic!(
+            "ICRA 'forward' is present but yielded no provider for checkerboard_corners_images: ground truth \
+             or images are missing inside it"
+        )
+    });
+    let snapshot = "icra_forward_checkerboard_grid".to_string();
+    RegressionHarness::new(snapshot)
+        .with_profile_json(ICRA_GRID_JSON)
+        .with_families(vec![TagFamily::AprilTag36h11])
+        .run(provider);
 }
