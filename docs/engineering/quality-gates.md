@@ -24,6 +24,19 @@ uv run --group types --group bench --group etl basedpyright
 # Always use --release for Rust tests as debug performance is non-representative.
 cargo nextest run --release --all-features
 
+# 4b. The dataset-backed suites, in one command (~25 s warm, 50 tests).
+# This is the inverse of the default filter: exactly what step 4 holds back. It needs no
+# environment — `common::datasets` defaults to the in-tree caches `tests/data/hub_cache`
+# and `tests/data/icra2020` — and it must run in release, because unoptimised these are
+# ~19x slower (10.12 s against 0.52 s for one render-tag case) and the suites refuse a
+# debug build rather than let that cost pass unnoticed.
+#
+# These suites FAIL when their dataset is absent. That is deliberate: until 2026-10-06 they
+# returned early and reported "8 passed; finished in 0.00s", and PR #449 moved render-tag
+# corner RMSE 25-40 % under that cover with every gate green. If you genuinely have no
+# datasets, say so with LOCUS_ALLOW_MISSING_DATASETS=1 and accept that they verify nothing.
+cargo nextest run --profile datasets --release --features bench-internals
+
 # Build the Python extension in release mode before running Python tests.
 uv run maturin develop --release --manifest-path crates/locus-py/Cargo.toml
 uv run pytest
@@ -72,6 +85,14 @@ PYTHONPATH=. uv run --group bench tools/cli.py bench real --hub-config charuco_g
 # Reads tests/data/icra2020 by default; LOCUS_ICRA_DATASET_DIR relocates it.
 TRACY_NO_INVARIANT_CHECK=1 cargo test --release --test regression_icra2020 --features bench-internals -- --test-threads=1
 
+# Environment, for reference:
+#   LOCUS_HUB_DATASET_DIR / LOCUS_ICRA_DATASET_DIR  relocate a dataset; unset uses the
+#       in-tree default, and a value that is not a directory is an error rather than a
+#       silent fallback.
+#   LOCUS_ALLOW_MISSING_DATASETS=1  let the dataset suites report success without data.
+#       Only for environments that have none (CI sets it on the snapshot-parity step).
+#   LOCUS_ALLOW_DEBUG_DATASET_TESTS=1  permit an unoptimised run, e.g. under a debugger.
+#
 # 4. Snapshot Verification & Update
 # Runs all regression suites (ICRA, Hub tag-level, Hub board-level, distortion)
 # and dictionary parity tests. LOCUS_HUB_DATASET_DIR is required by

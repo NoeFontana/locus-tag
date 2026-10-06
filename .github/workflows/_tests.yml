@@ -107,12 +107,19 @@ jobs:
         run: cargo test --doc --all-features
 
       # Neither step above reaches a `regression_*` binary: `.config/nextest.toml`'s
-      # `default-filter` excludes `binary(~regression)`, the `ci` profile inherits it, and
-      # `cargo insta test` defaults to `--test-runner auto`, which picks the installed
-      # nextest and so inherits the same filter. Most of those suites need a dataset and
-      # cannot run here, but `regression_straight_space` is **synthetic** — it renders its
-      # own fisheye and polynomial scenes — so it is a free gate, and it is the only CI
-      # coverage of the distortion-aware extraction and decode routes.
+      # `default-filter` excludes `binary(~regression)` and the `ci` profile inherits it.
+      #
+      # `cargo insta test` below is the exception, and this comment used to claim it was not:
+      # it does NOT inherit that filter. Verified by running it with a deliberately empty
+      # dataset dir — it prints `Running tests/regression_board_hub.rs` and executes the
+      # suite. Those runs did nothing and reported success, because the suites returned early
+      # when their dataset was absent; `common::datasets` now makes that a failure, so the
+      # step has to say out loud that CI fetches no datasets. What it still verifies is every
+      # snapshot that needs no dataset.
+      #
+      # `regression_straight_space` is **synthetic** — it renders its own fisheye and
+      # polynomial scenes — so it is a free gate, and it is the only CI coverage of the
+      # distortion-aware extraction and decode routes.
       # Features named explicitly rather than `--all-features`: this suite needs exactly
       # `non_rectified` (the distortion models) and `bench-internals` (its synthetic
       # renderer), and `--all-features` would also enable `tracy`, whose client aborts a
@@ -122,6 +129,12 @@ jobs:
         run: cargo test --release --features bench-internals,non_rectified --test regression_straight_space
 
       - name: Verify Snapshot Parity
+        # CI fetches no datasets (they are GBs and some need a token), so the dataset-backed
+        # suites cannot be gates here. They are gates locally — see `docs/engineering/
+        # quality-gates.md` — and this variable is the declaration that they are not gates in
+        # this job, rather than a silent early return inside each test.
+        env:
+          LOCUS_ALLOW_MISSING_DATASETS: 1
         run: cargo insta test --release --all-features --features bench-internals --check
 
   # Independent of the host test build — split out so it runs in parallel

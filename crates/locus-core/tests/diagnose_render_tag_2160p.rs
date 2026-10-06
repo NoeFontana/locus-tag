@@ -22,7 +22,6 @@ mod render_tag_2160p {
     use bumpalo::Bump;
     use common::hub::HubProvider;
     use common::hub::load_detect_options;
-    use common::resolve_hub_root;
     use locus_core::Detector;
     use locus_core::DetectorConfig;
     use locus_core::ImageView;
@@ -38,15 +37,13 @@ mod render_tag_2160p {
 
     #[test]
     fn high_accuracy_2160p_decodes_largest_components() {
-        let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") else {
-            println!("Skipping: LOCUS_HUB_DATASET_DIR is unset.");
+        // `optional`, not `require`: this binary reports findings rather than gating a
+        // change, and unlike the `regression_*` binaries it is not excluded from the default
+        // nextest filter, so it runs where no dataset exists. It may legitimately do nothing.
+        let Some(dataset_path) = common::datasets::HUB.optional(HUB_CONFIG) else {
+            println!("Skipping: no hub dataset for {HUB_CONFIG}");
             return;
         };
-        let dataset_path = resolve_hub_root(&hub_dir).join(HUB_CONFIG);
-        if !dataset_path.is_dir() {
-            println!("Skipping: dataset not in cache: {HUB_CONFIG}");
-            return;
-        }
 
         let provider = HubProvider::new(&dataset_path)
             .expect("hub provider should construct from a populated dataset directory");

@@ -737,19 +737,21 @@ pub struct RenderTagOpts {
 
 /// Run a render-tag regression against a hub dataset.
 ///
-/// Skips gracefully when `LOCUS_HUB_DATASET_DIR` is unset or the dataset is
-/// missing from the cache. Snapshot name: `hub_{provider.name}{snapshot_suffix}`.
+/// Resolves the dataset through [`super::datasets::HUB`], which defaults to the in-tree cache
+/// and **fails** when the data is absent rather than reporting a pass for a suite that ran
+/// nothing. Snapshot name: `hub_{provider.name}{snapshot_suffix}`.
 pub fn run_render_tag_test(config_name: &str, family: TagFamily, opts: RenderTagOpts) {
-    let Ok(hub_dir) = std::env::var("LOCUS_HUB_DATASET_DIR") else {
-        println!("Skipping hub tests. Set LOCUS_HUB_DATASET_DIR to run.");
+    let Some(dataset_path) = super::datasets::HUB.require(config_name) else {
         return;
     };
-
-    let dataset_path = super::resolve_hub_root(&hub_dir).join(config_name);
-    let Some(provider) = HubProvider::new(&dataset_path) else {
-        println!("Dataset not in cache: {config_name}. Skipping.");
-        return;
-    };
+    let provider = HubProvider::new(&dataset_path).unwrap_or_else(|| {
+        panic!(
+            "hub dataset '{config_name}' is at '{}' but would not load; the directory exists, \
+             so this is a corrupt or half-fetched cache rather than a missing one -- re-fetch \
+             with `cargo xtask data fetch hub --force`",
+            dataset_path.display()
+        )
+    });
 
     let mut options = load_detect_options(&dataset_path);
     options.families = vec![family];

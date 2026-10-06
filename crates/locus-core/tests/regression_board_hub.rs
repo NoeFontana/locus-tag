@@ -671,15 +671,7 @@ mod tests {
     }
 
     fn resolve_hub_dataset(config_name: &str) -> Option<std::path::PathBuf> {
-        let hub_dir = std::env::var("LOCUS_HUB_DATASET_DIR")
-            .unwrap_or_else(|_| "tests/data/hub_cache".to_string());
-        let dataset_path = common::resolve_hub_root(&hub_dir).join(config_name);
-        if dataset_path.exists() {
-            Some(dataset_path)
-        } else {
-            println!("Skipping {config_name}: dataset not found at {dataset_path:?}");
-            None
-        }
+        common::datasets::HUB.require(config_name)
     }
 
     #[test]

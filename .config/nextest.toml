@@ -14,3 +14,18 @@ slow-timeout = { period = "15s", terminate-after = 2 }
 # The 'ci' profile inherits from 'default' and adds CI-specific behavior.
 # It uses the default-filter above.
 retries = 1
+
+# The inverse of `default`: exactly the suites `default` holds back. It exists so the
+# dataset-backed gates are one command rather than a remembered filterset plus two env
+# vars -- `common::datasets` now defaults both paths to the in-tree caches, so
+#
+#     cargo nextest run --profile datasets --release --features bench-internals
+#
+# is the whole invocation. Run it in release: unoptimised these suites are ~19x slower
+# (10.12 s against 0.52 s for a single render-tag case), and `common::datasets` refuses a
+# debug build rather than letting that cost go unnoticed.
+[profile.datasets]
+default-filter = "binary(~regression) or binary(~robustness)"
+# Several of these legitimately take tens of seconds on 4K frames; the 15 s of `default`
+# would report them as slow on every run.
+slow-timeout = { period = "90s", terminate-after = 3 }

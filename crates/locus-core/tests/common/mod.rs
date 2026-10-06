@@ -73,19 +73,14 @@ pub fn resolve_dataset_root() -> Option<PathBuf> {
         );
     }
 
-    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let candidates = [
-        manifest_dir.join("tests/fixtures/icra2020"),
-        manifest_dir.join("../../tests/data/icra2020"),
-    ];
-
-    for p in &candidates {
-        if p.is_dir() {
-            return Some(p.clone());
-        }
-    }
-
-    None
+    // The in-tree `tests/fixtures/icra2020` stub is deliberately NOT a candidate. It holds a
+    // single image pair and none of the `forward` / `circle` / `random` subfolders, so when it
+    // came first it shadowed the real dataset: `IcraProvider::new` looked for `forward` inside
+    // the stub, found nothing, returned `None`, and the three forward regressions reported
+    // `ok` having run nothing -- with `tests/data/icra2020/forward` present all along.
+    // `FixtureProvider` resolves that stub directly, so nothing needs it here.
+    let root = datasets::ICRA.root();
+    root.is_dir().then_some(root)
 }
 
 /// Resolves the hub dataset root directory.
@@ -166,6 +161,7 @@ pub fn load_ground_truth(
     Some(map)
 }
 
+pub mod datasets;
 pub mod euroc;
 pub mod hub;
 pub mod telemetry;
