@@ -2626,7 +2626,7 @@ conditions.</p>
 <tr>
 <td style="text-align: left;"><a href="recall-quad-icra/">Recall, quad extraction &amp; ICRA</a></td>
 <td style="text-align: left;">ACTIVE</td>
-<td style="text-align: left;">No static <code>(extraction, refinement)</code> pair wins both regimes; PPB adaptive routing does. Real-image recall was limited by the segmentation model: the filled-blob gates and the refine-before-decode latency are resolved in <code>standard</code> (decode-first with the dark-ring check, #433; 4-connectivity, gates off, clipped and gross corners, #436 — EuRoC recall 20.9 → 86.0 %). Still open: the min/max-midpoint threshold cut (Liu4K 37 % vs aruco_nano 66 %) and a merge-robust quad seed.</td>
+<td style="text-align: left;">No static <code>(extraction, refinement)</code> pair wins both regimes; PPB adaptive routing does. Real-image recall was limited by the segmentation model: the filled-blob gates and the refine-before-decode latency are resolved in <code>standard</code> (decode-first with the dark-ring check, #433; 4-connectivity, gates off, clipped and gross corners, #436 — EuRoC recall 20.9 → 86.0 %). The min/max-<em>midpoint</em> cut was the next limit and is resolved: the tile cut moved to 179/400 (0.4475) of the neighbourhood range (#449), taking EuRoC 86.0 → 92.1 % and Liu4K 37.2 → 44.6 %. Still open: a merge-robust quad seed, and the seeded split that would let the cut erode for topology without eroding small markers out of existence (the measured 99.6 % / 74.6 % frontier).</td>
 </tr>
 </tbody>
 </table>
