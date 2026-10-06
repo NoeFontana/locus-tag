@@ -2779,6 +2779,19 @@ uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </s
 <span class="c1"># Always use --release for Rust tests as debug performance is non-representative.</span>
 cargo<span class="w"> </span>nextest<span class="w"> </span>run<span class="w"> </span>--release<span class="w"> </span>--all-features
 
+<span class="c1"># 4b. The dataset-backed suites, in one command (~25 s warm, 50 tests).</span>
+<span class="c1"># This is the inverse of the default filter: exactly what step 4 holds back. It needs no</span>
+<span class="c1"># environment — `common::datasets` defaults to the in-tree caches `tests/data/hub_cache`</span>
+<span class="c1"># and `tests/data/icra2020` — and it must run in release, because unoptimised these are</span>
+<span class="c1"># ~19x slower (10.12 s against 0.52 s for one render-tag case) and the suites refuse a</span>
+<span class="c1"># debug build rather than let that cost pass unnoticed.</span>
+<span class="c1">#</span>
+<span class="c1"># These suites FAIL when their dataset is absent. That is deliberate: until 2026-10-06 they</span>
+<span class="c1"># returned early and reported &quot;8 passed; finished in 0.00s&quot;, and PR #449 moved render-tag</span>
+<span class="c1"># corner RMSE 25-40 % under that cover with every gate green. If you genuinely have no</span>
+<span class="c1"># datasets, say so with LOCUS_ALLOW_MISSING_DATASETS=1 and accept that they verify nothing.</span>
+cargo<span class="w"> </span>nextest<span class="w"> </span>run<span class="w"> </span>--profile<span class="w"> </span>datasets<span class="w"> </span>--release<span class="w"> </span>--features<span class="w"> </span>bench-internals
+
 <span class="c1"># Build the Python extension in release mode before running Python tests.</span>
 uv<span class="w"> </span>run<span class="w"> </span>maturin<span class="w"> </span>develop<span class="w"> </span>--release<span class="w"> </span>--manifest-path<span class="w"> </span>crates/locus-py/Cargo.toml
 uv<span class="w"> </span>run<span class="w"> </span>pytest
@@ -2816,6 +2829,14 @@ uv<span class="w"> </span>run<span class="w"> </span>--group<span class="w"> </s
 <span class="c1"># Reads tests/data/icra2020 by default; LOCUS_ICRA_DATASET_DIR relocates it.</span>
 <span class="nv">TRACY_NO_INVARIANT_CHECK</span><span class="o">=</span><span class="m">1</span><span class="w"> </span>cargo<span class="w"> </span><span class="nb">test</span><span class="w"> </span>--release<span class="w"> </span>--test<span class="w"> </span>regression_icra2020<span class="w"> </span>--features<span class="w"> </span>bench-internals<span class="w"> </span>--<span class="w"> </span>--test-threads<span class="o">=</span><span class="m">1</span>
 
+<span class="c1"># Environment, for reference:</span>
+<span class="c1">#   LOCUS_HUB_DATASET_DIR / LOCUS_ICRA_DATASET_DIR  relocate a dataset; unset uses the</span>
+<span class="c1">#       in-tree default, and a value that is not a directory is an error rather than a</span>
+<span class="c1">#       silent fallback.</span>
+<span class="c1">#   LOCUS_ALLOW_MISSING_DATASETS=1  let the dataset suites report success without data.</span>
+<span class="c1">#       Only for environments that have none (CI sets it on the snapshot-parity step).</span>
+<span class="c1">#   LOCUS_ALLOW_DEBUG_DATASET_TESTS=1  permit an unoptimised run, e.g. under a debugger.</span>
+<span class="c1">#</span>
 <span class="c1"># 4. Snapshot Verification &amp; Update</span>
 <span class="c1"># Runs all regression suites (ICRA, Hub tag-level, Hub board-level, distortion)</span>
 <span class="c1"># and dictionary parity tests. LOCUS_HUB_DATASET_DIR is required by</span>
