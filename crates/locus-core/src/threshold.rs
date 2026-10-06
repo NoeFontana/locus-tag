@@ -50,7 +50,9 @@ pub const NOISE_OFFSET_MAX: i32 = 20;
 /// rises steeply on the ones that do (EuRoC cam_april 86.0 → 92.0 %, Liu4K 37.2 → 44.8 %,
 /// render-tag low-key 66 → 96 %, 2026-10-05). Below 0.45 small and low-contrast markers start
 /// to lose their one-module borders — render-tag 640 falls off at 0.40, tag16h5 at 0.42 — so
-/// the gains past it are not free and are not taken here. See
+/// the gains past it are not free and are not taken here. Every fraction in this paragraph is
+/// **nominal**, as the sweep labelled it; it truncated, so none of them is the cut it realized,
+/// which is what the paragraph after next is about and why this constant is not 0.45. See
 /// `docs/explanation/pipeline.md`.
 ///
 /// The cut is applied with rounding, not truncation. A truncated `CUT_NUM·range/CUT_DEN`
@@ -59,15 +61,42 @@ pub const NOISE_OFFSET_MAX: i32 = 20;
 /// border. At a range of 2 it reaches the whole fraction: the threshold would equal the
 /// neighbourhood minimum, and a `pixel < threshold` rule makes that tile background entirely.
 ///
+/// Which is why this is 0.4475 and not the 0.45 the frontier above reads at: **the sweep that
+/// measured that frontier was truncated too**, so its fractions are nominal, not realized. A
+/// strict `pixel < threshold` rule puts the faithful integer cut for a fraction at
+/// `ceil(fraction·range)`; averaged over the 8-bit ranges, truncation lands 0.95 grey levels
+/// under that and rounding 0.45 under it. Rounding a nominal 0.45 therefore moves the realized
+/// cut *up* by half a level and off the measured point, which costs 0.4 pp of EuRoC recall and
+/// 0.7 pp of Liu4K on its own — the whole regression is that half level.
+///
+/// Half a level back down is `0.5/range` of fraction, so **no constant recovers it exactly**.
+/// Truncation's realized fraction depends on the range — that dependence is the defect being
+/// removed — and the suites do not share a range distribution: the median neighbourhood range
+/// is 107 on EuRoC and 86 on Liu4K, so they do not want the same correction. What a constant
+/// *can* do is land on the same integer cut for most of the data, and 0.4475 is the value that
+/// does: it reproduces the truncated cut on 81 % of EuRoC tile neighbourhoods and 76 % of
+/// Liu4K's, against 47 % and 45 % for 0.45.
+///
+/// Measured, it recovers EuRoC exactly — 92.05 %, against 92.05 truncated and 91.65 at 0.45 —
+/// and two thirds of Liu4K: 44.56 %, against 44.80 and 44.06. The shortfall is that range
+/// dependence and not a mis-derivation; Liu4K's lower ranges want a larger correction, and
+/// 0.4450 does reach it (45.01 %) at the cost of one ICRA-forward tag. The frontier continues
+/// below this point, as it always did. 0.4475 is where it stops being free.
+///
 /// Public because it is observable contract — it decides which markers are one component —
 /// not a private tuning knob.
-pub const CUT_NUM: u16 = 9;
-/// Denominator of [`CUT_NUM`]. Twenty expresses the measured frontier at the granularity it
-/// was measured on (0.05 steps) and halves exactly, so the rounded cut below needs no wider
-/// arithmetic than the `u16` the tile loop already multiplies in. The cut is *not* exact for
-/// most ranges — `9·range` is a multiple of 20 only one time in twenty — but it is integer
-/// throughout, so the map is bit-identical across targets and SIMD widths.
-pub const CUT_DEN: u16 = 20;
+pub const CUT_NUM: u16 = 179;
+/// Denominator of [`CUT_NUM`]. Four hundred is twenty times the 0.05 grid the frontier was
+/// swept on, which re-denominates that sweep exactly — `(180·range + 200)/400` equals
+/// `(9·range + 10)/20` for every 8-bit range, so the coarse grid is still readable on this one
+/// — while resolving the half grey level that separates a truncated cut from a rounded one.
+/// That correction is `0.5/range`, about 0.003 at the ranges this stage sees (median
+/// neighbourhood range 107 on EuRoC, 86 on Liu4K), so a denominator of 20 cannot express the
+/// measured point at all: the nearest it can say is 0.45, which is the regression. Four
+/// hundred still halves exactly, so the rounded cut needs no wider arithmetic than the `u16`
+/// the tile loop already multiplies in. The cut is *not* exact for most ranges, but it is
+/// integer throughout, so the map is bit-identical across targets and SIMD widths.
+pub const CUT_DEN: u16 = 400;
 
 /// A mis-tuned cut must be a compile error, not a frame with no foreground in it: the tile
 /// loop multiplies in `u16` and divides by [`CUT_DEN`], and a numerator above the denominator
@@ -1017,6 +1046,12 @@ mod tests {
         map
     }
 
+    /// One twentieth of the range, as a numerator over [`CUT_DEN`]: the grid the frontier
+    /// around [`CUT_NUM`] was swept on, and the step the brackets below are stated at. A bracket
+    /// written as `CUT_NUM - 1` would silently stop bracketing anything the moment the cut was
+    /// re-denominated onto a finer grid, which is exactly what happened to it.
+    const BRACKET_STEP: u16 = CUT_DEN / 20;
+
     /// The cut this stage ships, as a `(nmin, nmax)` rule.
     fn cut_at(num: u16) -> impl Fn(u8, u8) -> u8 {
         move |nmin, nmax| {
@@ -1179,7 +1214,7 @@ mod tests {
         blur(&mut data, w, h, 2);
 
         let (_, production) = run_mode(ThresholdMode::TileMidExtreme, 2, 2, &data, w, h);
-        let lower = counterfactual_map(&data, w, h, cut_at(CUT_NUM - 1));
+        let lower = counterfactual_map(&data, w, h, cut_at(CUT_NUM - BRACKET_STEP));
 
         let mut lost_one_lower = 0usize;
         for y in 16..48 {
@@ -1200,7 +1235,41 @@ mod tests {
             32,
             "the stroke survives a cut of {}/{CUT_DEN} too, so this fixture does not bracket \
              the shipped cut from below and would not notice it being lowered",
-            CUT_NUM - 1
+            CUT_NUM - BRACKET_STEP
+        );
+    }
+
+    /// The cut is **rounded**, and that is worth a test rather than a comment: the same half
+    /// grey level has now been lost twice — once by truncating `CUT_NUM·range/CUT_DEN`, and
+    /// once by carrying a fraction that had been *measured* under truncation into the rounded
+    /// form unchanged. Each time it cost 0.4 pp of EuRoC recall, and neither time did anything
+    /// fail. So: over every 8-bit range the shipped offset must stay within half a grey level
+    /// of the exact fractional cut, and must show no systematic lean. That pins rounding
+    /// uniquely — truncation leans half a level low, and the `ceil` that would make a strict
+    /// `pixel < threshold` rule exactly faithful leans half a level high.
+    #[test]
+    fn the_cut_is_rounded_and_leans_neither_way() {
+        let cut = cut_at(CUT_NUM);
+        let mut sum = 0.0f64;
+        let mut worst = 0.0f64;
+        for range in 0..=u8::MAX {
+            // `nmin` is zero, so the threshold *is* the offset the fraction contributes.
+            let deviation = f64::from(cut(0, range))
+                - f64::from(CUT_NUM) * f64::from(range) / f64::from(CUT_DEN);
+            sum += deviation;
+            worst = worst.max(deviation.abs());
+        }
+        let lean = sum / (f64::from(u16::from(u8::MAX)) + 1.0);
+        assert!(
+            worst <= 0.5,
+            "the cut is {worst:.4} grey levels off the exact fraction at its worst, so it is \
+             not a rounded cut"
+        );
+        assert!(
+            lean.abs() < 0.05,
+            "the cut leans {lean:+.4} grey levels over the 8-bit ranges; truncation leans \
+             -0.50 and ceil +0.50, so this is a biased cut and CUT_NUM no longer means the \
+             fraction the frontier was measured at"
         );
     }
 
