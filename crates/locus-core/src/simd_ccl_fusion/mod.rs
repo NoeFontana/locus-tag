@@ -14,6 +14,7 @@
 use crate::image::ImageView;
 use crate::segmentation::{ComponentStats, LabelResult, UnionFind};
 use bumpalo::Bump;
+use bumpalo::collections::Vec as BumpVec;
 use rayon::prelude::*;
 
 /// A 1D Run-Length Encoded (RLE) segment representing contiguous foreground pixels.
@@ -164,6 +165,55 @@ fn resolve_root(parent: &[u32], i: u32) -> u32 {
     root
 }
 
+/// Union every vertically adjacent pair of runs between two rows.
+///
+/// Shared verbatim by the striped pass and the boundary merge, so the two cannot disagree about
+/// which pairs are adjacent. `prev` and `curr` are run-index ranges for rows `y - 1` and `y`,
+/// both already in ascending `start_x` order, which is what lets `p_idx` advance monotonically
+/// across the whole row instead of rescanning per run.
+#[inline]
+fn union_row_pair(
+    uf: &mut crate::segmentation::UnionFindSlice<'_>,
+    runs: &[RleSegment],
+    prev: core::ops::Range<usize>,
+    curr: core::ops::Range<usize>,
+    use_8_connectivity: bool,
+) {
+    let mut p_idx = prev.start;
+    for c_idx in curr {
+        let curr_run = &runs[c_idx];
+        if use_8_connectivity {
+            // 8-connectivity: overlap diagonally when prev.end_x >= curr.start_x and
+            // prev.start_x <= curr.end_x.
+            while p_idx < prev.end && runs[p_idx].end_x < curr_run.start_x {
+                p_idx += 1;
+            }
+            let mut temp_p = p_idx;
+            while temp_p < prev.end && runs[temp_p].start_x <= curr_run.end_x {
+                uf.union(curr_run.label, runs[temp_p].label);
+                temp_p += 1;
+            }
+        } else {
+            // 4-connectivity: strict column overlap.
+            while p_idx < prev.end && runs[p_idx].end_x <= curr_run.start_x {
+                p_idx += 1;
+            }
+            let mut temp_p = p_idx;
+            while temp_p < prev.end && runs[temp_p].start_x < curr_run.end_x {
+                uf.union(curr_run.label, runs[temp_p].label);
+                temp_p += 1;
+            }
+        }
+    }
+}
+
+/// Rows per stripe in the parallel union pass.
+///
+/// Small enough that a 1080-row frame yields ~34 stripes — several per worker, so rayon can
+/// balance rows of very different run density — and large enough that the serial boundary
+/// merges (one row pair per stripe edge) stay a rounding error.
+const ROWS_PER_UNION_STRIPE: usize = 32;
+
 /// Folds one run into its component's statistics.
 ///
 /// Every term is order-independent (min / max / integer sum) except
@@ -172,7 +222,7 @@ fn resolve_root(parent: &[u32], i: u32) -> u32 {
 /// the previous implementation's first-encounter branch picked. A run is never
 /// empty, so `pixel_count == 0` is a reliable "untouched" marker.
 #[inline]
-fn accumulate_run(stats: &mut ComponentStats, run: &RleSegment) {
+fn accumulate_run(stats: &mut ComponentStats, run: &RleSegment, need_moments: bool) {
     if stats.pixel_count == 0 {
         stats.first_pixel_x = run.start_x;
         stats.first_pixel_y = run.y;
@@ -182,7 +232,14 @@ fn accumulate_run(stats: &mut ComponentStats, run: &RleSegment) {
     stats.min_y = stats.min_y.min(run.y);
     stats.max_y = stats.max_y.max(run.y);
     stats.pixel_count += u32::from(run.end_x - run.start_x);
-    // Accumulate spatial moments using closed-form per-run sums.
+    // Spatial moments, closed-form per run — and opt-in, because they are the expensive part
+    // of this function (fifteen multiplies and three divides) and every consumer is optional.
+    // `compute_moment_shape` is gated on `quad_max_elongation` / `quad_min_density`, both `0.0`
+    // in every shipped profile, and EdLines reads `m10`/`m01` only on a route that can run at
+    // all when the full-frame label image is built.
+    if !need_moments {
+        return;
+    }
     // Run covers x in [a, b) exclusive (end_x is exclusive).
     let a = u64::from(run.start_x);
     let b = u64::from(run.end_x);
@@ -345,12 +402,15 @@ pub fn label_components_lsl<'a>(
     use_8_connectivity: bool,
     min_area: u32,
 ) -> LabelResult<'a> {
+    // `true, true`: the benchmark and test entry point asks for everything, so a caller that
+    // reads moments or the label image is never surprised by a missing field.
     label_components_lsl_opts(
         arena,
         img,
         threshold_map,
         use_8_connectivity,
         min_area,
+        true,
         true,
     )
 }
@@ -370,6 +430,7 @@ pub fn label_components_lsl_opts<'a>(
     use_8_connectivity: bool,
     min_area: u32,
     build_label_image: bool,
+    need_moments: bool,
 ) -> LabelResult<'a> {
     // Runs come out in scan order with `label` already set to the global index
     // the Union-Find uses as its id. Both extractors produce byte-identical
@@ -398,45 +459,85 @@ pub fn label_components_lsl_opts<'a>(
     }
 
     let mut uf = UnionFind::new_in(arena, runs.len());
-    let mut curr_row_range = 0..0;
-    let mut i = 0;
 
-    while i < runs.len() {
-        let y = runs[i].y;
-        let start = i;
-        while i < runs.len() && runs[i].y == y {
-            i += 1;
-        }
-        let prev_row_range = curr_row_range;
-        curr_row_range = start..i;
+    // Row index -> first run index, by counting sort. The union pass needs to address rows
+    // directly (a stripe is a row range), and deriving the boundaries by scanning for `y`
+    // changes — what the serial loop did — cannot be done independently per stripe.
+    let row_start = arena.alloc_slice_fill_copy(img.height + 2, 0u32);
+    for run in runs {
+        row_start[run.y as usize + 1] += 1;
+    }
+    for y in 1..row_start.len() {
+        row_start[y] += row_start[y - 1];
+    }
+    let row_start: &[u32] = row_start;
+    let row_range = |y: usize| row_start[y] as usize..row_start[y + 1] as usize;
 
-        if y > 0 && !prev_row_range.is_empty() && runs[prev_row_range.start].y == y - 1 {
-            let mut p_idx = prev_row_range.start;
-            for c_idx in curr_row_range.clone() {
-                let curr = &runs[c_idx];
-                if use_8_connectivity {
-                    // 8-connectivity: [start_x, end_x)
-                    // overlap diagonally if prev.end_x >= curr.start_x and prev.start_x <= curr.end_x
-                    while p_idx < prev_row_range.end && runs[p_idx].end_x < curr.start_x {
-                        p_idx += 1;
-                    }
-                    let mut temp_p = p_idx;
-                    while temp_p < prev_row_range.end && runs[temp_p].start_x <= curr.end_x {
-                        uf.union(curr.label, runs[temp_p].label);
-                        temp_p += 1;
-                    }
-                } else {
-                    // 4-connectivity
-                    while p_idx < prev_row_range.end && runs[p_idx].end_x <= curr.start_x {
-                        p_idx += 1;
-                    }
-                    let mut temp_p = p_idx;
-                    while temp_p < prev_row_range.end && runs[temp_p].start_x < curr.end_x {
-                        uf.union(curr.label, runs[temp_p].label);
-                        temp_p += 1;
-                    }
-                }
+    // Stripe the row pairs. Within a stripe every union stays inside the stripe's own
+    // contiguous id range (see `UnionFindSlice`), so the workers write disjoint sub-slices of
+    // `parent` and need no synchronisation. The pairs that straddle a stripe edge are merged
+    // afterwards on the whole array, and because unions attach by minimum index the result does
+    // not depend on the order any of it happened in.
+    let mut bounds = BumpVec::new_in(arena);
+    let mut y0 = 0usize;
+    while y0 < img.height {
+        bounds.push(y0);
+        y0 += ROWS_PER_UNION_STRIPE;
+    }
+    bounds.push(img.height);
+
+    if rayon::current_num_threads() > 1 && bounds.len() > 2 {
+        // Scoped so the sub-slice borrows end before the boundary merge reclaims the whole
+        // array.
+        {
+            let mut stripes = BumpVec::new_in(arena);
+            let mut rest: &mut [u32] = uf.parents_mut();
+            let mut consumed = 0usize;
+            for w in bounds.windows(2) {
+                let end = row_start[w[1]] as usize;
+                let (head, tail) = rest.split_at_mut(end - consumed);
+                stripes.push((w[0], w[1], consumed as u32, head));
+                rest = tail;
+                consumed = end;
             }
+            stripes
+                .par_iter_mut()
+                .for_each(|(stripe_y0, stripe_y1, base, parent)| {
+                    let mut view = crate::segmentation::UnionFindSlice::new(parent, *base);
+                    // Row pairs strictly inside the stripe; `(*stripe_y0 - 1, *stripe_y0)` is a
+                    // boundary and is merged below.
+                    for y in (*stripe_y0 + 1)..*stripe_y1 {
+                        union_row_pair(
+                            &mut view,
+                            runs,
+                            row_range(y - 1),
+                            row_range(y),
+                            use_8_connectivity,
+                        );
+                    }
+                });
+        }
+        // Boundary merges, on the whole array: these are the only unions that may cross.
+        let mut all = crate::segmentation::UnionFindSlice::new(uf.parents_mut(), 0);
+        for w in &bounds[1..bounds.len() - 1] {
+            union_row_pair(
+                &mut all,
+                runs,
+                row_range(*w - 1),
+                row_range(*w),
+                use_8_connectivity,
+            );
+        }
+    } else {
+        let mut view = crate::segmentation::UnionFindSlice::new(uf.parents_mut(), 0);
+        for y in 1..img.height {
+            union_row_pair(
+                &mut view,
+                runs,
+                row_range(y - 1),
+                row_range(y),
+                use_8_connectivity,
+            );
         }
     }
 
@@ -470,8 +571,6 @@ pub fn label_components_lsl_opts<'a>(
     // is still one `find` pass fewer than the previous implementation, because
     // the fill below reads `comp` instead of resolving again).
     let comp = arena.alloc_slice_fill_copy(runs.len(), 0u32);
-    let stats_by_slot =
-        arena.alloc_slice_fill_copy(num_components as usize, ComponentStats::default());
     let parallel = rayon::current_num_threads() > 1;
 
     if parallel {
@@ -480,7 +579,17 @@ pub fn label_components_lsl_opts<'a>(
         });
     }
 
-    // ---- Stats accumulation ---------------------------------------------
+    // ---- Survivor selection ----------------------------------------------
+    // Only `pixel_count` decides whether a component clears `min_area`, and almost none do:
+    // measured over the Brown-Conrady hub, a frame averages 237k runs resolving to 63k
+    // components (327k at worst) of which **940** survive. Describing all of them first and
+    // discarding 98.5 % afterwards meant a `num_components`-sized scatter over the 56-byte
+    // `ComponentStats` — 3.5 MB per frame, 18 MB on the worst frame — one random write per run,
+    // which is a cache miss per run.
+    //
+    // A `u32` per component is 253 KB instead, small enough to stay in L2, and the full
+    // description then runs over the survivors alone: 940 x 56 B = 53 KB, L1-resident.
+    let counts = arena.alloc_slice_fill_copy(num_components as usize, 0u32);
     for (i, run) in runs.iter().enumerate() {
         let c = if parallel {
             comp[i]
@@ -497,34 +606,42 @@ pub fn label_components_lsl_opts<'a>(
             comp[i] = c;
             c
         };
-        accumulate_run(&mut stats_by_slot[c as usize], run);
+        counts[c as usize] += u32::from(run.end_x - run.start_x);
     }
     let comp: &[u32] = comp;
 
     // ---- Final labelling -------------------------------------------------
-    let mut component_stats = Vec::with_capacity(num_components as usize);
+    // Labels are assigned in ascending slot order exactly as before, so which label a
+    // component receives is unchanged.
     let slot_to_final_label = arena.alloc_slice_fill_copy(num_components as usize, 0u32);
     let mut next_label = 1u32;
-
-    for (c, s) in stats_by_slot.iter().enumerate() {
-        if s.pixel_count >= min_area {
-            component_stats.push(*s);
+    for (c, &n) in counts.iter().enumerate() {
+        if n >= min_area {
             slot_to_final_label[c] = next_label;
             next_label += 1;
         }
     }
     let slot_to_final_label: &[u32] = slot_to_final_label;
+    let kept = (next_label - 1) as usize;
 
+    // ---- Describe the survivors, and group their runs --------------------
+    // One pass doing both. The counting sort's histogram asks every run the same question the
+    // stats accumulation does — "is your component kept?" — so they share it. Runs are still
+    // visited in index order, which is what `first_pixel_x` / `first_pixel_y` depend on, so
+    // every surviving component's stats are bit-identical to the all-components version.
+    //
     // Group the surviving components' runs by final label, keeping scan order (a counting
     // sort): `trace_component` paints a component from its runs alone.
-    let kept = (next_label - 1) as usize;
+    let stats_by_label = arena.alloc_slice_fill_copy(kept, ComponentStats::default());
     let offsets = arena.alloc_slice_fill_copy(kept + 1, 0u32);
-    for &c in comp {
+    for (run, &c) in runs.iter().zip(comp) {
         let label = slot_to_final_label[c as usize] as usize;
         if label > 0 {
+            accumulate_run(&mut stats_by_label[label - 1], run, need_moments);
             offsets[label] += 1;
         }
     }
+    let component_stats = stats_by_label.to_vec();
     for l in 1..=kept {
         offsets[l] += offsets[l - 1];
     }
