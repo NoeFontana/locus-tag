@@ -7,6 +7,167 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **The dark/bright cut no longer sits on the midpoint of the tile extremes.**
+  `ThresholdMode::TileMidExtreme` thresholded at `(min + max) / 2` over a tile's 3x3
+  neighbourhood. That is the unbiased cut for an edge the optics resolved, and it is the wrong
+  cut for *topology*: segmentation reads this map to decide which pixels are one marker, and a
+  bright separation narrower than the point-spread function never reaches the bright level, so
+  two markers either side of it come out as one connected component. Nothing downstream can
+  take them apart — a component is traced once and reduced to one quadrilateral — so both
+  markers are lost. The cut is now at **179/400 (0.4475) of the range**, which shrinks every
+  dark region by a fraction of the blur width and holds those separations open.
+  - The cut is applied with **rounding**, not truncation. Truncating `9 * range / 20` biases the
+    cut downward by up to one grey level, and the bias is proportionally largest where the
+    range is smallest — the low-contrast tiles where erosion is most likely to cost a marker
+    its border, i.e. exactly backwards from what the cut is for. At a range of 2 it reached the
+    whole fraction: the threshold equalled the neighbourhood minimum, and under a
+    `pixel < threshold` rule that tile could never hold foreground at all, where the old
+    midpoint still admitted its darkest pixel. The constant is integer throughout, so the map
+    stays bit-identical across targets and SIMD widths, but it is **not** exact for most
+    ranges.
+  - **The fraction reads 0.4475 and not 0.45 because the frontier sweep that chose it was
+    itself truncated.** Every path of the foreground test is a strict `pixel < threshold`
+    (scalar, AVX2, NEON), so the faithful integer cut for a fraction is `ceil(fraction *
+    range)`; averaged over the 8-bit ranges, truncation lands 0.95 grey levels under that and
+    rounding 0.45 under it. Rounding a nominal 0.45 therefore moves the realized cut *up* by
+    half a grey level, off the point that was measured — and that half level is the entire
+    regression it caused. Half a level back down is `0.5/range` of fraction, about 0.003 at the
+    ranges this stage sees, which is why the denominator moved 20 -> 400: no coarser grid can
+    write the number down, and re-denominating is exact, so the swept grid stays readable on
+    the new one (`(180 * range + 200) / 400` equals `(9 * range + 10) / 20` for every 8-bit
+    range). No constant reproduces truncation exactly — truncation's realized fraction depends
+    on the range, which is the defect being removed — but 0.4475 is the constant that lands on
+    the same integer cut for most of the data the frontier was measured on: **81 % of EuRoC
+    tile neighbourhoods and 76 % of Liu4K's, against 47 % and 45 % for 0.45**. It was derived
+    before it was run. Measured, it recovers EuRoC **exactly** — 92.05 %, against the 92.05 the
+    truncated cut scored and 91.65 at 0.45 — and **two thirds of Liu4K**: 44.56 %, against 44.80
+    and 44.06. That shortfall is the range dependence itself rather than a mis-derivation.
+    Liu4K's neighbourhoods are lower-contrast (median range 86 against EuRoC's 107) and so want
+    a larger correction than any one constant can give them while also giving EuRoC its own.
+  - On **EuRoC `cam_april`**, the only real-camera dataset in the suite, the board's tags are
+    separated from the connector squares by a strip that closes under motion blur and
+    obliquity; whole frames were resolving to a single black lattice. Recall
+    **86.02 -> 92.05 %** with precision rising 99.996 -> **100.000 %** (1450 frames,
+    `standard`, 1 thread). Leave-one-tag-out corner error barely moves (0.2833 -> 0.2845 px
+    median) and is identical to four decimals at every cut in the sweep below, which is the
+    expected result: the cut decides topology, corners come from the grey-scale refinement
+    either way.
+  - Elsewhere: **Liu4K 37.18 -> 44.56 %** recall (precision 100 %), **render-tag low-key
+    66 -> 96 %**, **render-tag raw-pipeline 96 -> 100 %**, AprilGrid 99.089 -> 99.108 %, ICRA
+    forward 72.026 -> 72.039 %, ICRA random 99.995 -> 99.997 %. Every other benchmark holds
+    at its previous recall, and the shipped cut is at or above the midpoint baseline on all
+    thirteen. (`hub-charuco` scores zero recall for every arm including the baseline — the
+    ChArUco board is not evaluable by this harness's matcher, not a regression.) Two extra
+    false positives appear on the 100-frame tag16h5 set (precision 100 -> 98 %); they are
+    borderline candidates that flicker with the constant, not
+    a systematic loss. **That precision side is not guarded by any assertion** — the render-tag
+    robustness suite is snapshot-only and this set lives in the bench harness — while the
+    recall side now has a hard floor, so the two directions are not symmetrically protected.
+  - The re-expression was swept rather than assumed, four fractions over the whole board in
+    one scoring pass (recall %, `standard`, 1 thread):
+
+    | cut | EuRoC | Liu4K | 640 | tag16h5 | low-key | AprilGrid | ICRA fwd |
+    | :-- | --: | --: | --: | --: | --: | --: | --: |
+    | midpoint (`main`) | 86.02 | 37.18 | 100 | 99.00 | 66.00 | 99.089 | 72.026 |
+    | 0.4500 = rounded 9/20 | 91.65 | 44.06 | 100 | 99.00 | 96.00 | 99.127 | 72.065 |
+    | **0.4475 (shipped)** | **92.05** | **44.56** | **100** | **99.00** | **96.00** | **99.108** | **72.039** |
+    | 0.4450 | 92.38 | 45.01 | 100 | 99.00 | 96.00 | 99.127 | 72.013 |
+    | 0.4425 | 92.40 | 45.23 | 100 | 99.00 | 96.00 | 99.127 | 72.013 |
+
+    0.4475 is kept because it is both the derived value and the last point at which nothing
+    regresses against the midpoint baseline. Lower cuts are **not** free and are not taken:
+    they keep buying EuRoC, but ICRA forward turns over at 0.4450, and `recall_by_side` puts
+    every bit of that movement in the `[0,20)` bin — the `[20,45)` and `[45,100)` bins sit at
+    100.0000 % for every arm, baseline included. Small markers eroded out of their one-module
+    borders, in other words: 57.615 % of the sub-20-px bin at the midpoint, 57.635 % at the
+    shipped cut, 57.595 % at 0.4450 — the same trade the frontier above describes. The
+    remaining gap to the measured 99.6 % / 74.6 % frontier is not another constant; it needs
+    the seeded split.
+  - Latency, serialised A-B-B-A on an idle host (AMD EPYC-Milan, 4 cores / 8 threads,
+    Linux 6.8.0, rustc 1.92.0, `--release`, `RAYON_NUM_THREADS=1`, two `detect()` calls per
+    image, best of two interleaved arms), midpoint -> shipped cut, within-arm spreads in
+    parentheses: render-tag 4K 78.00 -> **68.99 ms** (-11.5 %, 0.82 / 0.14), 1080p
+    20.23 -> **18.66 ms** (-7.7 %, 0.07 / 0.23). EuRoC is flat at 7.38 -> 7.41 ms (+0.4 %,
+    0.01 / 0.03): it now finds 6.0 pp more markers, and decoding them is work the old cut was
+    not doing. The extra foreground the re-expressed fraction admits costs nothing measurable
+    against 0.4500, which scored 69.55 ms and 18.50 ms on the same bench — both inside these
+    within-arm spreads.
+  - How far below the midpoint is a stated assumption about the thinnest *dark* stroke that
+    must survive, and it was measured rather than derived: the full scoreboard is flat from the
+    midpoint down to 9/20 and then starts costing small and low-contrast markers their
+    one-module borders (render-tag 640 falls off at 8/20, tag16h5 at 8.4/20). Those are the
+    sweep's *nominal truncated* fractions, which is the distinction the bullet above turns on. The
+    constant is
+    documented at `threshold::CUT_NUM`, and a `const` assertion rejects a numerator above the
+    denominator or wide enough to overflow the `u16` the tile loop multiplies in.
+  - Two tests bracket the constant from both sides, which the first version of this change did
+    not do. `the_cut_holds_open_gaps_the_midpoint_closed` sweeps contrast and point-spread
+    width over a pair of dark squares split by a one-pixel gap and requires the shipped cut to
+    separate strictly more of the sweep than the midpoint rule does — reverting the cut to the
+    midpoint makes the two counts equal and fails. `the_cut_is_the_lowest_that_keeps_a_one_pixel_dark_stroke`
+    requires a one-pixel stroke to survive at the shipped cut and to be **lost** one twentieth
+    lower, so lowering the constant fails too; it steps by `CUT_DEN / 20` rather than by 1, because
+    a bracket written as `CUT_NUM - 1` stops bracketing anything the moment the cut is
+    re-denominated onto a finer grid — which is exactly what just happened to it.
+    `the_cut_is_rounded_and_leans_neither_way` pins the discretizer itself: over the 8-bit
+    ranges the cut must stay within half a grey level of the exact fraction and show no
+    systematic lean, which truncation (0.5 low) and `ceil` (0.5 high) both fail. That half
+    level has now been lost twice without anything failing, so it is a test and not a comment.
+    `counterfactual_map_reproduces_the_shipped_cut` pins the test-side cut
+    arithmetic to the production map so neither can drift.
+  - `regression_euroc`'s relative-recall floor moves 0.50 -> 0.75. It is a per-frame mean over
+    whichever frames the sampling stride selects, so it was calibrated across strides rather
+    than at the default alone: 0.806 / 0.807 / 0.802 / 0.802 / 0.823 / 0.802 at strides
+    1 / 3 / 7 / 10 / 23, minimum 0.802.
+  - Board snapshots moved: the shift is deterministic (three consecutive runs agree bit for
+    bit, so it is not the known ~1e-13 flake) and comes from marginal tags entering and leaving
+    the board solve. It is small and mixed in both directions — the largest single movements
+    are AprilGrid p95 translation -33.8 % and p99 translation +15.3 %, `high_accuracy`
+    AprilGrid p95 rotation +13.2 %, and ChArUco `high_accuracy` p95 rotation -14.0 %; tag
+    coverage rises slightly on every AprilGrid arm. Relative to `main` the `high_accuracy`
+    AprilGrid arm also loses two of 150 frames to `frames_no_estimate` while its mean rotation
+    error improves 39 % and its p99 78 %. ICRA's fixture corner RMSE improves
+    0.1312 -> 0.1048 px. **Every render-tag snapshot is byte-identical.**
+  - The EuRoC figures come from a single scoring pass. `tools/bench/sota/score.py` builds the
+    presence reference from every self-consistent run in the directory, which includes the
+    Locus runs under test, so absolute EuRoC recall moves at the ~0.01 pp level with the run
+    set; deltas within one pass are unaffected. The gap is now documented at the pool
+    construction with the fix and why it needs its own re-baselining pass.
+
+- **The tile thresholder stops doing a frame of telemetry work on every production frame, and
+  its 3x3 reduction vectorises.** `apply_threshold_with_map` drove its row loop from the
+  binarized image — which `detect()` sizes to zero unless debug telemetry is on — so a
+  production frame allocated a full-size scratch buffer purely to have something to iterate,
+  ran the whole compare-and-store pass that fills it, expanded a per-tile validity mask only
+  that pass reads, and computed the 3x3 tile reduction a **second** time, serially, in an
+  Amdahl section beside the parallel one. The loop is now driven by the threshold map that
+  segmentation actually reads, and the binarize work happens only when a caller asks for the
+  image. Disjointness between the two output buffers now comes from `par_chunks_mut` on both
+  rather than from a pointer-aliasing argument, which removes the **only `unsafe` block in the
+  module** (and its `#![allow(unsafe_code)]`), along with two per-worker scratch rows.
+  - The reduction itself is now separable. Each tile is packed as `(min, !max)`; `!max` is
+    `255 - max`, which turns the maximum into a *minimum*, so one byte-wise `pminub` lane
+    carries both fields, and the minimum over a clamped 3x3 window factors exactly into a
+    horizontal and a vertical 3-tap over contiguous bytes. Reducing `TileStats` where it lies
+    cannot vectorise: it interleaves the two fields, so every lane would want a strided gather
+    and the maximum would want the opposite instruction. `TileStats` stays as it is — the
+    packing is internal, into the arena.
+  - Stage cost on the 2448x2048 ICRA frame, `--release`, one thread, median of 100 samples:
+    **2.510 -> 0.289 ms (-88.5 %)**. Attributable as 2.510 -> 1.102 for dropping the telemetry
+    work, -> 1.038 for hoisting the per-tile bounds checks out of the reduction, -> 0.289 for
+    the separable form. A diagnostic that replaced the reduction with a single-tile read put it
+    at 65 % of the stage, which is what justified the rewrite over the map write.
+  - **This does not reach frame latency.** Interleaved A-B-B-A at 1080p against the same cut
+    family measures 18.69 -> 18.67 ms (-0.1 %, spreads 0.18 and 0.07): the ~0.9 ms the stage
+    saves at that resolution is absorbed downstream, consistent in both A-B-B-A runs with the
+    extra foreground that rounding admits costing a comparable amount in segmentation and quad
+    extraction. The stage win is real and the frame win is not, and both are reported.
+  - `bench_threshold_real_icra_apply_map` is new and benchmarks the production shape (empty
+    binary output). Nothing did, which is why a full frame of discarded work survived.
+  - **Fixed:** a frame narrower or shorter than `threshold_tile_size` produced a zero-sized
+    tile grid and reached `par_chunks_mut(0)`, which panics. Both the statistics pass and the
+    threshold pass now return early, leaving the map at "never foreground".
+
 - **The distortion path is one pipeline again, and ~20 % faster.** `decode_batch_soa_with_camera_inner`
   was a second implementation of the decode loop; that duplication was the *mechanism* by which
   every corner-estimator change since #426 reached the pinhole route only. It is gone. The loop

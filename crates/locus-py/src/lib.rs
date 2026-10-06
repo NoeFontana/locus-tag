@@ -169,7 +169,8 @@ impl From<locus_core::config::EdLinesImbalanceGatePolicy> for EdLinesImbalanceGa
 #[pyclass(eq, eq_int, hash, frozen, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum ThresholdMode {
-    /// Midpoint of the min/max over a 3x3 tile neighbourhood (every shipped profile).
+    /// A fixed fraction (179/400 = 0.4475) of the min/max range over a 3x3 tile neighbourhood,
+    /// below the midpoint the name records (every shipped profile).
     TileMidExtreme = 0,
     /// Per-pixel local mean over a `(2r+1)^2` window minus a noise-calibrated offset
     /// `clamp(round(noise_k * sigma_n), 2, 20)`. Opt-in.

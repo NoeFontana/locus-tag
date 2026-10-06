@@ -26,15 +26,19 @@ pub enum SegmentationConnectivity {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ThresholdMode {
-    /// Midpoint of the min/max over a 3x3 tile neighbourhood. The historical
-    /// default; every shipped profile uses it, and it is the only mode whose
-    /// output the regression snapshots pin.
+    /// A fixed fraction of the min/max range over a 3x3 tile neighbourhood —
+    /// [`crate::threshold::CUT_NUM`]/[`crate::threshold::CUT_DEN`] of it, below
+    /// the midpoint the name records and this mode originally used. The
+    /// historical default; every shipped profile uses it, and it is the only
+    /// mode whose output the regression snapshots pin.
     ///
     /// Two fragilities follow from the threshold being a function of the local
-    /// *extremes*: a flat tile gets `t` equal to its own grey level, so sensor
-    /// noise speckles uniform regions with foreground; and a background darker
-    /// than the midpoint between a marker's black border and a nearby highlight
-    /// becomes foreground and fuses with the marker.
+    /// *extremes* rather than the local background. A flat tile gets `t` at or
+    /// just above its own grey level, so sensor noise speckles uniform regions
+    /// with foreground. And a nearby highlight widens the range and lifts the
+    /// cut with it, so a dark background can still cross into foreground and
+    /// fuse with a marker — cutting below the midpoint shrinks that window but
+    /// does not close it, which is what [`Self::LocalMean`] exists for.
     TileMidExtreme,
     /// Per-pixel local mean over a `(2r+1)^2` window minus a noise-calibrated offset
     /// `clamp(round(k · σ̂ₙ), 2, 20)`, where `r` is

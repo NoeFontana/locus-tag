@@ -424,9 +424,19 @@ fn euroc_detection_baseline() {
          decoder must never report a physical tag twice within a single detection batch"
     );
 
+    // The floor tracks what the detector actually achieves, not a number comfortably below it:
+    // a floor of 0.5 sat under the 0.699 this suite reported before `threshold::CUT_NUM` moved
+    // the dark/bright cut off the midpoint of the tile extremes, so the 10.4 pp that change
+    // recovered could have been lost again in silence.
+    //
+    // This is a per-frame mean over whichever frames `LOCUS_EUROC_SAMPLE_STRIDE` samples, so
+    // the floor only means something if it holds at every stride the suite is run at. Measured
+    // 2026-10-05: stride 1 -> 0.806, 3 -> 0.807, 7 -> 0.802, 10 (default) -> 0.802,
+    // 13 -> 0.823, 23 -> 0.802. The spread is 2 pp and the minimum is 0.802, so 0.75 holds
+    // everywhere with room for the frame mix to shift; re-measure that sweep before moving it.
     assert!(
-        relative_recall_mean >= 0.5,
-        "Relative recall too low: {relative_recall_mean:.2} (expected ≥ 0.5) over \
+        relative_recall_mean >= 0.75,
+        "Relative recall too low: {relative_recall_mean:.2} (expected ≥ 0.75) over \
          {frames_considered} frames with a board pose estimated. This measures decoded/present \
          per frame (see the module-level doc comment on `euroc_detection_baseline`), so a low \
          number here means real, in-view tags are being missed — not that the board was out of \
