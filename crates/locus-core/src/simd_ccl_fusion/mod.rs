@@ -518,7 +518,7 @@ pub fn label_components_lsl_opts<'a>(
                 });
         }
         // Boundary merges, on the whole array: these are the only unions that may cross.
-        let mut all = crate::segmentation::UnionFindSlice::new(uf.parents_mut(), 0);
+        let mut all = uf.as_slice();
         for w in &bounds[1..bounds.len() - 1] {
             union_row_pair(
                 &mut all,
@@ -529,7 +529,7 @@ pub fn label_components_lsl_opts<'a>(
             );
         }
     } else {
-        let mut view = crate::segmentation::UnionFindSlice::new(uf.parents_mut(), 0);
+        let mut view = uf.as_slice();
         for y in 1..img.height {
             union_row_pair(
                 &mut view,
@@ -874,6 +874,7 @@ mod differential_tests {
         }
 
         let mut uf = UnionFind::new_in(arena, runs.len());
+        let mut uf = uf.as_slice();
         let mut curr_row_range = 0..0;
         let mut i = 0;
 
