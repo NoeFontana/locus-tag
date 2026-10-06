@@ -85,12 +85,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     the seeded split.
   - Latency, serialised A-B-B-A on an idle host (AMD EPYC-Milan, 4 cores / 8 threads,
     Linux 6.8.0, rustc 1.92.0, `--release`, `RAYON_NUM_THREADS=1`, two `detect()` calls per
-    image, best of two interleaved arms), within-arm spread in parentheses: render-tag 4K
-    77.92 -> **69.55 ms** (-10.7 %, 0.34), 1080p 20.18 -> **18.50 ms** (-8.4 %, 0.18). EuRoC is
-    flat at 7.42 -> 7.44 ms (+0.3 %, 0.01): it now finds 5.6 pp more markers, and decoding them
-    is work the old cut was not doing. Those arms are the midpoint and the cut at **0.4500**;
-    the shipped 0.4475 admits marginally more foreground, and its own A-B-B-A is pending a
-    quiet host.
+    image, best of two interleaved arms), midpoint -> shipped cut, within-arm spreads in
+    parentheses: render-tag 4K 78.00 -> **68.99 ms** (-11.5 %, 0.82 / 0.14), 1080p
+    20.23 -> **18.66 ms** (-7.7 %, 0.07 / 0.23). EuRoC is flat at 7.38 -> 7.41 ms (+0.4 %,
+    0.01 / 0.03): it now finds 6.0 pp more markers, and decoding them is work the old cut was
+    not doing. The extra foreground the re-expressed fraction admits costs nothing measurable
+    against 0.4500, which scored 69.55 ms and 18.50 ms on the same bench — both inside these
+    within-arm spreads.
   - How far below the midpoint is a stated assumption about the thinnest *dark* stroke that
     must survive, and it was measured rather than derived: the full scoreboard is flat from the
     midpoint down to 9/20 and then starts costing small and low-contrast markers their
