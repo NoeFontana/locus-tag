@@ -29,8 +29,14 @@ use rayon::prelude::*;
 ///   that impossible, because the roots would depend on the interleaving.
 ///
 /// Rank attachment bounds tree height at O(log n); minimum-index attachment does not, so
-/// [`UnionFind::union`] compresses its inputs onto the new root as it goes — free, since both
-/// roots are already in hand, and it is what keeps [`UnionFind::parents`]'s walks short.
+/// [`UnionFindSlice::union`] compresses its inputs onto the new root as it goes — free, since
+/// both roots are already in hand, and it is what keeps [`UnionFind::parents`]'s walks short.
+///
+/// The attachment rule itself lives only in [`UnionFindSlice`]; this type is the `base = 0`
+/// case of it, reached through [`UnionFind::as_slice`]. One copy rather than two is not
+/// housekeeping: striped labelling is equivalent to the serial sweep *only* if the stripe
+/// workers and the boundary merge attach identically, and two implementations of the same rule
+/// are two things that can drift apart.
 pub struct UnionFind<'a> {
     parent: &'a mut [u32],
 }
@@ -65,40 +71,14 @@ impl<'a> UnionFind<'a> {
         self.parent
     }
 
-    /// Find the representative (root) of the set containing `i`.
-    #[inline]
-    pub fn find(&mut self, i: u32) -> u32 {
-        let mut root = i;
-        while self.parent[root as usize] != root {
-            self.parent[root as usize] = self.parent[self.parent[root as usize] as usize];
-            root = self.parent[root as usize];
-        }
-        root
-    }
-
-    /// Unite the sets containing `i` and `j`.
+    /// The whole forest as a [`UnionFindSlice`] based at zero.
     ///
-    /// The merged set keeps the smaller of the two roots, which by induction is the smallest
-    /// member of the union: each root was already its own set's minimum, so `min` of the two is
-    /// the minimum of the whole. That invariant is what makes the result independent of union
-    /// order — see [`UnionFind`].
+    /// `UnionFind` is exactly the `base = 0` case, so `find` and `union` are not reimplemented
+    /// here: the unstriped paths take this view and share the one attachment rule with the
+    /// stripe workers, which is what makes the striped result provably the serial one.
     #[inline]
-    pub fn union(&mut self, i: u32, j: u32) {
-        let root_i = self.find(i);
-        let root_j = self.find(j);
-        let (lo, hi) = if root_i <= root_j {
-            (root_i, root_j)
-        } else {
-            (root_j, root_i)
-        };
-        if lo != hi {
-            self.parent[hi as usize] = lo;
-        }
-        // Compress the inputs onto the new root. Both roots are already resolved, so this costs
-        // two stores and no traversal, and it is what bounds the walks that minimum-index
-        // attachment would otherwise leave unbounded.
-        self.parent[i as usize] = lo;
-        self.parent[j as usize] = lo;
+    pub fn as_slice(&mut self) -> UnionFindSlice<'_> {
+        UnionFindSlice::new(self.parents_mut(), 0)
     }
 }
 
@@ -124,7 +104,10 @@ impl<'a> UnionFindSlice<'a> {
         Self { parent, base }
     }
 
-    /// [`UnionFind::find`], on absolute ids.
+    /// Find the representative (root) of the set containing `i`.
+    ///
+    /// Walks to the root, compressing as it goes. Path compression never changes *which* index
+    /// is a set's root, only how fast it is reached.
     #[inline]
     pub fn find(&mut self, i: u32) -> u32 {
         let base = self.base;
@@ -137,7 +120,12 @@ impl<'a> UnionFindSlice<'a> {
         root
     }
 
-    /// [`UnionFind::union`], on absolute ids.
+    /// Unite the sets containing `i` and `j`.
+    ///
+    /// The merged set keeps the smaller of the two roots, which by induction is the smallest
+    /// member of the union: each root was already its own set's minimum, so `min` of the two is
+    /// the minimum of the whole. That invariant is what makes the result independent of union
+    /// order — see [`UnionFind`].
     #[inline]
     pub fn union(&mut self, i: u32, j: u32) {
         let base = self.base;
@@ -151,6 +139,9 @@ impl<'a> UnionFindSlice<'a> {
         if lo != hi {
             self.parent[(hi - base) as usize] = lo;
         }
+        // Compress the inputs onto the new root. Both roots are already resolved, so this costs
+        // two stores and no traversal, and it is what bounds the walks that minimum-index
+        // attachment would otherwise leave unbounded.
         self.parent[(i - base) as usize] = lo;
         self.parent[(j - base) as usize] = lo;
     }
@@ -352,6 +343,7 @@ pub fn label_components_with_stats<'a>(
     }
 
     let mut uf = UnionFind::new_in(arena, runs.len());
+    let mut uf = uf.as_slice();
     let mut curr_row_range = 0..0; // Initialize curr_row_range
     let mut i = 0;
 
@@ -467,6 +459,7 @@ mod tests {
     fn test_union_find() {
         let arena = Bump::new();
         let mut uf = UnionFind::new_in(&arena, 10);
+        let mut uf = uf.as_slice();
 
         uf.union(1, 2);
         uf.union(2, 3);
@@ -552,6 +545,7 @@ mod tests {
         fn prop_union_find_reflexivity(size in 1..1000usize) {
             let arena = Bump::new();
             let mut uf = UnionFind::new_in(&arena, size);
+            let mut uf = uf.as_slice();
             for i in 0..size as u32 {
                 assert_eq!(uf.find(i), i);
             }
@@ -562,6 +556,7 @@ mod tests {
             let arena = Bump::new();
             let real_size = size.max(1001); // Ensure indices are in range
             let mut uf = UnionFind::new_in(&arena, real_size);
+            let mut uf = uf.as_slice();
 
             for (a, b) in pairs {
                 let a = a % real_size as u32;
