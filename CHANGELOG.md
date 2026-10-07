@@ -5,6 +5,22 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- **The EuRoC scorer's undistortion inverse was approximate, and it flattered the better
+  detector.** `_undist` was `cv2.undistortPoints`, which runs a fixed, small iteration count
+  with no convergence test; on this lens it stopped short by a *radius-growing* amount --
+  0.046 px median at r in [300, 380) and 0.134 px at worst, where a converged fixed point
+  reaches 3e-13. Because the shortfall is a smooth function of position a homography absorbs
+  part of it, so the reported corner median came out **low**: -3.98 % for Locus `standard`
+  against -0.82 % for OpenCV APRILTAG and -0.02 % for OpenCV CONTOUR+SUBPIX. It therefore did
+  **not** cancel in the head-to-head comparison the scorer exists to make -- Locus's relative
+  corner margin was overstated by about 3 pp. The inverse is now a fixed point that *asserts*
+  convergence rather than returning an approximation, and a test pins the achieved round-trip
+  error (it fails at 0.131 px against the old implementation). Recall, false positives and the
+  reference-frame count are unmoved (`locus_b_std` 92.485 -> 92.491 %, FP 0 -> 0, 1029 frames
+  both ways) and no SOTA ordering changes, so this re-baselines the corner columns only.
+
 ### Changed
 
 - **The dataset-backed snapshots are blessed, and the suites are green for the first time since
@@ -38,8 +54,28 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     0.6 -> 1.4 (4th decimal only), and `high_accuracy`'s `min_area` 400 -> 36 plus the
     filled-blob gates switched off (identical, because connectivity is the binding constraint:
     markers are merged, not rejected for being small). The sigma result retires a plausible
-    hypothesis — the 7.7x gap between synthetic corner error (0.0370 px) and real (0.2845 px) is
-    not the Erf model's assumed PSF width.
+    hypothesis: the difference between synthetic corner error (0.0370 px) and the real EuRoC
+    figure (0.2845 px) is not the Erf model's assumed PSF width. It is also not a 7.7x
+    detector gap — see the `### Fixed` entry above, which shows the two were never the same
+    quantity.
+
+- **The EuRoC corner number is now documented for what it measures**, in
+  `docs/engineering/benchmarking/euroc_error_budget.md`. It is a leave-one-tag-out
+  *self-consistency residual* against a nominal board, with no ground truth in it, and it had
+  been compared against the render-tag synthetic RMSE as though the two were one quantity. They
+  are not, and the 7.7x "gap" between them was an artefact of that comparison. Measured:
+  the metric reports **1.365x** the underlying iid corner noise (and its p90 reports **2.6x**),
+  and of Locus's 0.436 px RMS residual, 24 % of the variance is static per image cell and 13 %
+  is a *deterministic per-`(tag, corner)`* bias -- which turns out to be the **estimator**, not
+  the board, because it ranges over 13x across detectors (Locus 0.333 mm, OpenCV APRILTAG
+  0.747 mm, OpenCV CONTOUR 4.226 mm) where a physical board would give them all the same
+  number. Locus is best of the four detectors on every component of the budget. Falsified and
+  recorded so they are not re-attempted: board-model error (7 %; the pitch/tag ratio fits to
+  *exactly* the Kalibr nominal 1.3000 and a free 288-parameter board removes 2.2 % on held-out
+  frames), motion blur (flat over a 40x velocity range), board non-planarity (non-monotonic in
+  tilt), and apparent tag size (error *grows* as L^+0.68, the opposite sign to the
+  variance-limited L^-0.5, and extrapolates to 0.46 px where render-tag measures 0.037 px).
+
 - **`high_accuracy` now shares `standard`'s geometry.** It ran `EdLines` whole-edge corners
   under an `AdaptivePpb` router; it now uses `ContourRdp` contours, `corner_subpix` and `Erf`
   refinement on a `Static` route, like `standard` and `grid`. What makes it the accuracy
