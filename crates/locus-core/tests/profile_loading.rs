@@ -108,12 +108,36 @@ fn grid_profile_values() {
 }
 
 #[test]
-fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
+fn high_accuracy_profile_shares_standard_geometry() {
     let cfg = DetectorConfig::from_profile("high_accuracy");
+    let std_cfg = DetectorConfig::from_profile("standard");
 
-    // High-accuracy overrides. EdLines' whole-edge corners stay unrefined until a fused
-    // corner estimator replaces them.
-    assert_eq!(cfg.decoder_corner_subpix, false);
+    // What makes this the accuracy profile is its pose layer and its stricter detection
+    // gates, not a separate corner estimator. It had one until 2026-10-07 -- EdLines
+    // whole-edge corners under an `AdaptivePpb` router -- and that was worse on every
+    // axis measured, including EuRoC, the only real imagery here: recall 38.4 -> 53.7 %,
+    // false positives 32 -> 0, LOO corner median 0.4138 -> 0.2825 px. See
+    // `profiles/README.md`.
+    //
+    // Asserted against `standard` rather than against literals, so the two cannot drift
+    // apart silently: that drift is exactly what made the tile cut look like a geometry
+    // regression, since EdLines was the only cut-sensitive corner path in the tree.
+    assert_eq!(cfg.quad_extraction_mode, std_cfg.quad_extraction_mode);
+    assert_eq!(cfg.quad_extraction_policy, std_cfg.quad_extraction_policy);
+    assert_eq!(cfg.refinement_mode, std_cfg.refinement_mode);
+    assert_eq!(cfg.decoder_corner_subpix, std_cfg.decoder_corner_subpix);
+    assert_eq!(
+        cfg.quad_extraction_policy,
+        QuadExtractionPolicy::Static,
+        "the shared geometry must be the Static route, not a router both profiles happen \
+         to agree on"
+    );
+    assert_eq!(cfg.refinement_mode, CornerRefinementMode::Erf);
+    assert_eq!(cfg.decoder_corner_subpix, true);
+    assert_eq!(cfg.quad_extraction_mode, QuadExtractionMode::ContourRdp);
+
+    // Everything below is what still distinguishes the profile.
+    assert_eq!(cfg.decoder_max_border_error_rate, Some(1.0));
     assert_eq!(cfg.decoder_max_border_error_rate, Some(1.0));
     assert_eq!(cfg.threshold_tile_size, 8);
     assert_eq!(cfg.enable_sharpening, false);
@@ -122,10 +146,8 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     assert_eq!(cfg.quad_max_elongation, 20.0);
     assert_eq!(cfg.quad_min_density, 0.15);
     assert_eq!(cfg.quad_min_edge_score, 4.0);
-    assert_eq!(cfg.refinement_mode, CornerRefinementMode::None);
     assert_eq!(cfg.decoder_min_contrast, 20.0);
     assert_eq!(cfg.max_hamming_error, Some(1));
-    assert_eq!(cfg.quad_extraction_mode, QuadExtractionMode::EdLines);
     assert_eq!(
         cfg.segmentation_connectivity,
         SegmentationConnectivity::Eight
@@ -133,28 +155,6 @@ fn high_accuracy_profile_routes_low_ppb_to_contour_rdp() {
     // Model-edge pose refinement is shipped on for high_accuracy (v0.7.0); lock
     // it so an accidental JSON revert is caught loudly. standard/grid stay off.
     assert_eq!(cfg.pose_edge_refinement_enabled, true);
-
-    match cfg.quad_extraction_policy {
-        QuadExtractionPolicy::AdaptivePpb(AdaptivePpbConfig {
-            threshold,
-            low_extraction,
-            high_extraction,
-            low_refinement,
-            high_refinement,
-        }) => {
-            assert!(
-                threshold > 1.0 && threshold < 5.0,
-                "threshold must be in validator bounds (1,5), got {threshold}"
-            );
-            assert_eq!(low_extraction, QuadExtractionMode::ContourRdp);
-            assert_eq!(high_extraction, QuadExtractionMode::EdLines);
-            assert_eq!(low_refinement, CornerRefinementMode::Erf);
-            assert_eq!(high_refinement, CornerRefinementMode::None);
-        },
-        QuadExtractionPolicy::Static => {
-            panic!("high_accuracy profile must carry AdaptivePpb policy, got Static");
-        },
-    }
 
     assert_shared_defaults(&cfg);
     cfg.validate().expect("high_accuracy profile must validate");

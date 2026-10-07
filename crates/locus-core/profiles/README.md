@@ -11,8 +11,9 @@ and `locus.DetectorConfig` always read identical bytes.
 (`config::schema_parity_tests::default_matches_standard_profile` and
 `test_bare_default_matches_standard_profile` enforce this).
 
-`standard` and `grid` carry `quad.extraction_policy: "Static"`. Only
-`high_accuracy.json` opts into the per-candidate `AdaptivePpb` router.
+All three shipped profiles now carry `quad.extraction_policy: "Static"`; the
+per-candidate `AdaptivePpb` router is no longer used by any of them (see
+[`high_accuracy`](#high_accuracy) for why it is kept anyway).
 
 If the Rust defaults and these JSONs ever disagree, **the JSON wins**.
 
@@ -126,17 +127,58 @@ ring check, `corner_subpix`) is as in `standard`.
 
 ### `high_accuracy`
 
-Pose-precision configuration for large, well-resolved markers. EdLines
-whole-edge corners feed the weighted-LM pose solver; `AdaptivePpb` routing
-sends small candidates (below ~2.5 pixels per bit) to `ContourRdp + Erf`
-instead of failing inside EdLines.
+Pose-precision configuration for large, well-resolved markers. **Its geometry is
+`standard`'s** — `ContourRdp` contours, `corner_subpix`, `Erf` refinement, `Static`
+routing. What makes it the accuracy profile is its *pose* layer and its stricter
+detection gates, not a separate corner estimator.
 
-| Field | `standard` | `high_accuracy` | Reason |
-| --- | --- | --- | --- |
-| `quad.extraction_policy` | `Static` | `AdaptivePpb(2.5, ContourRdp+Erf, EdLines+None)` | Per-candidate routing: small tags use ContourRdp/Erf, large tags EdLines/None (sub-pixel Gauss-Newton corners). |
-| `quad.extraction_mode` | `ContourRdp` | `EdLines` | Inert under `AdaptivePpb` (the routes decide); kept consistent with the high route. |
-| `quad.edlines_imbalance_gate` | `"Disabled"` | `"Enabled"` | AXIS→DIAG rescue: when one boundary arc is > 40 % and another < 16 % (two corners collapsing onto the same extremal on near-axis-aligned tags), re-partition along the diagonals. Distorted cameras never reach EdLines (`AdaptivePpb` falls back to ContourRdp there). |
-| `decoder.refinement_mode` | `Erf` | `None` | Required by `AdaptivePpb`: the routes carry their own refinement. |
+It did have one. Until 2026-10-07 it ran `EdLines` whole-edge corners under an
+`AdaptivePpb` policy, and that was measured to be worse on every axis that matters:
+
+| | EdLines + AdaptivePpb | `standard` geometry |
+| :-- | --: | --: |
+| render-tag corner RMSE (4 resolutions) | baseline | **−69 to −71 %** |
+| render-tag rotation p99 | baseline | unchanged (±0.0001 deg) |
+| render-tag translation p99 | baseline | −24 to −39 % |
+| AprilGrid board p99 rotation | 0.1098 deg | **0.0186 deg** |
+| ChArUco board p99 rotation | 0.1757 deg | **0.0477 deg** |
+| **EuRoC** (real data) recall | 38.43 % | **53.75 %** |
+| **EuRoC** false positives | 32 | **0** |
+| **EuRoC** LOO corner median | 0.4138 px | **0.2825 px** |
+| ICRA forward recall (high_accuracy) | 17.04 % | **24.30 %** |
+
+It also made the profile the only consumer of the tile cut that was sensitive to it:
+corner error moved +34 % between cuts 0.5000 and 0.4475 under EdLines, and is
+bit-identical under `standard` geometry. That sensitivity was what made the 179/400 cut
+look like a geometry regression when it is not one.
+
+The cost is latency: EuRoC 3.47 → 5.28 ms, because `min_area: 400` plus EdLines was
+rejecting candidates it should have kept. Still well inside `standard`'s 11.77 ms.
+
+Note on emitted uncertainty: board `mean_board_translation_std_m` rises ~14x while the
+actual error falls ~86 %, so the covariance goes from over-confident to markedly
+conservative. Better that direction than the other for a consumer that gates on it, but
+it is a change in what the covariance means.
+
+### EdLines and `AdaptivePpb` are retained on purpose
+
+**No shipped profile uses `EdLines`, `AdaptivePpb` or `edlines_imbalance_gate` any more.
+Do not delete them on the grounds that nothing references them.** They are kept because
+the evidence above is synthetic plus one real sequence, and whole-edge corners may yet
+prove better on real data this repo does not have — EuRoC `cam_april` is the only real
+imagery here. They remain reachable through the config surface and are still exercised by
+the `quad_extraction_variants` cases in `regression_render_tag`, so they keep snapshot
+coverage and can be re-evaluated without being rewritten.
+
+The historical settings, for anyone re-running that comparison:
+
+| Field | was | Reason it was there |
+| --- | --- | --- |
+| `quad.extraction_policy` | `AdaptivePpb(2.5, ContourRdp+Erf, EdLines+None)` | Per-candidate routing: small tags to ContourRdp/Erf, large tags to EdLines/None (sub-pixel Gauss-Newton corners). |
+| `quad.extraction_mode` | `EdLines` | Inert under `AdaptivePpb` (the routes decide); kept consistent with the high route. |
+| `quad.edlines_imbalance_gate` | `"Enabled"` | AXIS→DIAG rescue: when one boundary arc is > 40 % and another < 16 % (two corners collapsing onto the same extremal on near-axis-aligned tags), re-partition along the diagonals. Distorted cameras never reached EdLines (`AdaptivePpb` fell back to ContourRdp there). |
+| `decoder.refinement_mode` | `None` | Required by `AdaptivePpb`: the routes carried their own refinement. |
+| `decoder.corner_subpix` | `false` | EdLines corners were taken as final. |
 | `quad.min_area` | `36` | `400` | Suppresses small textured-quad false positives; the profile targets large markers. |
 | `quad.min_fill_ratio`, `quad.max_elongation`, `quad.min_density` | off | `0.10`, `20.0`, `0.15` | Filled-blob gates on. |
 | `decoder.max_hamming_error` | per family | `1` | Tightened against false positives at Hamming distance 2. |

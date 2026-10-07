@@ -7,6 +7,45 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **`high_accuracy` now shares `standard`'s geometry.** It ran `EdLines` whole-edge corners
+  under an `AdaptivePpb` router; it now uses `ContourRdp` contours, `corner_subpix` and `Erf`
+  refinement on a `Static` route, like `standard` and `grid`. What makes it the accuracy
+  profile is its pose layer (model-edge refinement, the χ² consistency gate, single-corner
+  outlier drop) and its stricter detection gates (`min_area: 400`, fill/elongation/density,
+  8-connectivity, no sharpening) — not a separate corner estimator.
+  - It was measured worse on every axis, **including the only real imagery in the repo**.
+    EuRoC `cam_april`, 1450 frames, one scoring pass, GT-free LOO protocol, `RAYON_NUM_THREADS=1`:
+    recall **38.43 -> 53.75 %**, precision 99.734 -> **100.000 %**, false positives **32 -> 0**,
+    LOO corner median **0.4138 -> 0.2825 px**, LOO p90 0.8471 -> 0.5856 px. Synthetic render-tag,
+    four resolutions: corner RMSE **-69 to -71 %**, translation p99 **-24 to -39 %**, rotation
+    p99 and p50 **unchanged** (±0.0001 deg) — the tail the profile exists for is untouched.
+    Board pose: AprilGrid p99 rotation **0.1098 -> 0.0186 deg**, p99 translation -94 %; ChArUco
+    p99 rotation **0.1757 -> 0.0477 deg**. ICRA forward on this profile: recall
+    **17.04 -> 24.30 %**, corner RMSE -66 %.
+  - The cost is latency: EuRoC **3.47 -> 5.28 ms**, because `min_area: 400` plus EdLines was
+    discarding candidates it should have kept. Still well inside `standard`'s 11.77 ms.
+  - **Emitted uncertainty changes meaning.** Board `mean_board_translation_std_m` rises ~14x
+    while the actual error falls ~86 %, so the covariance moves from over-confident to markedly
+    conservative. That is the safer direction for a consumer that gates on it, but it is a
+    change, not a wash.
+  - This also removes the last cut-sensitive corner path in the tree. Corner error under
+    EdLines moved **+34 %** between tile cuts 0.5000 and 0.4475; under `standard` geometry it is
+    bit-identical at both. The 179/400 cut had looked like a geometry regression on render-tag,
+    and it was this profile, not the cut: the four `accuracy_baseline` snapshots were the only
+    place the cost appeared, and they run `high_accuracy`. A sweep of seven cuts found **no
+    knee** — render-tag cost is superlinear in the offset from 0.5 while recall gain is roughly
+    linear, with marginal efficiency falling 3.03 -> 1.18 EuRoC pp per 0.01 px — so no single
+    constant was defensible, and the constant was not the thing to change.
+  - **`EdLines`, `AdaptivePpb` and `edlines_imbalance_gate` are retained deliberately.** No
+    shipped profile uses them; they are **not** dead code to be removed. The evidence above is
+    synthetic plus one real sequence, whole-edge corners may yet prove better on real imagery
+    this repo does not have, and they stay reachable through the config surface and exercised by
+    the `quad_extraction_variants` cases so they keep snapshot coverage. `profiles/README.md`
+    records the historical settings and the reason for keeping them.
+  - `high_accuracy_profile_routes_low_ppb_to_contour_rdp` becomes
+    `high_accuracy_profile_shares_standard_geometry` and asserts the four geometry fields
+    **against `standard`** rather than against literals, so the two cannot drift apart
+    silently — that drift is what made the cut look like a geometry regression.
 - **The dark/bright cut no longer sits on the midpoint of the tile extremes.**
   `ThresholdMode::TileMidExtreme` thresholded at `(min + max) / 2` over a tile's 3x3
   neighbourhood. That is the unbiased cut for an edge the optics resolved, and it is the wrong

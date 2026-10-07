@@ -43,12 +43,13 @@ EXPECTED = {
         "threshold.tile_size": 8,
         "quad.max_elongation": 20.0,
         "quad.min_density": 0.15,
-        # Under AdaptivePpb, `quad.extraction_mode` is ignored at runtime but
-        # the field still round-trips through JSON.
-        "quad.extraction_mode": QuadExtractionMode.EdLines,
-        "quad.edlines_imbalance_gate": EdLinesImbalanceGatePolicy.Enabled,
-        # `None` is a Python keyword — reach the variant via getattr.
-        "decoder.refinement_mode": getattr(CornerRefinementMode, "None"),
+        # Geometry is shared with `standard` as of 2026-10-07: the EdLines +
+        # AdaptivePpb path measured worse on every axis, EuRoC included, and was
+        # the only cut-sensitive corner path in the tree. See profiles/README.md.
+        "quad.extraction_mode": QuadExtractionMode.ContourRdp,
+        "quad.edlines_imbalance_gate": EdLinesImbalanceGatePolicy.Disabled,
+        "decoder.refinement_mode": CornerRefinementMode.Erf,
+        "decoder.corner_subpix": True,
         "segmentation.connectivity": SegmentationConnectivity.Eight,
         # Model-edge pose refinement shipped on for high_accuracy (v0.7.0).
         "pose.pose_edge_refinement_enabled": True,
