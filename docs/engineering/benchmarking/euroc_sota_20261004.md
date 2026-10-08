@@ -5,15 +5,24 @@ real-camera benchmark with a verifiable board model, so this pass starts from it
 analysis is in the
 [recall lessons](../lessons/recall-quad-icra.md#2026-10-04-euroc-the-only-real-data-benchmark-scorer-connectivity-clipped-and-gross-corners).
 
-!!! warning "Corner columns superseded (2026-10-07)"
+!!! note "Corner cells re-derived with the fixed undistortion inverse (2026-10-08)"
 
-    The `loo_*` corner figures on this page were produced with an **inexact** undistortion
-    inverse and read ~4 % low for Locus against ~0.8 % for OpenCV APRILTAG, so Locus's
-    relative margin here is overstated by about 3 pp. Recall, false positives and latency
-    are unaffected. More importantly, this metric is a self-consistency residual with a
-    ~1.37x gain over the underlying corner noise and a ~0.26 px floor no detector change can
-    move -- it is not a corner accuracy, and must not be compared against a render-tag RMSE.
-    See [what the EuRoC corner number actually measures](euroc_error_budget.md).
+    The `LOO corner error` cell below has been **recomputed from the same stored detections**
+    with the converged undistortion inverse of PR #455, so it is a measurement, not a rescaled
+    figure. The original cell read `0.316 / 0.634 | 0.283 / 0.575 | 0.516 / 0.996`; the inexact
+    inverse had made it ~4 % low for Locus against ~0.8 % for OpenCV APRILTAG, overstating
+    Locus's relative margin by about 3 pp. Locus still wins the cell by a wide margin.
+
+    Provenance: `main` is the archived run `locus_main`, **This build** is `locus_final`, and the
+    reference is `opencv_apriltag`, scored together over 1047 reference frames and 9923 common
+    tags. The pre-fix recompute reproduces the original cell to the thousandth, which is what
+    identifies the runs. Recall (20.86 / 86.02 %) and false positives (6 / 1) move by at most
+    0.01 pp, and latency is untouched.
+
+    This metric is still a self-consistency residual with a ~1.37x gain over the underlying
+    corner noise and a ~0.26 px floor no detector change can move. It is not a corner accuracy
+    and must not be compared against a render-tag RMSE:
+    see [the EuRoC error budget](euroc_error_budget.md).
 
 **This build** is `main` (`629a557`) plus:
 - **EuRoC scorer fixes:** a judgeable lens-model radius, corner error in image pixels, and a
@@ -30,7 +39,7 @@ analysis is in the
 | :-- | --: | --: | --: |
 | Recall | 20.85 % | **86.02 %** | 57.11 % (OpenCV NONE / SUBPIX, `markerBorderBits = 2`) |
 | Precision | 99.910 % (6 FP) | **99.996 %** (1 FP) | 99.993 % (OpenCV APRILTAG, 1 FP) |
-| LOO corner error, common tags, median / p90 (px) | 0.316 / 0.634 | **0.283 / 0.575** | 0.516 / 0.996 (OpenCV APRILTAG) |
+| LOO corner error, common tags, median / p90 (px) | 0.325 / 0.650 | **0.295 / 0.594** | 0.520 / 1.008 (OpenCV APRILTAG) |
 | ms/img, 1 thread | 4.3 | 9.5 | 8.3 (OpenCV NONE) |
 
 - **Latency:** Locus now decodes four times as many tags per frame. The per-frame latency cell is

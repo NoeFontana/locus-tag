@@ -7,6 +7,31 @@ each reference** on every benchmark both references can decode. Reproduce any ce
 real-image root-cause snapshot ([Liu4K + EuRoC, 2026-10-01](liu4k_euroc_sota_20261001.md)) and
 the lessons pages; this page carries the numbers.
 
+!!! note "EuRoC corner cells carry a known measurement bias (fixed 2026-10-07)"
+
+    The EuRoC `LOO px` figures on this page were scored with an **inexact**
+    undistortion inverse (`cv2.undistortPoints`, which stops short with no convergence
+    test); see PR #455.
+
+    Across the fourteen EuRoC runs whose detections are preserved, the correction is a
+    near-fixed **absolute** shift of -0.005 to +0.011 px. It is therefore largest in
+    *relative* terms for the most accurate detector -- +4.0 % at 0.27 px, +2.7 % at 0.32 px,
+    +0.75 % at 0.48 px, +0.3 % at 0.98 px, and indistinguishable from zero above 2 px --
+    which is exactly why it flattered the best corners.
+
+    At the 0.53-0.91 px levels in the EuRoC rows the shift is about +0.004 px on both Locus
+    and the reference, so **no win/loss verdict changes**.
+
+    The runs behind this page were not archived, so these cells are **not** re-derived here:
+    a figure rescaled by a factor measured on *other* runs would not be a measurement, and the
+    common-tag set each cell used depended on which runs shared the directory at the time,
+    which is not recoverable. Re-running `cargo xtask sota` today produces corrected values.
+    The one page whose detections survive is
+    [EuRoC SOTA (2026-10-04)](euroc_sota_20261004.md), re-derived exactly.
+
+    What the metric measures -- and why it must not be compared against a render-tag RMSE --
+    is in the [EuRoC error budget](euroc_error_budget.md).
+
 **Result: `standard` wins 31 / 88 judged cells.** "Industrial SOTA" here means every judged
 cell green. Pose metrics are not reported: the win table is corner-level, so the Fast/Accurate
 pose-mode rule does not apply.
