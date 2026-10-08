@@ -7,6 +7,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **The EuRoC corner cells across the benchmarking docs are re-baselined for the inexact
+  undistortion inverse.** Recomputing the fourteen archived EuRoC runs both ways shows the
+  artefact is a near-fixed **absolute** shift of -0.005 to +0.011 px, close to constant across
+  detectors, so its *relative* size falls as a detector's own error grows: ~4 % at 0.27 px,
+  +0.75 % at 0.48 px, indistinguishable from zero above 2 px. That is the whole mechanism by
+  which it flattered the best corners, and why no single rescaling factor could undo it.
+  `euroc_sota_20261004.md` is **re-derived exactly** — its detections were archived, and
+  recomputing them with the old inverse reproduces the published cell to the thousandth, which
+  identifies the runs (`locus_main`, `locus_final`, `opencv_apriltag`): the cell moves
+  `0.316 / 0.634 | 0.283 / 0.575 | 0.516 / 0.996` to
+  **`0.325 / 0.650 | 0.295 / 0.594 | 0.520 / 1.008`**, with recall and false positives moving
+  by at most 0.01 pp. The runs behind `sota_scoreboard_20261002/03/04.md` and
+  `liu4k_euroc_sota_20261001.md` were not archived and the common-tag set each cell used
+  depended on the directory composition at the time, so those pages are annotated with the
+  measured bound rather than rewritten — a figure rescaled by a factor measured on other runs
+  is not a measurement. **No win/loss verdict on any scoreboard changes**, and only the EuRoC
+  `LOO` rows are affected at all: `_undist` is reachable only from `score_euroc`, so the
+  liu4k / ICRA / hub `Corner RMSE` cells never undistorted.
+
 - **The EuRoC scorer's undistortion inverse was approximate, and it flattered the better
   detector.** `_undist` was `cv2.undistortPoints`, which runs a fixed, small iteration count
   with no convergence test; on this lens it stopped short by a *radius-growing* amount --

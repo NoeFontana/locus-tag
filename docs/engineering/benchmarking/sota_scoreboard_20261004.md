@@ -6,6 +6,32 @@ profile of the branch for #434: decode-first and the dark-ring check by default 
 junction/edge-line corners with the photometric corner calibration. `main` at `365c9ba` is the
 before column. Reproduce any cell with `cargo xtask sota` (`xtask/README.md`).
 
+!!! note "EuRoC corner cells carry a known measurement bias (fixed 2026-10-07)"
+
+    The EuRoC `LOO px` figures on this page were scored with an **inexact**
+    undistortion inverse (`cv2.undistortPoints`, which stops short with no convergence
+    test); see PR #455.
+
+    Across the fourteen EuRoC runs whose detections are preserved, the correction is a
+    near-fixed **absolute** shift of -0.005 to +0.011 px. It is therefore largest in
+    *relative* terms for the most accurate detector -- +4.0 % at 0.27 px, +2.7 % at 0.32 px,
+    +0.75 % at 0.48 px, +0.3 % at 0.98 px, and indistinguishable from zero above 2 px --
+    which is exactly why it flattered the best corners.
+
+    At the ~0.31 px Locus level in the EuRoC rows the shift is about +0.009 px, against
+    +0.004 px on the reference at 0.53 px, so **no win/loss verdict changes** (Locus still
+    wins both EuRoC corner cells).
+
+    The runs behind this page were not archived, so these cells are **not** re-derived here:
+    a figure rescaled by a factor measured on *other* runs would not be a measurement, and the
+    common-tag set each cell used depended on which runs shared the directory at the time,
+    which is not recoverable. Re-running `cargo xtask sota` today produces corrected values.
+    The one page whose detections survive is
+    [EuRoC SOTA (2026-10-04)](euroc_sota_20261004.md), re-derived exactly.
+
+    What the metric measures -- and why it must not be compared against a render-tag RMSE --
+    is in the [EuRoC error budget](euroc_error_budget.md).
+
 **Result:** 52 of 73 judged cells won (`main`: 47). Corner metrics are debiased: each detector's
 mean radial offset is removed and reported separately ([why](../lessons/rotation-tail-and-edge-refinement.md#2026-10-04-the-marker-calibrates-its-own-photometric-inset)).
 

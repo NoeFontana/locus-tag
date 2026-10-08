@@ -152,6 +152,57 @@ Recall and false positives are essentially unmoved (`locus_b_std` 92.485 -> 92.4
 0 -> 0; reference frames 1029 both ways), so this re-baselines the corner columns only,
 and no SOTA ordering changes.
 
+### The correction is a near-fixed absolute term (2026-10-08)
+
+Recomputing the fourteen archived EuRoC runs both ways, in one directory so the reference
+pool and common-tag set are identical across the comparison (1047 reference frames, 9923
+common tags):
+
+| run | LOO own median, before | after | absolute | relative |
+| :--- | ---: | ---: | ---: | ---: |
+| `locus_g5`, `locus_new4` | 0.2661 | 0.2767 | +0.0106 | +3.98 % |
+| `locus_final` | 0.2665 | 0.2770 | +0.0105 | +3.95 % |
+| `locus_f40`, `locus_g4` | 0.2691 | 0.2799 | +0.0108 | +4.01 % |
+| `locus_main4` | 0.2697 | 0.2802 | +0.0105 | +3.90 % |
+| `locus_f35`, `locus_g35` | 0.2708 | 0.2813 | +0.0105 | +3.89 % |
+| `locus_new` | 0.3183 | 0.3274 | +0.0091 | +2.87 % |
+| `locus_main` | 0.3211 | 0.3298 | +0.0087 | +2.71 % |
+| `opencv_apriltag` | 0.4752 | 0.4788 | +0.0036 | +0.75 % |
+| `locus_v080` | 0.9844 | 0.9876 | +0.0032 | +0.32 % |
+| `opencv_subpix` | 2.1336 | 2.1323 | -0.0012 | -0.06 % |
+| `opencv` | 2.2865 | 2.2820 | -0.0045 | -0.20 % |
+
+The shift is bounded in **absolute** terms (-0.005 to +0.011 px) and is close to constant
+across detectors. Its *relative* size therefore falls monotonically as the detector's own
+error grows — ~4 % at 0.27 px, 0.75 % at 0.48 px, indistinguishable from zero above 2 px.
+That is the whole mechanism by which it flattered the best corners, and it is why the
+artefact could not be removed by rescaling: there is no single factor.
+
+It also bounds what the un-re-derivable pages lose. At the 0.3-0.9 px levels those pages
+report, the shift is ~0.004-0.009 px on Locus and ~0.004 px on the references, and no
+win/loss verdict on any scoreboard changes.
+
+### Re-derived: EuRoC SOTA (2026-10-04)
+
+The only page whose detections were archived. Recomputing the stored runs with the old
+inverse reproduces its published cell to the thousandth, which is what identifies them —
+`main` is `locus_main`, **This build** is `locus_final`, the reference is `opencv_apriltag`:
+
+| cell | published (inexact) | recomputed, old inverse | **re-derived** |
+| :--- | ---: | ---: | ---: |
+| `main` median / p90 | 0.316 / 0.634 | 0.316 / 0.634 | **0.325 / 0.650** |
+| This build median / p90 | 0.283 / 0.575 | 0.283 / 0.575 | **0.295 / 0.594** |
+| OpenCV APRILTAG median / p90 | 0.516 / 0.996 | 0.516 / 0.997 | **0.520 / 1.008** |
+
+Recall (20.86 / 86.02 %) and false positives (6 / 1) move by at most 0.01 pp. Locus still
+wins the cell by a wide margin; only the size of the margin changes.
+
+The runs behind `sota_scoreboard_20261002/03/04.md` and `liu4k_euroc_sota_20261001.md` were
+not archived, and the common-tag set each of their cells used depended on which runs shared
+the directory at the time, which is not recoverable. Those pages are annotated with the
+bound above rather than rewritten: a figure rescaled by a factor measured on other runs
+would not be a measurement, which is the failure this whole file exists to document.
+
 ## How to quote these numbers
 
 * Do not compare `loo_own_median_px` against a render-tag corner RMSE. Different
