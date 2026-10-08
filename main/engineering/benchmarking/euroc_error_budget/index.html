@@ -2245,6 +2245,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Fixed: the scorer&#39;s undistortion inverse">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-correction-is-a-near-fixed-absolute-term-2026-10-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The correction is a near-fixed absolute term (2026-10-08)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#re-derived-euroc-sota-2026-10-04" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-derived: EuRoC SOTA (2026-10-04)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2789,6 +2817,34 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="Fixed: the scorer&#39;s undistortion inverse">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-correction-is-a-near-fixed-absolute-term-2026-10-08" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The correction is a near-fixed absolute term (2026-10-08)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#re-derived-euroc-sota-2026-10-04" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-derived: EuRoC SOTA (2026-10-04)
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -3077,6 +3133,149 @@ convergence rather than returning an approximation.</p>
 <p>Recall and false positives are essentially unmoved (<code>locus_b_std</code> 92.485 -&gt; 92.491 %, FP
 0 -&gt; 0; reference frames 1029 both ways), so this re-baselines the corner columns only,
 and no SOTA ordering changes.</p>
+<h3 id="the-correction-is-a-near-fixed-absolute-term-2026-10-08">The correction is a near-fixed absolute term (2026-10-08)</h3>
+<p>Recomputing the fourteen archived EuRoC runs both ways, in one directory so the reference
+pool and common-tag set are identical across the comparison (1047 reference frames, 9923
+common tags):</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">run</th>
+<th style="text-align: right;">LOO own median, before</th>
+<th style="text-align: right;">after</th>
+<th style="text-align: right;">absolute</th>
+<th style="text-align: right;">relative</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>locus_g5</code>, <code>locus_new4</code></td>
+<td style="text-align: right;">0.2661</td>
+<td style="text-align: right;">0.2767</td>
+<td style="text-align: right;">+0.0106</td>
+<td style="text-align: right;">+3.98 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>locus_final</code></td>
+<td style="text-align: right;">0.2665</td>
+<td style="text-align: right;">0.2770</td>
+<td style="text-align: right;">+0.0105</td>
+<td style="text-align: right;">+3.95 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>locus_f40</code>, <code>locus_g4</code></td>
+<td style="text-align: right;">0.2691</td>
+<td style="text-align: right;">0.2799</td>
+<td style="text-align: right;">+0.0108</td>
+<td style="text-align: right;">+4.01 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>locus_main4</code></td>
+<td style="text-align: right;">0.2697</td>
+<td style="text-align: right;">0.2802</td>
+<td style="text-align: right;">+0.0105</td>
+<td style="text-align: right;">+3.90 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>locus_f35</code>, <code>locus_g35</code></td>
+<td style="text-align: right;">0.2708</td>
+<td style="text-align: right;">0.2813</td>
+<td style="text-align: right;">+0.0105</td>
+<td style="text-align: right;">+3.89 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>locus_new</code></td>
+<td style="text-align: right;">0.3183</td>
+<td style="text-align: right;">0.3274</td>
+<td style="text-align: right;">+0.0091</td>
+<td style="text-align: right;">+2.87 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>locus_main</code></td>
+<td style="text-align: right;">0.3211</td>
+<td style="text-align: right;">0.3298</td>
+<td style="text-align: right;">+0.0087</td>
+<td style="text-align: right;">+2.71 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>opencv_apriltag</code></td>
+<td style="text-align: right;">0.4752</td>
+<td style="text-align: right;">0.4788</td>
+<td style="text-align: right;">+0.0036</td>
+<td style="text-align: right;">+0.75 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>locus_v080</code></td>
+<td style="text-align: right;">0.9844</td>
+<td style="text-align: right;">0.9876</td>
+<td style="text-align: right;">+0.0032</td>
+<td style="text-align: right;">+0.32 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>opencv_subpix</code></td>
+<td style="text-align: right;">2.1336</td>
+<td style="text-align: right;">2.1323</td>
+<td style="text-align: right;">-0.0012</td>
+<td style="text-align: right;">-0.06 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><code>opencv</code></td>
+<td style="text-align: right;">2.2865</td>
+<td style="text-align: right;">2.2820</td>
+<td style="text-align: right;">-0.0045</td>
+<td style="text-align: right;">-0.20 %</td>
+</tr>
+</tbody>
+</table>
+<p>The shift is bounded in <strong>absolute</strong> terms (-0.005 to +0.011 px) and is close to constant
+across detectors. Its <em>relative</em> size therefore falls monotonically as the detector's own
+error grows — ~4 % at 0.27 px, 0.75 % at 0.48 px, indistinguishable from zero above 2 px.
+That is the whole mechanism by which it flattered the best corners, and it is why the
+artefact could not be removed by rescaling: there is no single factor.</p>
+<p>It also bounds what the un-re-derivable pages lose. At the 0.3-0.9 px levels those pages
+report, the shift is ~0.004-0.009 px on Locus and ~0.004 px on the references, and no
+win/loss verdict on any scoreboard changes.</p>
+<h3 id="re-derived-euroc-sota-2026-10-04">Re-derived: EuRoC SOTA (2026-10-04)</h3>
+<p>The only page whose detections were archived. Recomputing the stored runs with the old
+inverse reproduces its published cell to the thousandth, which is what identifies them —
+<code>main</code> is <code>locus_main</code>, <strong>This build</strong> is <code>locus_final</code>, the reference is <code>opencv_apriltag</code>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">cell</th>
+<th style="text-align: right;">published (inexact)</th>
+<th style="text-align: right;">recomputed, old inverse</th>
+<th style="text-align: right;"><strong>re-derived</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><code>main</code> median / p90</td>
+<td style="text-align: right;">0.316 / 0.634</td>
+<td style="text-align: right;">0.316 / 0.634</td>
+<td style="text-align: right;"><strong>0.325 / 0.650</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">This build median / p90</td>
+<td style="text-align: right;">0.283 / 0.575</td>
+<td style="text-align: right;">0.283 / 0.575</td>
+<td style="text-align: right;"><strong>0.295 / 0.594</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV APRILTAG median / p90</td>
+<td style="text-align: right;">0.516 / 0.996</td>
+<td style="text-align: right;">0.516 / 0.997</td>
+<td style="text-align: right;"><strong>0.520 / 1.008</strong></td>
+</tr>
+</tbody>
+</table>
+<p>Recall (20.86 / 86.02 %) and false positives (6 / 1) move by at most 0.01 pp. Locus still
+wins the cell by a wide margin; only the size of the margin changes.</p>
+<p>The runs behind <code>sota_scoreboard_20261002/03/04.md</code> and <code>liu4k_euroc_sota_20261001.md</code> were
+not archived, and the common-tag set each of their cells used depended on which runs shared
+the directory at the time, which is not recoverable. Those pages are annotated with the
+bound above rather than rewritten: a figure rescaled by a factor measured on other runs
+would not be a measurement, which is the failure this whole file exists to document.</p>
 <h2 id="how-to-quote-these-numbers">How to quote these numbers</h2>
 <ul>
 <li>Do not compare <code>loo_own_median_px</code> against a render-tag corner RMSE. Different

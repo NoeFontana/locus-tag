@@ -2717,6 +2717,27 @@ each reference</strong> on every benchmark both references can decode. Reproduce
 <code>cargo xtask sota</code> (<code>xtask/README.md</code>). Mechanisms live in the
 real-image root-cause snapshot (<a href="../liu4k_euroc_sota_20261001/">Liu4K + EuRoC, 2026-10-01</a>) and
 the lessons pages; this page carries the numbers.</p>
+<div class="admonition note">
+<p class="admonition-title">EuRoC corner cells carry a known measurement bias (fixed 2026-10-07)</p>
+<p>The EuRoC <code>LOO px</code> figures on this page were scored with an <strong>inexact</strong>
+undistortion inverse (<code>cv2.undistortPoints</code>, which stops short with no convergence
+test); see PR #455.</p>
+<p>Across the fourteen EuRoC runs whose detections are preserved, the correction is a
+near-fixed <strong>absolute</strong> shift of -0.005 to +0.011 px. It is therefore largest in
+<em>relative</em> terms for the most accurate detector -- +4.0 % at 0.27 px, +2.7 % at 0.32 px,
++0.75 % at 0.48 px, +0.3 % at 0.98 px, and indistinguishable from zero above 2 px --
+which is exactly why it flattered the best corners.</p>
+<p>At the 0.53-0.91 px levels in the EuRoC rows the shift is about +0.004 px on both Locus
+and the reference, so <strong>no win/loss verdict changes</strong>.</p>
+<p>The runs behind this page were not archived, so these cells are <strong>not</strong> re-derived here:
+a figure rescaled by a factor measured on <em>other</em> runs would not be a measurement, and the
+common-tag set each cell used depended on which runs shared the directory at the time,
+which is not recoverable. Re-running <code>cargo xtask sota</code> today produces corrected values.
+The one page whose detections survive is
+<a href="../euroc_sota_20261004/">EuRoC SOTA (2026-10-04)</a>, re-derived exactly.</p>
+<p>What the metric measures -- and why it must not be compared against a render-tag RMSE --
+is in the <a href="../euroc_error_budget/">EuRoC error budget</a>.</p>
+</div>
 <p><strong>Result: <code>standard</code> wins 31 / 88 judged cells.</strong> "Industrial SOTA" here means every judged
 cell green. Pose metrics are not reported: the win table is corner-level, so the Fast/Accurate
 pose-mode rule does not apply.</p>

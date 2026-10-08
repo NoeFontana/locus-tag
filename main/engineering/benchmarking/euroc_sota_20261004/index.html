@@ -2759,15 +2759,22 @@
 real-camera benchmark with a verifiable board model, so this pass starts from it. The
 analysis is in the
 <a href="../../lessons/recall-quad-icra/#2026-10-04-euroc-the-only-real-data-benchmark-scorer-connectivity-clipped-and-gross-corners">recall lessons</a>.</p>
-<div class="admonition warning">
-<p class="admonition-title">Corner columns superseded (2026-10-07)</p>
-<p>The <code>loo_*</code> corner figures on this page were produced with an <strong>inexact</strong> undistortion
-inverse and read ~4 % low for Locus against ~0.8 % for OpenCV APRILTAG, so Locus's
-relative margin here is overstated by about 3 pp. Recall, false positives and latency
-are unaffected. More importantly, this metric is a self-consistency residual with a
-~1.37x gain over the underlying corner noise and a ~0.26 px floor no detector change can
-move -- it is not a corner accuracy, and must not be compared against a render-tag RMSE.
-See <a href="../euroc_error_budget/">what the EuRoC corner number actually measures</a>.</p>
+<div class="admonition note">
+<p class="admonition-title">Corner cells re-derived with the fixed undistortion inverse (2026-10-08)</p>
+<p>The <code>LOO corner error</code> cell below has been <strong>recomputed from the same stored detections</strong>
+with the converged undistortion inverse of PR #455, so it is a measurement, not a rescaled
+figure. The original cell read <code>0.316 / 0.634 | 0.283 / 0.575 | 0.516 / 0.996</code>; the inexact
+inverse had made it ~4 % low for Locus against ~0.8 % for OpenCV APRILTAG, overstating
+Locus's relative margin by about 3 pp. Locus still wins the cell by a wide margin.</p>
+<p>Provenance: <code>main</code> is the archived run <code>locus_main</code>, <strong>This build</strong> is <code>locus_final</code>, and the
+reference is <code>opencv_apriltag</code>, scored together over 1047 reference frames and 9923 common
+tags. The pre-fix recompute reproduces the original cell to the thousandth, which is what
+identifies the runs. Recall (20.86 / 86.02 %) and false positives (6 / 1) move by at most
+0.01 pp, and latency is untouched.</p>
+<p>This metric is still a self-consistency residual with a ~1.37x gain over the underlying
+corner noise and a ~0.26 px floor no detector change can move. It is not a corner accuracy
+and must not be compared against a render-tag RMSE:
+see <a href="../euroc_error_budget/">the EuRoC error budget</a>.</p>
 </div>
 <p><strong>This build</strong> is <code>main</code> (<code>629a557</code>) plus:
 - <strong>EuRoC scorer fixes:</strong> a judgeable lens-model radius, corner error in image pixels, and a
@@ -2801,9 +2808,9 @@ See <a href="../euroc_error_budget/">what the EuRoC corner number actually measu
 </tr>
 <tr>
 <td style="text-align: left;">LOO corner error, common tags, median / p90 (px)</td>
-<td style="text-align: right;">0.316 / 0.634</td>
-<td style="text-align: right;"><strong>0.283 / 0.575</strong></td>
-<td style="text-align: right;">0.516 / 0.996 (OpenCV APRILTAG)</td>
+<td style="text-align: right;">0.325 / 0.650</td>
+<td style="text-align: right;"><strong>0.295 / 0.594</strong></td>
+<td style="text-align: right;">0.520 / 1.008 (OpenCV APRILTAG)</td>
 </tr>
 <tr>
 <td style="text-align: left;">ms/img, 1 thread</td>

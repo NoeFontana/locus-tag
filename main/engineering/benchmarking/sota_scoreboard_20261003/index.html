@@ -2760,6 +2760,27 @@
 probability with a dispatched codebook search (#417), and exact latency work (#418, #420–#424).
 This page scores two configurations of <code>main</code> <code>a6199d4</code> against the <strong>best published operating
 point of each reference</strong>. Reproduce any cell with <code>cargo xtask sota</code> (<code>xtask/README.md</code>).</p>
+<div class="admonition note">
+<p class="admonition-title">EuRoC corner cells carry a known measurement bias (fixed 2026-10-07)</p>
+<p>The EuRoC <code>LOO px</code> figures on this page were scored with an <strong>inexact</strong>
+undistortion inverse (<code>cv2.undistortPoints</code>, which stops short with no convergence
+test); see PR #455.</p>
+<p>Across the fourteen EuRoC runs whose detections are preserved, the correction is a
+near-fixed <strong>absolute</strong> shift of -0.005 to +0.011 px. It is therefore largest in
+<em>relative</em> terms for the most accurate detector -- +4.0 % at 0.27 px, +2.7 % at 0.32 px,
++0.75 % at 0.48 px, +0.3 % at 0.98 px, and indistinguishable from zero above 2 px --
+which is exactly why it flattered the best corners.</p>
+<p>At the 0.53-0.91 px levels in the EuRoC rows the shift is about +0.004 px on both Locus
+and the reference, so <strong>no win/loss verdict changes</strong>.</p>
+<p>The runs behind this page were not archived, so these cells are <strong>not</strong> re-derived here:
+a figure rescaled by a factor measured on <em>other</em> runs would not be a measurement, and the
+common-tag set each cell used depended on which runs shared the directory at the time,
+which is not recoverable. Re-running <code>cargo xtask sota</code> today produces corrected values.
+The one page whose detections survive is
+<a href="../euroc_sota_20261004/">EuRoC SOTA (2026-10-04)</a>, re-derived exactly.</p>
+<p>What the metric measures -- and why it must not be compared against a render-tag RMSE --
+is in the <a href="../euroc_error_budget/">EuRoC error budget</a>.</p>
+</div>
 <ul>
 <li><strong>Candidate</strong> is the opt-in robust pipeline: <code>standard</code> plus these overrides.</li>
 </ul>

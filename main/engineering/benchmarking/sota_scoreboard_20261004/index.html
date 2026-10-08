@@ -2694,6 +2694,28 @@ profile of the branch for #434: decode-first and the dark-ring check by default 
 <code>corner_subpix</code> with the junction window chosen per corner (#431, #432), plus #434's fused
 junction/edge-line corners with the photometric corner calibration. <code>main</code> at <code>365c9ba</code> is the
 before column. Reproduce any cell with <code>cargo xtask sota</code> (<code>xtask/README.md</code>).</p>
+<div class="admonition note">
+<p class="admonition-title">EuRoC corner cells carry a known measurement bias (fixed 2026-10-07)</p>
+<p>The EuRoC <code>LOO px</code> figures on this page were scored with an <strong>inexact</strong>
+undistortion inverse (<code>cv2.undistortPoints</code>, which stops short with no convergence
+test); see PR #455.</p>
+<p>Across the fourteen EuRoC runs whose detections are preserved, the correction is a
+near-fixed <strong>absolute</strong> shift of -0.005 to +0.011 px. It is therefore largest in
+<em>relative</em> terms for the most accurate detector -- +4.0 % at 0.27 px, +2.7 % at 0.32 px,
++0.75 % at 0.48 px, +0.3 % at 0.98 px, and indistinguishable from zero above 2 px --
+which is exactly why it flattered the best corners.</p>
+<p>At the ~0.31 px Locus level in the EuRoC rows the shift is about +0.009 px, against
++0.004 px on the reference at 0.53 px, so <strong>no win/loss verdict changes</strong> (Locus still
+wins both EuRoC corner cells).</p>
+<p>The runs behind this page were not archived, so these cells are <strong>not</strong> re-derived here:
+a figure rescaled by a factor measured on <em>other</em> runs would not be a measurement, and the
+common-tag set each cell used depended on which runs shared the directory at the time,
+which is not recoverable. Re-running <code>cargo xtask sota</code> today produces corrected values.
+The one page whose detections survive is
+<a href="../euroc_sota_20261004/">EuRoC SOTA (2026-10-04)</a>, re-derived exactly.</p>
+<p>What the metric measures -- and why it must not be compared against a render-tag RMSE --
+is in the <a href="../euroc_error_budget/">EuRoC error budget</a>.</p>
+</div>
 <p><strong>Result:</strong> 52 of 73 judged cells won (<code>main</code>: 47). Corner metrics are debiased: each detector's
 mean radial offset is removed and reported separately (<a href="../../lessons/rotation-tail-and-edge-refinement/#2026-10-04-the-marker-calibrates-its-own-photometric-inset">why</a>).</p>
 <table>
