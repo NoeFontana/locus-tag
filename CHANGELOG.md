@@ -7,6 +7,39 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **The dataset-backed snapshots are blessed, and the suites are green for the first time since
+  2026-07-19.** `cargo nextest run --profile datasets --release --features bench-internals`
+  reports 50 passed / 0 pending. The twelve snapshots that moved with the 179/400 tile cut were
+  held back deliberately until the cut had been re-examined; it has been, the constant is
+  unchanged, and they now record the measured result rather than a pending question. The wins:
+  low-key recall **0.80 -> 0.98** with corner RMSE 0.1776 -> 0.0650 and rotation p99
+  **1.4606 -> 0.1811 deg**, low-key tuned recall 0.20 -> 0.44, raw-pipeline recall 0.96 -> 1.00,
+  raw-pipeline tuned recall 0.62 -> 0.74 with rotation p99 **3.4167 -> 0.4746 deg**. The costs,
+  recorded rather than buried: `tag16h5` loses one marker of 100 in both variants (recall
+  1.00 -> 0.99), ICRA forward checkerboard-grid recall 0.6886 -> 0.6736, the EdLines-variant
+  rotation p99 rises 0.5794 -> 0.8356 deg, and raw-pipeline mean corner RMSE rises
+  0.1015 -> 0.1839 px as four percent more markers enter the average.
+- **A profile optimisation pass found no change worth shipping, which is itself the result.**
+  Recorded in `profiles/README.md` so it is not re-derived:
+  - `segmentation.connectivity` and `threshold.enable_sharpening` **interact** and the two
+    shipped profiles sit at the two self-consistent corners of a 2x2. Sharpening overshoots at a
+    border, widening the dark region into single-pixel *diagonal* bridges between neighbouring
+    markers; 8-connectivity fuses across them, 4-connectivity cannot see them. EuRoC
+    `high_accuracy` recall: `Eight`+off **53.4 %**, `Four`+off 87.6 %, `Eight`+on 25.9 %,
+    `Four`+on **91.6 %**. Changing either knob alone moves the detector to a worse corner than
+    it started in.
+  - Moving `high_accuracy` to `Four` + sharpening would buy 38 pp of EuRoC recall and cost the
+    metric the profile exists for: **AprilGrid board p99 rotation 0.0186 -> 0.1749 deg, 9.4x
+    worse**, deterministic to 16 digits over two runs, plus one 4K render-tag marker. Rejected.
+    Its low EuRoC recall is a use-case mismatch — those are small, motion-blurred tags and
+    `standard` reaches 92.0 % on the same frames — not mis-tuning.
+  - Measured and **inert**: `decoder.min_contrast` 20 -> 15 -> 10 (identical recall),
+    `quad.min_edge_score` 4.0 -> 2.0 (identical), `quad.subpixel_refinement_sigma`
+    0.6 -> 1.4 (4th decimal only), and `high_accuracy`'s `min_area` 400 -> 36 plus the
+    filled-blob gates switched off (identical, because connectivity is the binding constraint:
+    markers are merged, not rejected for being small). The sigma result retires a plausible
+    hypothesis — the 7.7x gap between synthetic corner error (0.0370 px) and real (0.2845 px) is
+    not the Erf model's assumed PSF width.
 - **`high_accuracy` now shares `standard`'s geometry.** It ran `EdLines` whole-edge corners
   under an `AdaptivePpb` router; it now uses `ContourRdp` contours, `corner_subpix` and `Erf`
   refinement on a `Static` route, like `standard` and `grid`. What makes it the accuracy

@@ -191,6 +191,55 @@ The historical settings, for anyone re-running that comparison:
 | `pose.outlier_drop_d2_threshold` | `0.0` (off) | `25.0` | Drop a single catastrophic corner (≈ 5σ²) and re-solve on the other three when that improves their fit. |
 | `pose.pose_edge_refinement_enabled` | `false` | `true` | Refine the pose against the decoded marker's internal bit edges (Accurate mode). |
 
+## Tuning notes (measured 2026-10-07)
+
+### `connectivity` and `enable_sharpening` are not independent
+
+The two shipped pairings are the two *self-consistent corners* of a 2x2, not independent
+choices. EuRoC `cam_april`, 1450 frames, GT-free LOO protocol, one scoring pass,
+`RAYON_NUM_THREADS=1`, `high_accuracy` recall:
+
+| | `connectivity: Eight` | `connectivity: Four` |
+| :-- | --: | --: |
+| `enable_sharpening: false` | **53.4 %** ← `high_accuracy` | 87.6 % |
+| `enable_sharpening: true` | 25.9 % | **91.6 %** ← `standard`'s pairing |
+
+Laplacian sharpening overshoots at a border, which widens the dark region and creates
+single-pixel **diagonal** bridges between neighbouring markers. 8-connectivity fuses across
+those bridges, so the markers arrive as one component and both are lost; 4-connectivity cannot
+see them. Hence sharpening is worst with `Eight` and best with `Four`, and changing either knob
+alone moves the detector to a worse corner than it started in. Do not tune them separately.
+
+### Why `high_accuracy` keeps `Eight` + no sharpening anyway
+
+Moving it to `Four` + sharpening raises EuRoC recall 53.4 -> 91.6 %, and costs the metric the
+profile exists for: **AprilGrid board p99 rotation 0.0186 -> 0.1749 deg, 9.4x worse**
+(deterministic to 16 digits over two runs, so not the known `regression_board_hub` noise), plus
+one 4K render-tag marker. `ChArUco` board rotation improves, AprilGrid does not. Rejected.
+
+Its low EuRoC recall is a **use-case mismatch, not mis-tuning**: EuRoC's small, motion-blurred
+board tags are `standard`'s regime, where `standard` reaches 92.0 % on the same frames. Reach
+for `standard` on small or blurred markers and `high_accuracy` on large well-resolved ones,
+which is what the profile names claim and what the numbers support.
+
+### Knobs measured and found inert
+
+Worth knowing so they are not re-tried. All on EuRoC, same protocol:
+
+- `decoder.min_contrast` 20.0 -> 15.0 -> 10.0: recall **identical** to 3 decimals. The
+  `grid` rationale ("20.0 rejects valid tags at shared borders") does not transfer here.
+- `quad.min_edge_score` 4.0 -> 2.0: identical.
+- `quad.subpixel_refinement_sigma` 0.6 -> 0.8 / 1.0 / 1.4: recall and LOO corner error move
+  only in the 4th decimal (0.2846 -> 0.2845). This one was expected to matter — it is the Erf
+  model's assumed PSF width, and EuRoC is motion-blurred, so a sharp-PSF prior should bias the
+  edge estimate. It does not measurably, so the 7.7x gap between synthetic corner error
+  (0.0370 px) and real (0.2845 px) is **not** sigma mis-specification. Still unexplained.
+- `high_accuracy`'s `quad.min_area` 400 -> 36, and `min_fill_ratio` / `max_elongation` /
+  `min_density` switched off: **identical** recall, alone or together. Connectivity is the
+  binding constraint — markers are being *merged*, not rejected for being small — so these
+  gates cost nothing on this data and stay as insurance for textured scenes EuRoC does not
+  exercise.
+
 ## Authoring a custom profile
 
 A custom profile is any JSON document that validates against the schema.
