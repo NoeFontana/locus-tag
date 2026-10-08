@@ -16,7 +16,7 @@
         <link rel="prev" href="../liu4k_euroc_sota_20261001/">
       
       
-        <link rel="next" href="../sota_scoreboard_20261004/">
+        <link rel="next" href="../euroc_error_budget/">
       
       
         
@@ -1837,6 +1837,8 @@
       
         
       
+        
+      
     
     
     
@@ -2198,6 +2200,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../euroc_error_budget/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    What the EuRoC corner number actually measures (2026-10-07)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -2729,6 +2759,16 @@
 real-camera benchmark with a verifiable board model, so this pass starts from it. The
 analysis is in the
 <a href="../../lessons/recall-quad-icra/#2026-10-04-euroc-the-only-real-data-benchmark-scorer-connectivity-clipped-and-gross-corners">recall lessons</a>.</p>
+<div class="admonition warning">
+<p class="admonition-title">Corner columns superseded (2026-10-07)</p>
+<p>The <code>loo_*</code> corner figures on this page were produced with an <strong>inexact</strong> undistortion
+inverse and read ~4 % low for Locus against ~0.8 % for OpenCV APRILTAG, so Locus's
+relative margin here is overstated by about 3 pp. Recall, false positives and latency
+are unaffected. More importantly, this metric is a self-consistency residual with a
+~1.37x gain over the underlying corner noise and a ~0.26 px floor no detector change can
+move -- it is not a corner accuracy, and must not be compared against a render-tag RMSE.
+See <a href="../euroc_error_budget/">what the EuRoC corner number actually measures</a>.</p>
+</div>
 <p><strong>This build</strong> is <code>main</code> (<code>629a557</code>) plus:
 - <strong>EuRoC scorer fixes:</strong> a judgeable lens-model radius, corner error in image pixels, and a
   self-consistent reference pool.

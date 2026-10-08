@@ -10,31 +10,31 @@
       
       
       
-        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/constraints/">
+        <link rel="canonical" href="https://noefontana.github.io/locus-tag/main/engineering/benchmarking/euroc_error_budget/">
       
       
-        <link rel="prev" href="../detection-batch-contract/">
+        <link rel="prev" href="../euroc_sota_20261004/">
       
       
-        <link rel="next" href="../ffi_contracts/">
+        <link rel="next" href="../sota_scoreboard_20261004/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.png">
+      <link rel="icon" href="../../../assets/images/favicon.png">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Strict Constraints - Locus</title>
+        <title>What the EuRoC corner number actually measures (2026-10-07) - Locus</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../../../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../../../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -53,9 +53,9 @@
       
     
     
-      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../../assets/_mkdocstrings.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#strict-constraints" class="md-skip">
+        <a href="#what-the-euroc-corner-number-actually-measures-2026-10-07" class="md-skip">
           Skip to content
         </a>
       
@@ -100,7 +100,7 @@
 
 <header class="md-header md-header--shadow" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
+    <a href="../../.." title="Locus" class="md-header__button md-logo" aria-label="Locus" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -120,7 +120,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Strict Constraints
+              What the EuRoC corner number actually measures (2026-10-07)
             
           </span>
         </div>
@@ -236,7 +236,7 @@
 
 <nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
+    <a href="../../.." title="Locus" class="md-nav__button md-logo" aria-label="Locus" data-md-component="logo">
       
   
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
@@ -266,7 +266,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href="../../.." class="md-nav__link">
         
   
   
@@ -346,7 +346,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/guide/" class="md-nav__link">
+      <a href="../../../tutorials/guide/" class="md-nav__link">
         
   
   
@@ -444,7 +444,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/add_dictionary/" class="md-nav__link">
+      <a href="../../../how-to/add_dictionary/" class="md-nav__link">
         
   
   
@@ -472,7 +472,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/debug_with_rerun/" class="md-nav__link">
+      <a href="../../../how-to/debug_with_rerun/" class="md-nav__link">
         
   
   
@@ -500,7 +500,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/concurrent_detection/" class="md-nav__link">
+      <a href="../../../how-to/concurrent_detection/" class="md-nav__link">
         
   
   
@@ -528,7 +528,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/install-with-distortion/" class="md-nav__link">
+      <a href="../../../how-to/install-with-distortion/" class="md-nav__link">
         
   
   
@@ -556,7 +556,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/tune_and_compare/" class="md-nav__link">
+      <a href="../../../how-to/tune_and_compare/" class="md-nav__link">
         
   
   
@@ -584,7 +584,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../how-to/per_instance_comparison/" class="md-nav__link">
+      <a href="../../../how-to/per_instance_comparison/" class="md-nav__link">
         
   
   
@@ -682,7 +682,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/architecture/" class="md-nav__link">
+      <a href="../../../explanation/architecture/" class="md-nav__link">
         
   
   
@@ -710,7 +710,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/pipeline/" class="md-nav__link">
+      <a href="../../../explanation/pipeline/" class="md-nav__link">
         
   
   
@@ -738,7 +738,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/memory_model/" class="md-nav__link">
+      <a href="../../../explanation/memory_model/" class="md-nav__link">
         
   
   
@@ -766,7 +766,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/algorithms/" class="md-nav__link">
+      <a href="../../../explanation/algorithms/" class="md-nav__link">
         
   
   
@@ -794,7 +794,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/coordinates/" class="md-nav__link">
+      <a href="../../../explanation/coordinates/" class="md-nav__link">
         
   
   
@@ -822,7 +822,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../explanation/performance/" class="md-nav__link">
+      <a href="../../../explanation/performance/" class="md-nav__link">
         
   
   
@@ -910,7 +910,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/api/" class="md-nav__link">
+      <a href="../../../reference/api/" class="md-nav__link">
         
   
   
@@ -977,7 +977,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../../changelogs/" class="md-nav__link ">
+            <a href="../../../changelogs/" class="md-nav__link ">
               
   
   
@@ -1021,7 +1021,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelogs/v0.9.0/" class="md-nav__link">
+      <a href="../../../changelogs/v0.9.0/" class="md-nav__link">
         
   
   
@@ -1049,7 +1049,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelogs/v0.8.0/" class="md-nav__link">
+      <a href="../../../changelogs/v0.8.0/" class="md-nav__link">
         
   
   
@@ -1077,7 +1077,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelogs/v0.7.1/" class="md-nav__link">
+      <a href="../../../changelogs/v0.7.1/" class="md-nav__link">
         
   
   
@@ -1105,7 +1105,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelogs/v0.7.0/" class="md-nav__link">
+      <a href="../../../changelogs/v0.7.0/" class="md-nav__link">
         
   
   
@@ -1133,7 +1133,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelogs/v0.6.0/" class="md-nav__link">
+      <a href="../../../changelogs/v0.6.0/" class="md-nav__link">
         
   
   
@@ -1161,7 +1161,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelogs/v0.5.0/" class="md-nav__link">
+      <a href="../../../changelogs/v0.5.0/" class="md-nav__link">
         
   
   
@@ -1277,7 +1277,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../core/" class="md-nav__link">
+      <a href="../../core/" class="md-nav__link">
         
   
   
@@ -1305,7 +1305,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../workflow/" class="md-nav__link">
+      <a href="../../workflow/" class="md-nav__link">
         
   
   
@@ -1333,7 +1333,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../release-runbook/" class="md-nav__link">
+      <a href="../../release-runbook/" class="md-nav__link">
         
   
   
@@ -1361,7 +1361,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../detection-batch-contract/" class="md-nav__link">
+      <a href="../../detection-batch-contract/" class="md-nav__link">
         
   
   
@@ -1386,37 +1386,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Strict Constraints
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../../constraints/" class="md-nav__link">
         
   
   
@@ -1432,92 +1405,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#1-memory-safety-allocations" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        1. Memory Safety &amp; Allocations
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#2-ffi-zero-copy-boundaries" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        2. FFI &amp; Zero-Copy Boundaries
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#3-unsafe-rust" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        3. Unsafe Rust
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-error-handling" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4. Error Handling
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#5-dependency-hygiene" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5. Dependency Hygiene
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#6-performance-reporting-benchmarking" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        6. Performance Reporting &amp; Benchmarking
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -1530,7 +1417,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ffi_contracts/" class="md-nav__link">
+      <a href="../../ffi_contracts/" class="md-nav__link">
         
   
   
@@ -1558,7 +1445,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../profiles/" class="md-nav__link">
+      <a href="../../profiles/" class="md-nav__link">
         
   
   
@@ -1586,7 +1473,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../stratification/" class="md-nav__link">
+      <a href="../../stratification/" class="md-nav__link">
         
   
   
@@ -1614,7 +1501,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../quality-gates/" class="md-nav__link">
+      <a href="../../quality-gates/" class="md-nav__link">
         
   
   
@@ -1642,7 +1529,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../rust-style/" class="md-nav__link">
+      <a href="../../rust-style/" class="md-nav__link">
         
   
   
@@ -1670,7 +1557,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../python-style/" class="md-nav__link">
+      <a href="../../python-style/" class="md-nav__link">
         
   
   
@@ -1698,7 +1585,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../general-style/" class="md-nav__link">
+      <a href="../../general-style/" class="md-nav__link">
         
   
   
@@ -1754,7 +1641,7 @@
         
           
           <div class="md-nav__link md-nav__container">
-            <a href="../lessons/" class="md-nav__link ">
+            <a href="../../lessons/" class="md-nav__link ">
               
   
   
@@ -1798,7 +1685,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lessons/recall-quad-icra/" class="md-nav__link">
+      <a href="../../lessons/recall-quad-icra/" class="md-nav__link">
         
   
   
@@ -1826,7 +1713,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lessons/rotation-tail-and-edge-refinement/" class="md-nav__link">
+      <a href="../../lessons/rotation-tail-and-edge-refinement/" class="md-nav__link">
         
   
   
@@ -1854,7 +1741,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lessons/edlines-segmentation/" class="md-nav__link">
+      <a href="../../lessons/edlines-segmentation/" class="md-nav__link">
         
   
   
@@ -1882,7 +1769,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lessons/pose-covariance/" class="md-nav__link">
+      <a href="../../lessons/pose-covariance/" class="md-nav__link">
         
   
   
@@ -1915,8 +1802,10 @@
                 
   
   
+    
   
   
+  
     
     
       
@@ -1954,13 +1843,11 @@
     
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
       
         
         
-          
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_7_14" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_14" checked>
         
           
           <label class="md-nav__link" for="__nav_7_14" id="__nav_7_14_label" tabindex="0">
@@ -1981,7 +1868,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_14_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_14_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_7_14">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1999,7 +1886,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/" class="md-nav__link">
+      <a href="../" class="md-nav__link">
         
   
   
@@ -2027,7 +1914,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/lessons/" class="md-nav__link">
+      <a href="../lessons/" class="md-nav__link">
         
   
   
@@ -2055,7 +1942,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/micro-benchmarking-guide/" class="md-nav__link">
+      <a href="../micro-benchmarking-guide/" class="md-nav__link">
         
   
   
@@ -2083,7 +1970,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/release_performance_20260418/" class="md-nav__link">
+      <a href="../release_performance_20260418/" class="md-nav__link">
         
   
   
@@ -2111,7 +1998,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260425/" class="md-nav__link">
+      <a href="../render_tag_sota_20260425/" class="md-nav__link">
         
   
   
@@ -2139,7 +2026,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_sota_20260713/" class="md-nav__link">
+      <a href="../render_tag_sota_20260713/" class="md-nav__link">
         
   
   
@@ -2167,7 +2054,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/liu4k_euroc_sota_20261001/" class="md-nav__link">
+      <a href="../liu4k_euroc_sota_20261001/" class="md-nav__link">
         
   
   
@@ -2195,7 +2082,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/euroc_sota_20261004/" class="md-nav__link">
+      <a href="../euroc_sota_20261004/" class="md-nav__link">
         
   
   
@@ -2220,10 +2107,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../benchmarking/euroc_error_budget/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    What the EuRoC corner number actually measures (2026-10-07)
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -2239,6 +2153,115 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-metric-is-a-self-consistency-residual-not-a-corner-error" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The metric is a self-consistency residual, not a corner error
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The metric is a self-consistency residual, not a corner error">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#measured-gain-of-the-metric" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measured gain of the metric
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error budget
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Error budget">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-per-tag-corner-term-is-the-estimator-not-the-board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The per-(tag, corner) term is the estimator, not the board
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#falsified-explanations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Falsified explanations
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#fixed-the-scorers-undistortion-inverse" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Fixed: the scorer's undistortion inverse
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#how-to-quote-these-numbers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        How to quote these numbers
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -2251,7 +2274,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/sota_scoreboard_20261004/" class="md-nav__link">
+      <a href="../sota_scoreboard_20261004/" class="md-nav__link">
         
   
   
@@ -2279,7 +2302,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/sota_scoreboard_20261003/" class="md-nav__link">
+      <a href="../sota_scoreboard_20261003/" class="md-nav__link">
         
   
   
@@ -2307,7 +2330,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/sota_scoreboard_20261002/" class="md-nav__link">
+      <a href="../sota_scoreboard_20261002/" class="md-nav__link">
         
   
   
@@ -2335,7 +2358,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/refine_variants_20260714/" class="md-nav__link">
+      <a href="../refine_variants_20260714/" class="md-nav__link">
         
   
   
@@ -2363,7 +2386,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/model_edge_refinement_20260715/" class="md-nav__link">
+      <a href="../model_edge_refinement_20260715/" class="md-nav__link">
         
   
   
@@ -2391,7 +2414,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
+      <a href="../render_tag_2160p_20260425/" class="md-nav__link">
         
   
   
@@ -2484,7 +2507,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../track2_precision_threshold/" class="md-nav__link">
+      <a href="../../track2_precision_threshold/" class="md-nav__link">
         
   
   
@@ -2512,7 +2535,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../latency_audit_2160p_segmentation_addendum_2026-05-03/" class="md-nav__link">
+      <a href="../../latency_audit_2160p_segmentation_addendum_2026-05-03/" class="md-nav__link">
         
   
   
@@ -2540,7 +2563,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../erf-simd-attempt-postmortem/" class="md-nav__link">
+      <a href="../../erf-simd-attempt-postmortem/" class="md-nav__link">
         
   
   
@@ -2636,7 +2659,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../migration/config-refactor/" class="md-nav__link">
+      <a href="../../../migration/config-refactor/" class="md-nav__link">
         
   
   
@@ -2691,10 +2714,66 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#1-memory-safety-allocations" class="md-nav__link">
+  <a href="#the-metric-is-a-self-consistency-residual-not-a-corner-error" class="md-nav__link">
     <span class="md-ellipsis">
       
-        1. Memory Safety &amp; Allocations
+        The metric is a self-consistency residual, not a corner error
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The metric is a self-consistency residual, not a corner error">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#measured-gain-of-the-metric" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Measured gain of the metric
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#error-budget" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Error budget
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Error budget">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-per-tag-corner-term-is-the-estimator-not-the-board" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The per-(tag, corner) term is the estimator, not the board
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#falsified-explanations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Falsified explanations
       
     </span>
   </a>
@@ -2702,10 +2781,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-ffi-zero-copy-boundaries" class="md-nav__link">
+  <a href="#fixed-the-scorers-undistortion-inverse" class="md-nav__link">
     <span class="md-ellipsis">
       
-        2. FFI &amp; Zero-Copy Boundaries
+        Fixed: the scorer's undistortion inverse
       
     </span>
   </a>
@@ -2713,43 +2792,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-unsafe-rust" class="md-nav__link">
+  <a href="#how-to-quote-these-numbers" class="md-nav__link">
     <span class="md-ellipsis">
       
-        3. Unsafe Rust
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#4-error-handling" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        4. Error Handling
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#5-dependency-hygiene" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        5. Dependency Hygiene
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#6-performance-reporting-benchmarking" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        6. Performance Reporting &amp; Benchmarking
+        How to quote these numbers
       
     </span>
   </a>
@@ -2776,67 +2822,271 @@
   
 
 
-<h1 id="strict-constraints">Strict Constraints</h1>
-<p>These constraints represent the non-negotiable laws of the Locus codebase. Violations will result in immediate PR rejection.</p>
-<h2 id="1-memory-safety-allocations">1. Memory Safety &amp; Allocations</h2>
-<p>Locus achieves its latency targets by strictly avoiding the system allocator (<code>malloc</code>/<code>free</code>) in the hot loop.
-* <strong>Hot Loop (<code>detect()</code>):</strong>
-  * ❌ <strong>Forbidden:</strong> <code>Vec::new()</code>, <code>Box::new()</code>, <code>HashMap::new()</code>, or any implicit heap allocations.
-  * ✅ <strong>Required:</strong> Use the <code>bumpalo::Bump</code> arena for all ephemeral per-frame data.
-  * ✅ <strong>Required:</strong> Adhere to the <a href="../detection-batch-contract/">DetectionBatch (SoA) Contract</a> to ensure zero-allocation performance and cache efficiency.
-  * ✅ <strong>Allowed:</strong> Stack-allocated structures like <code>SmallVec</code>, <code>arrayvec</code>, or fixed-size arrays <code>[T; N]</code>.
-* <strong>Large SoA / batch structs (≥ 64 KB):</strong>
-  * ❌ <strong>Forbidden:</strong> <code>pub fn new() -&gt; Self</code> (or any other constructor that returns the struct by value) and <code>impl Default</code>.
-  * ❌ <strong>Forbidden:</strong> Holding such structs inline as a field of another type whose constructor returns by value.
-  * ✅ <strong>Required:</strong> Expose only <code>pub fn new_boxed() -&gt; Box&lt;Self&gt;</code>, implemented via <code>Box::&lt;Self&gt;::new_zeroed().assume_init()</code> (or equivalent in-place heap initialization) so the struct never lives on the stack. Patch non-zero defaults in place via <code>slice::fill</code> after <code>assume_init</code>.
-  * ✅ <strong>Required:</strong> Owning types must hold the struct via <code>Box&lt;T&gt;</code> (e.g. <code>FrameContext.batch: Box&lt;DetectionBatch&gt;</code>).
-  * <strong>Rationale:</strong> Debug-mode <code>rustc</code> does not perform RVO/NRVO, so a by-value <code>-&gt; Self</code> materializes the struct in <em>every</em> caller's stack frame along the construction chain. The Windows main-thread stack (1 MB) and <code>std::thread::spawn</code>'s default (2 MB) are easily overflowed once two or three frames each hold a copy. See <code>crates/locus-core/src/batch.rs::DetectionBatch::new_boxed</code> and the <code>detector_constructs_in_constrained_stack</code> regression test.</p>
-<h2 id="2-ffi-zero-copy-boundaries">2. FFI &amp; Zero-Copy Boundaries</h2>
-<p>The Rust-Python boundary must be invisible to performance.
-* <strong>Image Data:</strong>
-  * ❌ <strong>Forbidden:</strong> Copying or cloning NumPy arrays into Rust <code>Vec&lt;u8&gt;</code>. 
-  * ❌ <strong>Forbidden:</strong> Passing non-contiguous views (stride_x != 1) to high-performance detection methods.
-  * ✅ <strong>Required:</strong> Use <code>PyReadonlyArray2&lt;u8&gt;</code> to leverage the Python Buffer Protocol. Validate strides early and once.
-  * ✅ <strong>Required:</strong> Throw a <code>ValueError</code> for non-contiguous arrays to force users to use <code>.ascontiguousarray()</code>.
-  * ✅ <strong>Required:</strong> Image buffers used with SIMD-vectorized kernels (e.g., AVX2 gather) MUST have at least <strong>3 bytes of padding</strong> at the end to prevent out-of-bounds reads during 32-bit pixel fetching.</p>
-<h2 id="3-unsafe-rust">3. Unsafe Rust</h2>
+<h1 id="what-the-euroc-corner-number-actually-measures-2026-10-07">What the EuRoC corner number actually measures (2026-10-07)</h1>
+<p>The EuRoC scorer's <code>loo_own_median_px</code> has been read as "Locus's corner error on real
+data", and compared against the render-tag synthetic figure (0.0370 px) as though the
+two were the same quantity. They are not, and the 7.7x "gap" between them was an
+artefact of that comparison. This file decomposes the number so the next person does
+not re-derive it, and records which candidate explanations were <strong>falsified</strong>.</p>
+<p>Environment for every figure here: AMD EPYC-Milan, 8 logical / 4 cores, Linux
+6.8.0-139, OpenCV 5.0.0, NumPy 2.4.1. Inputs are the stored run jsonl under
+<code>target/sota/runs/euroc</code> and <code>/home/dev/locus-archive/sota-reference/runs/euroc</code>; no
+detector was re-run, so these are properties of the metric and of already-recorded
+detections.</p>
+<h2 id="the-metric-is-a-self-consistency-residual-not-a-corner-error">The metric is a self-consistency residual, not a corner error</h2>
+<p><code>score.py::_loo_errors</code> computes, in <strong>undistorted</strong> pixels,</p>
+<div class="highlight"><pre><span></span><code>e = || H_-t * X_t(nominal board) - c_t ||
+</code></pre></div>
+<p>where <code>H_-t</code> is a homography fitted to the <em>other</em> tags' own detected corners. There is
+no ground truth anywhere in it. Four things therefore enter, and only the first is the
+detector:</p>
+<ol>
+<li>the held-out tag's own corner noise;</li>
+<li>that noise propagated through <code>H_-t</code> (8 DOF fitted to ~112 noisy points, then
+   evaluated at the held-out tag);</li>
+<li>error static in <strong>board</strong> coordinates — the hard-coded <code>PITCH / TAG = 1.3</code>, board bow,
+   per-tag print placement. A homography absorbs any <em>projective</em> map of the board plane,
+   so a uniform pitch scale is invisible, but the 1.3 <strong>ratio</strong> is not;</li>
+<li>error static in <strong>image</strong> coordinates — the radtan model's own residual, plus the
+   inverse used to apply it.</li>
+</ol>
+<p>Terms 3 and 4 are shared across detectors, so they cancel in deltas measured within one
+scoring pass — which is why so many tuning levers have measured "inert" — but they sit in
+the absolute number.</p>
+<h3 id="measured-gain-of-the-metric">Measured gain of the metric</h3>
+<p>Synthesising a <em>perfect</em> board at the real per-frame poses through the published lens
+model, injecting iid Gaussian noise of known sigma in image pixels, and running the
+shipped <code>_loo_errors</code>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">sigma_img (px)</th>
+<th style="text-align: right;">LOO median</th>
+<th style="text-align: right;">gain</th>
+<th style="text-align: right;">LOO p90</th>
+<th style="text-align: right;">p90 gain</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">0.01</td>
+<td style="text-align: right;">0.0209</td>
+<td style="text-align: right;">2.09</td>
+<td style="text-align: right;">0.0615</td>
+<td style="text-align: right;">6.15</td>
+</tr>
+<tr>
+<td style="text-align: right;">0.05</td>
+<td style="text-align: right;">0.0726</td>
+<td style="text-align: right;">1.45</td>
+<td style="text-align: right;">0.1412</td>
+<td style="text-align: right;">2.82</td>
+</tr>
+<tr>
+<td style="text-align: right;">0.10</td>
+<td style="text-align: right;">0.1405</td>
+<td style="text-align: right;">1.41</td>
+<td style="text-align: right;">0.2666</td>
+<td style="text-align: right;">2.67</td>
+</tr>
+<tr>
+<td style="text-align: right;">0.20</td>
+<td style="text-align: right;">0.2775</td>
+<td style="text-align: right;">1.39</td>
+<td style="text-align: right;">0.5259</td>
+<td style="text-align: right;">2.63</td>
+</tr>
+<tr>
+<td style="text-align: right;">0.30</td>
+<td style="text-align: right;">0.4161</td>
+<td style="text-align: right;">1.39</td>
+<td style="text-align: right;">0.7837</td>
+<td style="text-align: right;">2.61</td>
+</tr>
+</tbody>
+</table>
+<p><code>median_LOO = 1.365 * sigma_img + 0.005</code>.</p>
+<p><strong>So the metric reports ~1.37x the underlying iid corner noise, and its p90 reports
+~2.6x.</strong> A reported 0.28 px median is ~0.20 px of image-space corner noise. Quoting
+<code>loo_common_p90_px</code> as a corner error overstates it by about a factor of three.</p>
+<h2 id="error-budget">Error budget</h2>
+<p>Non-parametric partition of the full-fit residual (no optimiser involved): group the
+residuals by <code>(tag, corner)</code> to get what is static in board coordinates, by 30 px image
+cell to get what is static in image coordinates, and call the rest random. Group means
+are debiased for their own sampling variance. 115 872 corner observations over 1028
+frames of <code>locus_b_std</code>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">component</th>
+<th style="text-align: right;">magnitude</th>
+<th style="text-align: right;">share of variance</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">static per <code>(tag, corner)</code></td>
+<td style="text-align: right;">0.333 mm = 0.157 px at median scale</td>
+<td style="text-align: right;">13 %</td>
+</tr>
+<tr>
+<td style="text-align: left;">static per image cell</td>
+<td style="text-align: right;">0.214 px</td>
+<td style="text-align: right;">24 %</td>
+</tr>
+<tr>
+<td style="text-align: left;">random</td>
+<td style="text-align: right;">0.347 px</td>
+<td style="text-align: right;">63 %</td>
+</tr>
+<tr>
+<td style="text-align: left;"><strong>total</strong></td>
+<td style="text-align: right;"><strong>0.436 px RMS, 0.255 px median</strong></td>
+<td style="text-align: right;"></td>
+</tr>
+</tbody>
+</table>
+<p>The partition closes: <code>0.157^2 + 0.214^2 + 0.347^2 = 0.427^2</code> against a measured
+0.436 RMS.</p>
+<h3 id="the-per-tag-corner-term-is-the-estimator-not-the-board">The per-<code>(tag, corner)</code> term is the estimator, not the board</h3>
+<p>This was the surprise. The same partition across detectors on the same frames:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">detector</th>
+<th style="text-align: right;">total RMS</th>
+<th style="text-align: right;">per-<code>(tag,corner)</code></th>
+<th style="text-align: right;">per-image-cell</th>
+<th style="text-align: right;">random</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Locus <code>standard</code></td>
+<td style="text-align: right;">0.436 px</td>
+<td style="text-align: right;">0.333 mm</td>
+<td style="text-align: right;">0.214 px</td>
+<td style="text-align: right;">0.347 px</td>
+</tr>
+<tr>
+<td style="text-align: left;">Locus <code>high_accuracy</code></td>
+<td style="text-align: right;">0.436 px</td>
+<td style="text-align: right;">0.332 mm</td>
+<td style="text-align: right;">0.214 px</td>
+<td style="text-align: right;">0.346 px</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV <code>APRILTAG</code></td>
+<td style="text-align: right;">0.594 px</td>
+<td style="text-align: right;">0.747 mm</td>
+<td style="text-align: right;">0.176 px</td>
+<td style="text-align: right;">0.419 px</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV <code>CONTOUR+SUBPIX</code></td>
+<td style="text-align: right;">2.523 px</td>
+<td style="text-align: right;">3.806 mm</td>
+<td style="text-align: right;">0.459 px</td>
+<td style="text-align: right;">1.623 px</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV <code>CONTOUR</code></td>
+<td style="text-align: right;">2.633 px</td>
+<td style="text-align: right;">4.226 mm</td>
+<td style="text-align: right;">0.477 px</td>
+<td style="text-align: right;">1.569 px</td>
+</tr>
+</tbody>
+</table>
+<p>A physical board would give <strong>every</strong> detector the same per-<code>(tag, corner)</code> number. It
+does not: the term tracks detector quality over a 13x range. So it is not print
+placement or bow — it is a <strong>deterministic per-corner bias of the estimator</strong>, i.e. the
+local bit pattern adjacent to each corner pulling it. That is the photometric inset this
+repo already knows about, now localised to the corner and quantified: 0.38 % of tag size
+for Locus, 0.85 % for OpenCV APRILTAG, and ~4.5 % for the unrefined contour paths
+(consistent with Kalibr's 2-bit border).</p>
+<p>Being deterministic in <code>(tag id, corner index)</code>, it is in principle correctable — both
+are known at decode time, and the machinery exists (PR #434 marker inset, PR #432 board
+inset). It is worth 0.157 px of 0.436 px RMS for Locus, so removing it entirely would
+move the total ~7 %. Not yet attempted.</p>
+<p>On both counts Locus is already the best of the four detectors on <strong>every</strong> component of
+the budget.</p>
+<h2 id="falsified-explanations">Falsified explanations</h2>
+<p>Recorded so they are not re-attempted. Each was a serious candidate and each is out.</p>
 <ul>
-<li>❌ <strong>Forbidden:</strong> Naked <code>unsafe</code> blocks.</li>
-<li>✅ <strong>Required:</strong> Every <code>unsafe</code> block must be immediately preceded by a <code>// SAFETY:</code> comment that rigorously justifies why the invariant holds (e.g., "Strides were checked at the FFI boundary").</li>
+<li><strong>Board-model error dominates.</strong> No: 7.0 % of the number, on held-out frames. Fitting
+  the pitch/tag ratio returns <strong>exactly</strong> the Kalibr nominal 1.3000, and a free 2-D board
+  (288 parameters, fitted on even frames, scored on odd) removes only 2.2 %. The board is
+  planar and printed to 0.18 mm, 0.2 % of tag size.</li>
+<li><strong>Motion blur.</strong> No: coefficient +0.043 on <code>log(velocity)</code> in the multivariate fit, and
+  flat across a 40x velocity range (0.24 to 0.33 px, non-monotonic).</li>
+<li><strong>Board non-planarity.</strong> No: the dependence on tilt is non-monotonic
+  (0.20 -&gt; 0.31 -&gt; 0.24 -&gt; 0.30 px over 0-75 deg), where a bow must grow with tan(tilt).</li>
+<li><strong>Apparent tag size explains the synthetic-vs-real gap.</strong> No, and it is worth being
+  precise about why. Error <em>grows</em> as <code>L^+0.68</code> after controlling for tilt, velocity,
+  radius and tag count — the opposite sign to the variance-limited <code>L^-0.5</code>. Extrapolated
+  to render-tag's tag size it predicts 0.46 px where render-tag measures 0.037 px, a 12x
+  contradiction. The scaling is real but <strong>EuRoC-internal</strong>; it does not transfer across
+  datasets, and the two figures are not two measurements of one quantity.</li>
+<li><strong><code>subpixel_refinement_sigma</code> mis-specification.</strong> Falsified earlier, 2026-10-07; see
+  <code>profiles/README.md</code>.</li>
 </ul>
-<h2 id="4-error-handling">4. Error Handling</h2>
+<p>What remains genuinely open is the 0.347 px random term: it is the detector, it is the
+largest single component, and it scales as <code>L^+0.35</code>, which no mechanism here explains.</p>
+<h2 id="fixed-the-scorers-undistortion-inverse">Fixed: the scorer's undistortion inverse</h2>
+<p><code>_undist</code> was <code>cv2.undistortPoints</code>, an iterative inverse that runs a fixed, small number
+of steps with no convergence test. On this lens it stops short by a <strong>radius-growing</strong>
+amount: 0.046 px median at r in [300, 380) and 0.134 px at worst, where a converged fixed
+point reaches 3e-13.</p>
+<p>The shortfall is smooth, so a homography absorbs part of it and the LOO median came out
+<strong>low</strong>:</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">detector</th>
+<th style="text-align: right;">shipped cv2 inverse</th>
+<th style="text-align: right;">converged</th>
+<th style="text-align: right;">artefact</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Locus <code>standard</code></td>
+<td style="text-align: right;">0.2679</td>
+<td style="text-align: right;">0.2785</td>
+<td style="text-align: right;"><strong>-3.98 %</strong></td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV <code>APRILTAG</code></td>
+<td style="text-align: right;">0.4750</td>
+<td style="text-align: right;">0.4789</td>
+<td style="text-align: right;">-0.82 %</td>
+</tr>
+<tr>
+<td style="text-align: left;">OpenCV <code>CONTOUR+SUBPIX</code></td>
+<td style="text-align: right;">2.1127</td>
+<td style="text-align: right;">2.1131</td>
+<td style="text-align: right;">-0.02 %</td>
+</tr>
+</tbody>
+</table>
+<p>It flatters whichever detector has the better corners, so it does <strong>not</strong> cancel in the
+head-to-head comparison the scorer exists to make: Locus's relative margin over APRILTAG
+was overstated by about 3 pp. <code>_undist</code> is now a fixed-point inverse that <strong>asserts</strong>
+convergence rather than returning an approximation.</p>
+<p>Recall and false positives are essentially unmoved (<code>locus_b_std</code> 92.485 -&gt; 92.491 %, FP
+0 -&gt; 0; reference frames 1029 both ways), so this re-baselines the corner columns only,
+and no SOTA ordering changes.</p>
+<h2 id="how-to-quote-these-numbers">How to quote these numbers</h2>
 <ul>
-<li>❌ <strong>Forbidden:</strong> <code>unwrap()</code> or <code>expect()</code> in library code. (Enforced via <code>#![deny(clippy::unwrap_used)]</code>).</li>
-<li>✅ <strong>Required:</strong> Propagate errors gracefully using <code>Result&lt;T, E&gt;</code> and <code>thiserror</code> for structured error definitions.</li>
+<li>Do not compare <code>loo_own_median_px</code> against a render-tag corner RMSE. Different
+  estimands.</li>
+<li>Divide by 1.365 for an image-space iid-equivalent corner sigma; do not use the p90 as a
+  corner error at all without dividing by ~2.6.</li>
+<li>The absolute number carries a ~0.26 px floor (0.214 px image-static plus the static part
+  of the lens model) that no detector change can move. Deltas within one scoring pass are
+  the trustworthy output; absolute values are not corner accuracy.</li>
 </ul>
-<h2 id="5-dependency-hygiene">5. Dependency Hygiene</h2>
-<p>Keeping the dependency graph lean is as important as keeping the hot loop lean — every unnecessary crate adds compile time, binary size, and a potential instability vector.</p>
-<ul>
-<li><strong>Randomness:</strong></li>
-<li>❌ <strong>Forbidden:</strong> <code>rand</code>, <code>rand_distr</code>, or any stochastic crates in <code>[dependencies]</code> (even as a non-optional entry).</li>
-<li>✅ <strong>Required:</strong> Place randomness crates in <code>[dev-dependencies]</code> or, when needed by <code>bench-internals</code> library code (e.g., <code>test_utils</code>), as <code>optional = true</code> deps activated exclusively by the <code>bench-internals</code> feature.</li>
-<li>
-<p><strong>Rationale:</strong> The production binary must be mathematically deterministic. Stochastic code has no place in a library that targets reproducible robotic perception pipelines.</p>
-</li>
-<li>
-<p><strong>Feature Discipline for Math Crates:</strong></p>
-</li>
-<li>❌ <strong>Forbidden:</strong> Bare version strings (e.g., <code>nalgebra = "0.34"</code>) for heavy mathematical crates. Default features can silently expand across minor releases.</li>
-<li>✅ <strong>Required:</strong> Always set <code>default-features = false</code> with an explicit <code>features = [...]</code> allowlist for <code>nalgebra</code> and <code>ndarray</code>. Pin only what is actually used.</li>
-<li>
-<p><strong>Current allowlists:</strong> <code>nalgebra = { ..., default-features = false, features = ["std"] }</code> · <code>ndarray = { ..., default-features = false, features = ["std"] }</code>.</p>
-</li>
-<li>
-<p><strong>Telemetry Erasure:</strong></p>
-</li>
-<li>❌ <strong>Forbidden:</strong> <code>tracing</code> dependencies without <code>release_max_level_info</code> in any Locus crate.</li>
-<li>✅ <strong>Required:</strong> Every <code>tracing</code> entry — in both <code>locus-core</code> and <code>locus-py</code> — must carry <code>features = ["release_max_level_info"]</code> to guarantee compile-time erasure of <code>debug!</code>/<code>trace!</code> spans in release builds. This is the only way to uphold the zero-overhead telemetry contract.</li>
-</ul>
-<h2 id="6-performance-reporting-benchmarking">6. Performance Reporting &amp; Benchmarking</h2>
-<p>To ensure reproducibility and scientific integrity, all benchmark reports must be grounded in verified system state.
-* ❌ <strong>Forbidden:</strong> Placeholder or assumed hardware specifications (e.g., "Intel CPU" without verification).
-* ✅ <strong>Required:</strong> Every performance or accuracy report MUST include verified hardware metadata obtained via system tools (e.g., <code>lscpu</code>, <code>/proc/cpuinfo</code>) during the same session the benchmark was executed.
-* ✅ <strong>Required:</strong> State the build profile (<code>--release</code>), thread count, and environment variables (e.g., <code>RAYON_NUM_THREADS</code>) used during the run.</p>
 
 
 
@@ -2886,18 +3136,18 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "../../..", "features": ["navigation.expand", "navigation.indexes", "content.code.copy", "content.code.annotate"], "search": "../../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../../../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="../../javascripts/mathjax.js"></script>
+        <script src="../../../javascripts/mathjax.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
       
         <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
       
-        <script src="../../javascripts/mermaid-init.js"></script>
+        <script src="../../../javascripts/mermaid-init.js"></script>
       
     
   </body>
