@@ -473,3 +473,31 @@ def test_report_lists_the_locus_extension_of_each_run(tmp_path: Path) -> None:
         f"`{ext['path']}` (mtime {ext['mtime']})": ["locus_standard"],
         "not recorded": ["locus_old"],
     }
+
+
+def test_euroc_undistortion_inverse_is_exact_to_its_own_tolerance() -> None:
+    """The radtan inverse must invert the forward model, not approximate it.
+
+    `_undist` used to be `cv2.undistortPoints`, which runs a fixed, small iteration
+    count with no convergence test; on this lens it stopped short by a radius-growing
+    amount (0.046 px median at r in [300, 380), 0.134 px worst). Because the shortfall
+    is smooth a homography absorbs part of it, so the LOO median came out 3.98 % LOW for
+    Locus against 0.82 % for OpenCV APRILTAG -- it flattered whichever detector had the
+    better corners and did not cancel in the head-to-head. Asserted on the achieved
+    round-trip error rather than on a loose bound, so a regression to an approximate
+    inverse fails here.
+    """
+    rng = np.random.default_rng(7)
+    pts = rng.uniform([0.0, 0.0], [score.EUROC_W, score.EUROC_H], size=(4000, 2))
+    inside = np.linalg.norm(pts - score.EUROC_K[:2, 2], axis=1) <= score.EUROC_VALID_RADIUS_PX
+    undistorted = pts[inside]
+    assert len(undistorted) > 500, "sampling must cover the disc the scorer judges"
+
+    err = np.linalg.norm(score._undist(score._redist(undistorted)) - undistorted, axis=1)
+    assert err.max() < 1e-8, f"inverse is not a fixed point: max round-trip {err.max():.3e} px"
+
+    # And it must stay exact where cv2's inverse degraded worst: the outer annulus.
+    radius = np.linalg.norm(undistorted - score.EUROC_K[:2, 2], axis=1)
+    outer = radius >= 300.0
+    assert outer.sum() > 100, "the outer annulus is where an inexact inverse shows up"
+    assert err[outer].max() < 1e-8, f"inexact at radius: {err[outer].max():.3e} px"

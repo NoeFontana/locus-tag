@@ -399,6 +399,11 @@ TAG, PITCH = 0.088, 0.088 * 1.3  # Kalibr april_6x6.yaml: tagSize 0.088, tagSpac
 # 420-440 px (Locus and OpenCV-apriltag, 2026-10-04), against |mean| <= 0.5 px inside 380 px.
 # Tags reaching past it cannot be judged by this protocol.
 EUROC_VALID_RADIUS_PX = 380.0
+# Fixed-point tolerance for the radtan inverse below, in normalised image units
+# (multiply by ~458 px focal for pixels): 1e-12 normalised is ~5e-10 px, i.e. exact
+# for every purpose here. 60 iterations is ~4x what this lens needs.
+_UNDIST_TOL = 1e-12
+_UNDIST_MAX_ITERS = 60
 # A detector joins the reference pool when its leave-one-tag-out median error is below this:
 # 0.27 (Locus) and 0.48 px (OpenCV APRILTAG) qualify, NONE / SUBPIX (1.9 / 1.5 px) do not.
 REFERENCE_MAX_SELF_ERROR_PX = 1.0
@@ -411,8 +416,42 @@ def _board(tid: int, perm: list[int]) -> np.ndarray:
 
 
 def _undist(px: np.ndarray) -> np.ndarray:
-    pts = px.reshape(-1, 1, 2).astype(np.float64)
-    return cv2.undistortPoints(pts, EUROC_K, EUROC_D, P=EUROC_K).reshape(-1, 2)
+    """Invert the radtan forward model to a fixed point.
+
+    Deliberately *not* ``cv2.undistortPoints``: that runs a fixed, small iteration
+    count with no convergence test, and on this lens it stops short by a
+    radius-growing amount -- 0.046 px median at r in [300, 380) and 0.134 px at
+    worst, against the 3e-13 a converged fixed point reaches. The shortfall is a
+    smooth function of position, so a homography absorbs part of it and the LOO
+    median comes out 3.8 % LOW for Locus against only 0.8 % low for OpenCV
+    APRILTAG. It flatters whichever detector has the better corners, so it does
+    not cancel in the head-to-head comparison this scorer exists to make.
+    Measured 2026-10-07; see `docs/engineering/benchmarking/euroc_error_budget.md`.
+    """
+    px = np.asarray(px, dtype=np.float64).reshape(-1, 2)
+    k1, k2, p1, p2 = EUROC_D.ravel()[:4]
+    fx, fy = EUROC_K[0, 0], EUROC_K[1, 1]
+    cx, cy = EUROC_K[0, 2], EUROC_K[1, 2]
+    target = np.column_stack(((px[:, 0] - cx) / fx, (px[:, 1] - cy) / fy))
+    xy = target.copy()
+    step = float("inf")
+    for _ in range(_UNDIST_MAX_ITERS):
+        r2 = (xy**2).sum(axis=1)
+        radial = 1.0 + k1 * r2 + k2 * r2 * r2
+        dx = 2.0 * p1 * xy[:, 0] * xy[:, 1] + p2 * (r2 + 2.0 * xy[:, 0] ** 2)
+        dy = p1 * (r2 + 2.0 * xy[:, 1] ** 2) + 2.0 * p2 * xy[:, 0] * xy[:, 1]
+        nxt = np.column_stack(((target[:, 0] - dx) / radial, (target[:, 1] - dy) / radial))
+        step = np.abs(nxt - xy).max(initial=0.0)
+        xy = nxt
+        if step <= _UNDIST_TOL:
+            break
+    else:  # pragma: no cover - a lens this mild converges in well under the cap
+        raise AssertionError(
+            f"radtan inverse did not converge: last step {step:.3e} > {_UNDIST_TOL:.0e} "
+            "normalised units. A silently unconverged inverse biases every corner "
+            "metric, so this fails rather than returning an approximation."
+        )
+    return np.column_stack((xy[:, 0] * fx + cx, xy[:, 1] * fy + cy))
 
 
 def _redist(pu: np.ndarray) -> np.ndarray:
