@@ -20,6 +20,10 @@ serde_json = "1.0"
 
 [dependencies]
 nalgebra = { version = "0.35", default-features = false, features = ["std"] }
+# Lie groups (SE(3), SO(3), the Decoupled chart). Local path to a helicoid feature branch while
+# the integration is validated; a crates.io version replaces it once helicoid publishes it.
+helicoid = { path = "../../../helicoid-wt-downstream/crates/helicoid" }
+helicoid-linalg = { path = "../../../helicoid-wt-downstream/crates/helicoid-linalg" }
 rayon = "1.12"
 bumpalo = { version = "3.20", features = ["collections"] }
 multiversion = "0.9"

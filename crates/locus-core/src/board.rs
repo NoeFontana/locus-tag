@@ -453,7 +453,7 @@ fn corner_class(corner_classes: &[u8], k: usize) -> usize {
 /// Image projections of the four corners of the marker whose corners are `start..start + 4`,
 /// in their cyclic order.
 fn project_marker(
-    pose: &Pose,
+    (rot, trans): (&Matrix3<f64>, &Vector3<f64>),
     corr: &PointCorrespondences<'_>,
     intrinsics: &CameraIntrinsics,
     start: usize,
@@ -463,7 +463,7 @@ fn project_marker(
         .iter_mut()
         .zip(&corr.object_points[start..start + MARKER_GROUP])
     {
-        let p_cam = pose.rotation * Vector3::new(obj[0], obj[1], obj[2]) + pose.translation;
+        let p_cam = rot * Vector3::new(obj[0], obj[1], obj[2]) + trans;
         if p_cam.z < 1e-4 {
             return None;
         }
@@ -519,6 +519,7 @@ fn estimate_corner_inset(
     if corr.group_size != MARKER_GROUP {
         return None;
     }
+    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
     // Calls `f` with each inlier marker corner's own least-squares inset.
     let for_each_residual = |f: &mut dyn FnMut(f64)| -> u32 {
         let mut groups = 0;
@@ -527,7 +528,7 @@ fn estimate_corner_inset(
                 continue;
             }
             let start = g * MARKER_GROUP;
-            let Some(quad) = project_marker(pose, corr, intrinsics, start) else {
+            let Some(quad) = project_marker((&rot, &trans), corr, intrinsics, start) else {
                 continue;
             };
             groups += 1;
@@ -591,13 +592,14 @@ fn sample_reprojection_score(
     let gs = corr.group_size;
     let mut sum_sq = 0.0f64;
     let mut count = 0usize;
+    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
 
     for &s_val in sample {
         let start = s_val * gs;
         for k in start..(start + gs) {
             let obj = corr.object_points[k];
             let p_world = Vector3::new(obj[0], obj[1], obj[2]);
-            let p_cam = pose.rotation * p_world + pose.translation;
+            let p_cam = rot * p_world + trans;
             if p_cam.z < 1e-4 {
                 return f64::INFINITY;
             }
@@ -637,7 +639,8 @@ fn gn_step_on_sample(
     corr: &PointCorrespondences<'_>,
     intrinsics: &CameraIntrinsics,
 ) -> Pose {
-    let mut ne = BodyFrameNormalEquations::new(pose);
+    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
+    let mut ne = BodyFrameNormalEquations::new(&rot);
     let gs = corr.group_size;
     let w = Matrix2::identity();
 
@@ -646,7 +649,7 @@ fn gn_step_on_sample(
         for k in start..(start + gs) {
             let obj = corr.object_points[k];
             let p_world = Vector3::new(obj[0], obj[1], obj[2]);
-            let p_cam = pose.rotation * p_world + pose.translation;
+            let p_cam = rot * p_world + trans;
             if p_cam.z < 1e-4 {
                 continue;
             }
@@ -806,18 +809,18 @@ fn ippe_branches_from_sample_homography(
 
     let [pose_a, pose_b] = solve_ippe_square(&h_metric)?;
     if !pose_a
-        .rotation
+        .r
         .iter()
-        .chain(pose_a.translation.iter())
-        .chain(pose_b.rotation.iter())
-        .chain(pose_b.translation.iter())
+        .chain(pose_a.t.iter())
+        .chain(pose_b.r.iter())
+        .chain(pose_b.t.iter())
         .all(|v| v.is_finite())
     {
         return None;
     }
 
     let centroid_offset = Vector3::new(cx_o, cy_o, 0.0);
-    Some(([pose_a, pose_b], centroid_offset))
+    Some(([Pose::from(pose_a), Pose::from(pose_b)], centroid_offset))
 }
 
 /// Sample-homography IPPE-Square seed for a minimal RANSAC sample.
@@ -868,10 +871,9 @@ fn solve_seed_from_sample_homography(
         // IPPE-Square returns poses in the centroid-shifted board frame
         // (origin = (cx_o, cy_o, 0)).  Un-shift to the original board frame:
         //   t_board = t_centred − R · centroid.
-        let raw = Pose {
-            rotation: pose_centred.rotation,
-            translation: pose_centred.translation - pose_centred.rotation * centroid,
-        };
+        let raw = pose_centred.with_translation(
+            pose_centred.translation() - pose_centred.rotation_matrix() * centroid,
+        );
 
         // Polish each branch with 3 unweighted GN steps over the
         // 4 × group_size sample correspondences (basin-convergent in 1-3
@@ -881,7 +883,7 @@ fn solve_seed_from_sample_homography(
         let mut polished = raw;
         for _ in 0..3 {
             let next = gn_step_on_sample(&polished, sample, corr, intrinsics);
-            let dt = (next.translation - polished.translation).norm();
+            let dt = (next.translation() - polished.translation()).norm();
             polished = next;
             if dt < 1e-6 {
                 break;
@@ -1212,6 +1214,7 @@ impl RobustPoseSolver {
     ) -> ([u64; 16], usize) {
         let mut mask = [0u64; 16];
         let mut count = 0usize;
+        let (rot, trans) = (pose.rotation_matrix(), pose.translation());
         let num_groups = corr.num_groups();
         let gs = corr.group_size;
 
@@ -1225,7 +1228,7 @@ impl RobustPoseSolver {
             for k in start..(start + gs) {
                 let obj = corr.object_points[k];
                 let p_world = Vector3::new(obj[0], obj[1], obj[2]);
-                let p_cam = pose.rotation * p_world + pose.translation;
+                let p_cam = rot * p_world + trans;
                 if p_cam.z < 1e-4 {
                     valid_group = false;
                     break;
@@ -1267,7 +1270,8 @@ impl RobustPoseSolver {
         intrinsics: &CameraIntrinsics,
         inlier_mask: &[u64; 16],
     ) -> Pose {
-        let mut ne = BodyFrameNormalEquations::new(pose);
+        let (rot, trans) = (pose.rotation_matrix(), pose.translation());
+        let mut ne = BodyFrameNormalEquations::new(&rot);
         let gs = corr.group_size;
         let num_groups = corr.num_groups();
         let w = Matrix2::identity();
@@ -1281,7 +1285,7 @@ impl RobustPoseSolver {
             for k in start..(start + gs) {
                 let obj = corr.object_points[k];
                 let p_world = Vector3::new(obj[0], obj[1], obj[2]);
-                let p_cam = pose.rotation * p_world + pose.translation;
+                let p_cam = rot * p_world + trans;
                 if p_cam.z < 1e-4 {
                     continue;
                 }
@@ -1314,13 +1318,13 @@ impl RobustPoseSolver {
     /// same condition).
     #[inline]
     fn observation_d2(
-        pose: &Pose,
+        (rot, trans): (&Matrix3<f64>, &Vector3<f64>),
         corr: &PointCorrespondences<'_>,
         intrinsics: &CameraIntrinsics,
         k: usize,
     ) -> Option<f64> {
         let obj = corr.object_points[k];
-        let p_cam = pose.rotation * Vector3::new(obj[0], obj[1], obj[2]) + pose.translation;
+        let p_cam = rot * Vector3::new(obj[0], obj[1], obj[2]) + trans;
         if p_cam.z < 1e-4 {
             return None;
         }
@@ -1352,6 +1356,7 @@ impl RobustPoseSolver {
         let mut k_worst = usize::MAX;
         let mut d2_worst = 0.0_f64;
         let mut d2_second = 0.0_f64;
+        let (rot, trans) = (pose.rotation_matrix(), pose.translation());
 
         for g in 0..num_groups {
             if (inlier_mask[g / 64] & (1 << (g % 64))) == 0 {
@@ -1359,7 +1364,7 @@ impl RobustPoseSolver {
             }
             let start = g * gs;
             for k in start..(start + gs) {
-                let Some(d2) = Self::observation_d2(pose, corr, intrinsics, k) else {
+                let Some(d2) = Self::observation_d2((&rot, &trans), corr, intrinsics, k) else {
                     continue;
                 };
                 if d2 > d2_worst {
@@ -1392,6 +1397,8 @@ impl RobustPoseSolver {
         let num_groups = corr.num_groups();
         let mut sum_a = 0.0_f64;
         let mut sum_b = 0.0_f64;
+        let a = (pose_a.rotation_matrix(), pose_a.translation());
+        let b = (pose_b.rotation_matrix(), pose_b.translation());
 
         for g in 0..num_groups {
             if g == skip_group {
@@ -1402,10 +1409,10 @@ impl RobustPoseSolver {
             }
             let start = g * gs;
             for k in start..(start + gs) {
-                if let Some(d2) = Self::observation_d2(pose_a, corr, intrinsics, k) {
+                if let Some(d2) = Self::observation_d2((&a.0, &a.1), corr, intrinsics, k) {
                     sum_a += d2;
                 }
-                if let Some(d2) = Self::observation_d2(pose_b, corr, intrinsics, k) {
+                if let Some(d2) = Self::observation_d2((&b.0, &b.1), corr, intrinsics, k) {
                     sum_b += d2;
                 }
             }
@@ -1518,7 +1525,8 @@ impl RobustPoseSolver {
         let inset = inset.filter(|_| gs == MARKER_GROUP);
 
         let compute_equations = |current_pose: &Pose| -> (f64, Matrix6<f64>, Vector6<f64>) {
-            let mut ne = BodyFrameNormalEquations::new(current_pose);
+            let (rot, trans) = (current_pose.rotation_matrix(), current_pose.translation());
+            let mut ne = BodyFrameNormalEquations::new(&rot);
             let mut total_cost = 0.0;
 
             for g in 0..num_groups {
@@ -1527,12 +1535,12 @@ impl RobustPoseSolver {
                 }
                 let start = g * gs;
                 let quad =
-                    inset.and_then(|_| project_marker(current_pose, corr, intrinsics, start));
+                    inset.and_then(|_| project_marker((&rot, &trans), corr, intrinsics, start));
 
                 for k in start..(start + gs) {
                     let obj = corr.object_points[k];
                     let p_world = Vector3::new(obj[0], obj[1], obj[2]);
-                    let p_cam = current_pose.rotation * p_world + current_pose.translation;
+                    let p_cam = rot * p_world + trans;
                     if p_cam.z < 1e-4 {
                         total_cost += 1e6;
                         continue;
@@ -1789,7 +1797,7 @@ mod tests {
         let mut batch = DetectionBatch::new_boxed();
         let mut n = 0usize;
 
-        let q = quat_from_so3(pose.rotation);
+        let q = quat_from_so3(pose.rotation_matrix());
 
         for (tag_id, opt_pts) in obj_points.iter().enumerate() {
             let Some(obj) = opt_pts else { continue };
@@ -1809,7 +1817,7 @@ mod tests {
                 (obj[0][1] + obj[2][1]) * 0.5,
                 (obj[0][2] + obj[2][2]) * 0.5,
             );
-            let det_t = pose.rotation * center + pose.translation;
+            let det_t = pose.rotation_matrix() * center + pose.translation();
             batch.poses[n].data = [
                 det_t.x as f32,
                 det_t.y as f32,
@@ -2207,7 +2215,7 @@ mod tests {
         };
         let (modelled, _) =
             solver.refine_aw_lm(&true_pose, &corr, &intrinsics, &all_inliers, Some(model));
-        let err = |p: &Pose| (p.translation - true_pose.translation).norm();
+        let err = |p: &Pose| (p.translation() - true_pose.translation()).norm();
         assert!(
             err(&modelled) < 0.1 * err(&ignored),
             "inset modelled {:.2e} m vs ignored {:.2e} m",
@@ -2241,7 +2249,7 @@ mod tests {
         let solver = RobustPoseSolver::new();
         let result = solver.gn_step(&pose, &corr, &intrinsics, &no_inliers);
         assert!(
-            (result.translation - pose.translation).norm() < 1e-12,
+            (result.translation() - pose.translation()).norm() < 1e-12,
             "pose must be unchanged when normal equations are singular"
         );
     }
@@ -2273,7 +2281,7 @@ mod tests {
         let (refined, cov) =
             solver.refine_aw_lm(&perturbed, &corr, &intrinsics, &all_inliers, None);
 
-        let t_error = (refined.translation - true_pose.translation).norm();
+        let t_error = (refined.translation() - true_pose.translation()).norm();
         assert!(
             t_error < 1e-4,
             "translation error {t_error} m exceeds 0.1 mm"
@@ -2407,11 +2415,11 @@ mod tests {
         );
 
         let board_pose = result.unwrap();
-        let t_error = (board_pose.pose.translation - true_pose.translation).norm();
+        let t_error = (board_pose.pose.translation() - true_pose.translation()).norm();
         assert!(t_error < 1e-3, "translation error {t_error} m exceeds 1 mm");
 
-        let est_q = quat_from_so3(board_pose.pose.rotation);
-        let true_q = quat_from_so3(true_pose.rotation);
+        let est_q = quat_from_so3(board_pose.pose.rotation_matrix());
+        let true_q = quat_from_so3(true_pose.rotation_matrix());
         let r_error = est_q.angle_to(&true_q).to_degrees();
         assert!(r_error < 0.1, "rotation error {r_error}° exceeds 0.1°");
     }
@@ -2491,8 +2499,8 @@ mod tests {
             .estimate(&batch.view(v), &intrinsics, DROP_TRIGGER_D2)
             .expect("outlier-drop pose must converge");
 
-        let baseline_err = (baseline.pose.translation - true_pose.translation).norm();
-        let dropped_err = (dropped.pose.translation - true_pose.translation).norm();
+        let baseline_err = (baseline.pose.translation() - true_pose.translation()).norm();
+        let dropped_err = (dropped.pose.translation() - true_pose.translation()).norm();
         assert!(
             dropped_err < baseline_err,
             "outlier drop must improve translation error: dropped={dropped_err}, baseline={baseline_err}",
@@ -2521,7 +2529,7 @@ mod tests {
 
         // On a noise-free synthetic board the drop trigger should not fire.
         assert!(
-            (baseline.pose.translation - with_drop.pose.translation).norm() < 1e-12,
+            (baseline.pose.translation() - with_drop.pose.translation()).norm() < 1e-12,
             "drop must not fire on clean observations",
         );
     }
@@ -2556,7 +2564,7 @@ mod tests {
         // With two comparable outliers and the 2× dominance gate, the drop
         // must NOT fire — pose must equal the baseline.
         assert!(
-            (baseline.pose.translation - with_drop.pose.translation).norm() < 1e-12,
+            (baseline.pose.translation() - with_drop.pose.translation()).norm() < 1e-12,
             "dominance check must reject ambiguous-outlier drops",
         );
     }
@@ -2694,13 +2702,13 @@ mod tests {
         let sample = [0usize, 1, 2, 3];
         let seed = solve_seed_from_sample_homography(&sample, &corr, &intrinsics)
             .expect("clean synthetic correspondences must produce a seed");
-        let t_err = (seed.translation - true_pose.translation).norm();
+        let t_err = (seed.translation() - true_pose.translation()).norm();
         assert!(
             t_err < 1e-3,
             "translation error {t_err} m exceeds 1 mm on noise-free input"
         );
-        let q_true = quat_from_so3(true_pose.rotation);
-        let q_est = quat_from_so3(seed.rotation);
+        let q_true = quat_from_so3(true_pose.rotation_matrix());
+        let q_est = quat_from_so3(seed.rotation_matrix());
         let r_err = q_true.angle_to(&q_est).to_degrees();
         assert!(
             r_err < 0.5,
@@ -2729,13 +2737,13 @@ mod tests {
         let sample = [0usize, 1, 2, 3];
         let seed = solve_seed_from_sample_homography(&sample, &corr, &intrinsics)
             .expect("oblique noise-free correspondences must produce a seed");
-        let t_err = (seed.translation - true_pose.translation).norm();
+        let t_err = (seed.translation() - true_pose.translation()).norm();
         assert!(
             t_err < 5e-3,
             "translation error {t_err} m exceeds 5 mm on oblique input"
         );
-        let q_true = quat_from_so3(true_pose.rotation);
-        let q_est = quat_from_so3(seed.rotation);
+        let q_true = quat_from_so3(true_pose.rotation_matrix());
+        let q_est = quat_from_so3(seed.rotation_matrix());
         let r_err = q_true.angle_to(&q_est).to_degrees();
         assert!(
             r_err < 1.0,
@@ -2777,7 +2785,7 @@ mod tests {
         let sample = [0usize, 1, 2, 3];
         let seed = solve_seed_from_sample_homography(&sample, &corr, &intrinsics)
             .expect("0.5 px noise must not break IPPE seeding");
-        let t_err = (seed.translation - true_pose.translation).norm();
+        let t_err = (seed.translation() - true_pose.translation()).norm();
         assert!(
             t_err < 0.05,
             "translation error {t_err} m exceeds 5 cm at 0.5 px noise"
@@ -2818,7 +2826,7 @@ mod tests {
         let sample = [0usize, 1, 2, 3];
         let seed = solve_seed_from_sample_homography(&sample, &corr, &intrinsics)
             .expect("clean saddle-path correspondences must produce a seed");
-        let t_err = (seed.translation - true_pose.translation).norm();
+        let t_err = (seed.translation() - true_pose.translation()).norm();
         assert!(
             t_err < 1e-3,
             "saddle-path translation error {t_err} m exceeds 1 mm on noise-free input"

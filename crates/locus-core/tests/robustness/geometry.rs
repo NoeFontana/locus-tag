@@ -68,14 +68,14 @@ proptest! {
         };
 
         if let (Some(pose), _) = estimate_tag_pose(&intrinsics, &corners, tag_size, None) {
-            for v in pose.translation.iter() {
+            for v in pose.translation().iter() {
                 prop_assert!(
                     v.is_finite(),
                     "estimate_tag_pose returned non-finite translation {:?} for corners {corners:?}",
-                    pose.translation,
+                    pose.translation(),
                 );
             }
-            for v in pose.rotation.iter() {
+            for v in pose.rotation_matrix().iter() {
                 prop_assert!(
                     v.is_finite(),
                     "estimate_tag_pose returned a non-finite rotation entry {v} for corners {corners:?}",

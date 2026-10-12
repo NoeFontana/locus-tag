@@ -438,9 +438,9 @@ impl BoardRegressionHarness {
                         entry.board_pose.translation[2],
                     );
 
-                    t_errors.push((est.pose.translation - gt_t).norm());
+                    t_errors.push((est.pose.translation() - gt_t).norm());
                     r_errors.push(
-                        quat_from_so3(est.pose.rotation)
+                        quat_from_so3(est.pose.rotation_matrix())
                             .angle_to(&gt_q)
                             .to_degrees(),
                     );
@@ -898,8 +898,8 @@ mod tests {
                 );
             }
             if let Some(pose) = &out_batch.board_pose {
-                let t = pose.pose.translation;
-                let q = quat_from_so3(pose.pose.rotation);
+                let t = pose.pose.translation();
+                let q = quat_from_so3(pose.pose.rotation_matrix());
                 let gt_t = nalgebra::Vector3::new(
                     entry.board_pose.translation[0],
                     entry.board_pose.translation[1],
@@ -1027,9 +1027,9 @@ mod tests {
                     entry.board_pose.translation[2],
                 );
 
-                t_errors.push((est.pose.translation - gt_t).norm());
+                t_errors.push((est.pose.translation() - gt_t).norm());
                 r_errors.push(
-                    quat_from_so3(est.pose.rotation)
+                    quat_from_so3(est.pose.rotation_matrix())
                         .angle_to(&gt_q)
                         .to_degrees(),
                 );

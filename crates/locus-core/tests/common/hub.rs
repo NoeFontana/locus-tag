@@ -293,9 +293,9 @@ impl RegressionHarness {
                             if let (Some(gt_pose), Some(intr), Some(size)) =
                                 (gt.poses.get(&det_id), intrinsics, tag_size)
                             {
-                                let q_gt = quat_from_so3(gt_pose.rotation);
+                                let q_gt = quat_from_so3(gt_pose.rotation_matrix());
                                 let r_err = det_q.angle_to(&q_gt);
-                                let t_err = (det_t - gt_pose.translation).norm();
+                                let t_err = (det_t - gt_pose.translation()).norm();
 
                                 image_translation_error_sum += t_err;
                                 image_rotation_error_sum += r_err;
@@ -658,19 +658,14 @@ impl HubProvider {
                 entry.rotation_quaternion[1],
                 entry.rotation_quaternion[2],
                 entry.rotation_quaternion[3],
-            ))
-            .to_rotation_matrix();
+            ));
 
             gt.poses.insert(
                 entry.tag_id,
-                Pose {
-                    rotation: *rotation.matrix(),
-                    translation: Vector3::new(
-                        entry.position[0],
-                        entry.position[1],
-                        entry.position[2],
-                    ),
-                },
+                Pose::from_quaternion(
+                    &rotation,
+                    Vector3::new(entry.position[0], entry.position[1], entry.position[2]),
+                ),
             );
         }
 

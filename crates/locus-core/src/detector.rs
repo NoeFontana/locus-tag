@@ -699,23 +699,7 @@ fn run_pose_refinement(
             ];
 
             for (i, repro_error) in repro_errors.iter_mut().enumerate().take(v) {
-                let det_pose_data = batch.poses[i].data;
-                let det_t = nalgebra::Vector3::new(
-                    f64::from(det_pose_data[0]),
-                    f64::from(det_pose_data[1]),
-                    f64::from(det_pose_data[2]),
-                );
-                let det_q = nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                    f64::from(det_pose_data[6]),
-                    f64::from(det_pose_data[3]),
-                    f64::from(det_pose_data[4]),
-                    f64::from(det_pose_data[5]),
-                ));
-
-                let pose = crate::pose::Pose {
-                    rotation: *det_q.to_rotation_matrix().matrix(),
-                    translation: det_t,
-                };
+                let pose = crate::pose::Pose::from_pose6d(&batch.poses[i].data);
 
                 let mut sum_sq_err = 0.0;
                 for (j, model_pt) in model_pts.iter().enumerate() {

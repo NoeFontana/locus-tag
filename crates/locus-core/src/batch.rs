@@ -275,18 +275,7 @@ impl DetectionBatch {
             // Reconstruct Pose if available (Z translation > 0)
             let pose = if self.poses[i].data[2] > 0.0 {
                 let d = self.poses[i].data;
-                // layout: [tx, ty, tz, qx, qy, qz, qw]
-                let t = nalgebra::Vector3::new(f64::from(d[0]), f64::from(d[1]), f64::from(d[2]));
-                let q = nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                    f64::from(d[6]), // w
-                    f64::from(d[3]), // x
-                    f64::from(d[4]), // y
-                    f64::from(d[5]), // z
-                ));
-                Some(crate::pose::Pose {
-                    rotation: q.to_rotation_matrix().into_inner(),
-                    translation: t,
-                })
+                Some(crate::pose::Pose::from_pose6d(&d))
             } else {
                 None
             };
@@ -431,17 +420,7 @@ impl DetectionBatchView<'_> {
             ];
             let pose = if self.poses[i].data[2] > 0.0 {
                 let d = self.poses[i].data;
-                let t = nalgebra::Vector3::new(f64::from(d[0]), f64::from(d[1]), f64::from(d[2]));
-                let q = nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                    f64::from(d[6]),
-                    f64::from(d[3]),
-                    f64::from(d[4]),
-                    f64::from(d[5]),
-                ));
-                Some(crate::pose::Pose {
-                    rotation: q.to_rotation_matrix().into_inner(),
-                    translation: t,
-                })
+                Some(crate::pose::Pose::from_pose6d(&d))
             } else {
                 None
             };

@@ -666,8 +666,8 @@ impl BoardEstimator {
         // `np.isnan(cov).any()`. The pose itself remains a best-effort
         // estimate.
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
-            let q = locus_core::pose::quat_from_so3(bp.pose.rotation);
-            let t = bp.pose.translation;
+            let q = bp.pose.quaternion();
+            let t = bp.pose.translation();
 
             // SAFETY: see "NumPy allocation safety contract" in module docs.
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
@@ -926,8 +926,8 @@ impl CharucoRefiner {
         // Surface to Python as `board_cov = None` so the typed
         // `NDArray | None` contract is honored.
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
-            let q = locus_core::pose::quat_from_so3(bp.pose.rotation);
-            let t = bp.pose.translation;
+            let q = bp.pose.quaternion();
+            let t = bp.pose.translation();
             // SAFETY: see "NumPy allocation safety contract" in module docs.
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
             // SAFETY: see "NumPy allocation safety contract" in module docs.
@@ -1767,11 +1767,10 @@ fn build_detection_result_from_owned(
             for (i, det) in detections.iter().enumerate() {
                 if let Some(ref pose) = det.pose {
                     // Reconstruct [tx, ty, tz, qx, qy, qz, qw] from Pose struct.
-                    let r = nalgebra::Rotation3::from_matrix_unchecked(pose.rotation);
-                    let q = nalgebra::UnitQuaternion::from_rotation_matrix(&r);
-                    poses_sl[i * 7] = pose.translation[0] as f32;
-                    poses_sl[i * 7 + 1] = pose.translation[1] as f32;
-                    poses_sl[i * 7 + 2] = pose.translation[2] as f32;
+                    let (q, t) = (pose.quaternion(), pose.translation());
+                    poses_sl[i * 7] = t.x as f32;
+                    poses_sl[i * 7 + 1] = t.y as f32;
+                    poses_sl[i * 7 + 2] = t.z as f32;
                     poses_sl[i * 7 + 3] = q.i as f32;
                     poses_sl[i * 7 + 4] = q.j as f32;
                     poses_sl[i * 7 + 5] = q.k as f32;
