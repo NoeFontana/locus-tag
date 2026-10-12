@@ -60,6 +60,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   before. The serde form and the batch and Python layouts are unchanged. Latency is at
   parity (`pose_real_bench`, `board_bench`: every row within the A/A noise of 0.5-1.4%).
 - **`locus-core` depends on `helicoid` and `helicoid-linalg`** (`no_std`, `libm` only).
+- **The pose LMs' normal equations factor the weighted outer products.** Each
+  correspondence's `w₀₀uuᵀ + w₁₁vvᵀ + w₀₁uvᵀ + w₁₀vuᵀ` is accumulated as `u pᵀ + v qᵀ`
+  (`p = w₀₀u + w₀₁v`, `q = w₁₀u + w₁₁v`), two multiplies per entry instead of eight. The
+  board estimator is 2.6-2.8 % faster (`board_bench`); the tag rows are unchanged, and the
+  snapshots move by at most 5.6e-13 relative.
 
 - **The dataset-backed snapshots are blessed, and the suites are green for the first time since
   2026-07-19.** `cargo nextest run --profile datasets --release --features bench-internals`

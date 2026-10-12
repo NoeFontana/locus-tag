@@ -645,13 +645,14 @@ impl BodyFrameNormalEquations {
         let (w00, w01, w10, w11) = (w[(0, 0)], w[(0, 1)], w[(1, 0)], w[(1, 1)]);
         // JᵀWr = row_u·(W r)_u + row_v·(W r)_v
         self.jtr += row_u * (w00 * res_u + w01 * res_v) + row_v * (w10 * res_u + w11 * res_v);
-        // JᵀWJ upper triangle: wᵢⱼ folded outer products, symmetrized in `finish`.
+        // JᵀWJ upper triangle, symmetrized in `finish`. The four weighted outer products
+        // `w₀₀uuᵀ + w₁₁vvᵀ + w₀₁uvᵀ + w₁₀vuᵀ` are `u pᵀ + v qᵀ` with `p = w₀₀u + w₀₁v` and
+        // `q = w₁₀u + w₁₁v`: two multiplies per entry instead of eight.
+        let p = row_u * w00 + row_v * w01;
+        let q = row_u * w10 + row_v * w11;
         for i in 0..6 {
             for j in i..6 {
-                self.jtj[(i, j)] += w00 * row_u[i] * row_u[j]
-                    + w11 * row_v[i] * row_v[j]
-                    + w01 * row_u[i] * row_v[j]
-                    + w10 * row_v[i] * row_u[j];
+                self.jtj[(i, j)] += row_u[i] * p[j] + row_v[i] * q[j];
             }
         }
     }
