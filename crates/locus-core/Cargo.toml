@@ -80,6 +80,11 @@ harness = false
 required-features = ["bench-internals"]
 
 [[bench]]
+name = "pose_real_bench"
+harness = false
+required-features = ["bench-internals"]
+
+[[bench]]
 name = "pose_covariance_bench"
 harness = false
 required-features = ["bench-internals"]

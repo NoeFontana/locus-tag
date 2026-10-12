@@ -73,8 +73,18 @@ fn load_board_meta(dataset: &str) -> (Arc<AprilGridTopology>, CameraIntrinsics) 
         marker_size_mm: f64,
     }
 
+    /// v1 is a bare list of records; v2 wraps it as `{"version", "records", ...}`.
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum RichTruth {
+        V2 { records: Vec<Entry> },
+        V1(Vec<Entry>),
+    }
+
     let path = hub_dir().join(dataset).join("rich_truth.json");
-    let raw: Vec<Entry> = serde_json::from_reader(std::fs::File::open(&path).unwrap()).unwrap();
+    let raw = match serde_json::from_reader(std::fs::File::open(&path).unwrap()).unwrap() {
+        RichTruth::V2 { records } | RichTruth::V1(records) => records,
+    };
 
     let mut board_cfg: Option<Arc<AprilGridTopology>> = None;
     let mut intrinsics = None;
