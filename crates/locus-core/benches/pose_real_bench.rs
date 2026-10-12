@@ -81,8 +81,7 @@ fn scene() -> Scene {
 
     let dir = hub_dir().join(DATASET);
     let truth: Truth =
-        serde_json::from_reader(std::fs::File::open(dir.join("rich_truth.json")).unwrap())
-            .unwrap();
+        serde_json::from_reader(std::fs::File::open(dir.join("rich_truth.json")).unwrap()).unwrap();
     let first = &truth.records[0];
     let k = &first.k_matrix;
     let intrinsics = CameraIntrinsics::new(k[0][0], k[1][1], k[0][2], k[1][2]);
@@ -158,11 +157,9 @@ fn estimate_unweighted(bencher: Bencher) {
     estimate_all(bencher, "standard", false);
 }
 
-/// The batch path with `high_accuracy`'s model-edge refinement, per frame.
-#[divan::bench]
-fn refine_soa_high_accuracy(bencher: Bencher) {
+fn refine_soa(bencher: Bencher, profile: &str, edge_refine_dim: Option<usize>) {
     let mut s = scene();
-    let config = DetectorConfig::from_profile("high_accuracy");
+    let config = DetectorConfig::from_profile(profile);
     bencher.bench_local(|| {
         for frame in &mut s.frames {
             let view = ImageView::new(&frame.luma, frame.width, frame.height, frame.width).unwrap();
@@ -173,8 +170,20 @@ fn refine_soa_high_accuracy(bencher: Bencher) {
                 s.tag_size,
                 Some(&view),
                 &config,
-                Some(TAG36H11_DIM),
+                edge_refine_dim,
             );
         }
     });
+}
+
+/// The batch path the detector runs with the `standard` profile, write-back included, per frame.
+#[divan::bench]
+fn refine_soa_standard(bencher: Bencher) {
+    refine_soa(bencher, "standard", None);
+}
+
+/// The batch path with `high_accuracy`'s model-edge refinement, per frame.
+#[divan::bench]
+fn refine_soa_high_accuracy(bencher: Bencher) {
+    refine_soa(bencher, "high_accuracy", Some(TAG36H11_DIM));
 }
