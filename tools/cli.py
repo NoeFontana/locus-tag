@@ -189,13 +189,13 @@ def visualize(
                     gt_labels.append(f"GT:{gt.tag_id}")
 
                     if gt.pose is not None:
-                        pos = gt.pose[:3]  # [tx, ty, tz, qx, qy, qz, qw]
-                        quat = gt.pose[3:]
+                        pos = gt.pose[:3]  # [tx, ty, tz, qw, qx, qy, qz]
+                        qw, qx, qy, qz = gt.pose[3:]
                         rr.log(
                             f"pipeline/0_input/ground_truth/tags/{gt.tag_id}/pose",
                             rr.Transform3D(
                                 translation=pos,
-                                rotation=rr.Quaternion(xyzw=quat),
+                                rotation=rr.Quaternion(xyzw=[qx, qy, qz, qw]),
                             ),
                         )
 

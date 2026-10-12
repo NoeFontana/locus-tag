@@ -388,23 +388,23 @@ impl Pose {
         ))
     }
 
-    /// From a [`Pose6D`] row, `[tx, ty, tz, qx, qy, qz, qw]` in `f32`, normalizing the
+    /// From a [`Pose6D`] row, `[tx, ty, tz, qw, qx, qy, qz]` in `f32`, normalizing the
     /// quaternion its rounding left off unit.
     #[must_use]
     pub(crate) fn from_pose6d(d: &[f32; 7]) -> Self {
-        let [tx, ty, tz, x, y, z, w] = d.map(f64::from);
+        let [tx, ty, tz, w, x, y, z] = d.map(f64::from);
         Self(SE3::from_rt(
             SO3::from_quat_normalized(Quat { w, x, y, z }),
             Vector([tx, ty, tz]),
         ))
     }
 
-    /// The [`Pose6D`] row, `[tx, ty, tz, qx, qy, qz, qw]`, rounded to `f32`.
+    /// The [`Pose6D`] row, `[tx, ty, tz, qw, qx, qy, qz]`, rounded to `f32`.
     #[must_use]
     pub(crate) fn to_pose6d(self) -> [f32; 7] {
         let q = self.0.rotation().quat();
         let t = self.0.translation().0;
-        [t[0], t[1], t[2], q.x, q.y, q.z, q.w].map(|v| v as f32)
+        [t[0], t[1], t[2], q.w, q.x, q.y, q.z].map(|v| v as f32)
     }
 
     /// The rotation `R` as a matrix, formed from the stored quaternion on each call.
@@ -3073,6 +3073,28 @@ mod tests {
                 assert!((cov_cam[i][j] - cov_cam[j][i]).abs() < 1e-12);
             }
         }
+    }
+
+    // The packed layout is `[tx, ty, tz, qw, qx, qy, qz]`: a quarter turn about z puts
+    // `cos 45°` at index 3 and `sin 45°` at index 6, and reading the row back gives the pose.
+    #[test]
+    fn pose6d_is_translation_then_scalar_first_quaternion() {
+        let r = Rotation3::new(Vector3::new(0.0, 0.0, core::f64::consts::FRAC_PI_2))
+            .matrix()
+            .into_owned();
+        let pose = Pose::new(r, Vector3::new(0.1, -0.2, 0.9));
+        let d = pose.to_pose6d();
+        let h = core::f32::consts::FRAC_1_SQRT_2;
+        let want = [0.1, -0.2, 0.9, h, 0.0, 0.0, h];
+        for (got, want) in d.iter().zip(want) {
+            assert!((got.abs() - want.abs()).abs() < 1e-6, "{d:?}");
+        }
+        assert!(
+            d[3] * d[6] > 0.0,
+            "qw and qz share a sign for +90° about z: {d:?}"
+        );
+        let back = Pose::from_pose6d(&d);
+        assert!((back.rotation_matrix() - r).abs().max() < 1e-6);
     }
 
     #[test]

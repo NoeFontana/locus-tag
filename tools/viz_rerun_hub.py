@@ -125,7 +125,10 @@ def main():
             for tid, pos, rot in zip(tag_ids, positions, rotations, strict=False):
                 rr.log(
                     f"world/camera/gt_tag_{tid}",
-                    rr.Transform3D(translation=pos, rotation=rr.Quaternion(xyzw=rot)),
+                    # The hub's quaternion is [w, x, y, z]; rerun takes x, y, z, w.
+                    rr.Transform3D(
+                        translation=pos, rotation=rr.Quaternion(xyzw=[*rot[1:], rot[0]])
+                    ),
                 )
                 rr.log(
                     f"world/camera/gt_tag_{tid}/axes",
@@ -160,8 +163,8 @@ def main():
             tid = batch.ids[i]
             pose = poses[i] if poses is not None else None
             if pose is not None:
-                # pose is a numpy array of shape (7,) tx, ty, tz, qx, qy, qz, qw
-                tx, ty, tz, qx, qy, qz, qw = pose
+                # pose is a numpy array of shape (7,) tx, ty, tz, qw, qx, qy, qz
+                tx, ty, tz, qw, qx, qy, qz = pose
                 rr.log(
                     f"world/camera/pred_tag_{tid}",
                     rr.Transform3D(

@@ -284,10 +284,10 @@ impl RegressionHarness {
                                 f64::from(det_pose_data[2]),
                             );
                             let det_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                                f64::from(det_pose_data[6]),
                                 f64::from(det_pose_data[3]),
                                 f64::from(det_pose_data[4]),
                                 f64::from(det_pose_data[5]),
+                                f64::from(det_pose_data[6]),
                             ));
 
                             if let (Some(gt_pose), Some(intr), Some(size)) =

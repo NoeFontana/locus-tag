@@ -54,13 +54,13 @@ def test_vectorized_poses():
     assert batch.poses.shape == (1, 7)
     assert batch.poses.dtype == np.float32
 
-    # [tx, ty, tz, qx, qy, qz, qw]. The 100 px tag is centered exactly on the
+    # [tx, ty, tz, qw, qx, qy, qz]. The 100 px tag is centered exactly on the
     # principal point (200, 200), facing the camera front-on, so this is a fully
     # determined pose — assert the actual values, not just a sign:
     #   * tx, ty ~ 0        (tag center == principal point)
     #   * tz = fx * tag_size / tag_px = 800 * 0.10 / 100 = 0.80 m
     #   * quaternion ~ identity (frontal, unrotated tag)
-    tx, ty, tz, qx, qy, qz, qw = (float(v) for v in batch.poses[0])
+    tx, ty, tz, qw, qx, qy, qz = (float(v) for v in batch.poses[0])
     assert abs(tx) < 1e-2, f"tx {tx} should be ~0 (tag on principal point)"
     assert abs(ty) < 1e-2, f"ty {ty} should be ~0 (tag on principal point)"
     assert abs(tz - 0.80) < 1e-2, f"tz {tz} should be ~0.80 m (fx*size/px)"

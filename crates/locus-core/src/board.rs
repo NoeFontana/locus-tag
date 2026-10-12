@@ -1822,10 +1822,10 @@ mod tests {
                 det_t.x as f32,
                 det_t.y as f32,
                 det_t.z as f32,
+                q.w as f32,
                 q.i as f32,
                 q.j as f32,
                 q.k as f32,
-                q.w as f32,
             ];
 
             for j in 0..4 {

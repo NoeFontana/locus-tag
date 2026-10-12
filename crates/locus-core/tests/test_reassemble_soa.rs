@@ -29,7 +29,7 @@ fn test_reassemble_single() {
     batch.error_rates[0] = 1.0;
 
     batch.poses[0] = Pose6D {
-        data: [1.0, 2.0, 3.0, 0.0, 0.0, 0.0, 1.0],
+        data: [1.0, 2.0, 3.0, 1.0, 0.0, 0.0, 0.0],
         padding: 0.0,
     };
 

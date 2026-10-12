@@ -111,6 +111,13 @@ $$
 - $R$: A $3 \times 3$ rotation matrix.
 - $t$: A $3 \times 1$ translation vector (representing the tag's **geometric center** in the camera frame).
 
+Packed poses (`DetectionBatch.poses`, the batch `Pose6D`, `board_pose`) are the 7-vector
+$[t_x, t_y, t_z, q_w, q_x, q_y, q_z]$: the translation, then $R$ as a unit Hamilton quaternion,
+**scalar first** — `helicoid`'s order, and the hub ground truth's `rotation_quaternion`. The sign of
+$q$ is not normalized: $q$ and $-q$ are the same rotation. Libraries that take the scalar last
+(ROS, Eigen's `coeffs()`, rerun's `xyzw=`) need `[qx, qy, qz, qw]`; SciPy reads this order with
+`Rotation.from_quat(q, scalar_first=True)` (SciPy ≥ 1.14).
+
 ### 5.1 Pose Covariance & Perturbation Frame
 
 The optional $6 \times 6$ covariance returned alongside a pose lives in the

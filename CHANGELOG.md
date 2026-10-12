@@ -53,6 +53,15 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `covariance_body_to_camera` now use `helicoid`'s structured adjoint. Every discrete
   output is unchanged; the board snapshots' continuous metrics move by at most 3e-9
   relative, the rounding of the permuted normal equations.
+- **Breaking: packed poses are `[tx, ty, tz, qw, qx, qy, qz]`, the quaternion scalar first.**
+  `DetectionBatch.poses` (Python `(N, 7) float32`), the batch `Pose6D` and `board_pose` move
+  `qw` from index 6 to index 3, matching `helicoid`, the hub ground truth and the
+  scalar-first libraries; `Pose::quaternion()` is unchanged (nalgebra's `UnitQuaternion`).
+  Code that reads the old order converts with `pose[..., [0, 1, 2, 6, 3, 4, 5]]`; ROS and
+  rerun take the scalar last, SciPy (≥ 1.14) reads this order with `scalar_first=True`.
+  `tools/` reads and writes the new order throughout, and `viz_rerun_hub.py` no longer hands
+  the hub's `[w, x, y, z]` ground truth to rerun as `xyzw`. The API reference's `board_pose`
+  row also stops claiming a top-left origin: the origin is the board's centre.
 - **Breaking (Rust): `Pose` is `helicoid`'s SE(3).** `Pose` stores a unit quaternion and a
   translation; its public fields become `rotation_matrix()`, `translation()`,
   `quaternion()`, `with_translation()` and `from_quaternion()`, and `Pose::new` keeps its

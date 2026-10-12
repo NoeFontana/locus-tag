@@ -30,7 +30,7 @@ class TagGroundTruth:
     tag_id: int
     corners: np.ndarray  # 4x2 float32
     fully_visible: bool = True
-    # 6-DOF pose if available: [tx, ty, tz, qx, qy, qz, qw] (Scalar-Last)
+    # 6-DOF pose if available: [tx, ty, tz, qw, qx, qy, qz] (scalar first)
     pose: np.ndarray | None = None
 
 

@@ -363,7 +363,7 @@ impl From<CameraIntrinsics> for locus_core::CameraIntrinsics {
 #[derive(Clone)]
 pub struct PyPose {
     #[pyo3(get)]
-    pub quaternion: [f64; 4], // x, y, z, w
+    pub quaternion: [f64; 4], // w, x, y, z
     #[pyo3(get)]
     pub translation: [f64; 3],
 }
@@ -586,7 +586,7 @@ impl BoardEstimator {
     /// Returns a [`BoardEstimateResult`] with fields:
     /// - `ids`:         `(N,) int32`  — decoded ArUco IDs
     /// - `corners`:     `(N, 4, 2) float32`  — tag corners
-    /// - `board_pose`:  `(7,) float64` `[tx, ty, tz, qx, qy, qz, qw]` or `None`
+    /// - `board_pose`:  `(7,) float64` `[tx, ty, tz, qw, qx, qy, qz]` or `None`
     /// - `board_cov`:   `(6, 6) float64` **body-frame** se(3) pose covariance
     ///   (rotation first, `[ω, v]`; see `docs/explanation/coordinates.md §5.1`), or `None` if no
     ///   board was estimated **or** the LM Hessian was singular (the
@@ -677,10 +677,10 @@ impl BoardEstimator {
             ps[0] = t.x;
             ps[1] = t.y;
             ps[2] = t.z;
-            ps[3] = q.i;
-            ps[4] = q.j;
-            ps[5] = q.k;
-            ps[6] = q.w;
+            ps[3] = q.w;
+            ps[4] = q.i;
+            ps[5] = q.j;
+            ps[6] = q.k;
 
             let cov_opt = if bp.covariance.iter().all(|v| v.is_finite()) {
                 // SAFETY: see "NumPy allocation safety contract" in module docs.
@@ -768,7 +768,7 @@ impl CharucoRefiner {
     /// - `saddle_ids`:  `(S,) int32`  — accepted saddle-point indices
     /// - `saddle_pts`:  `(S, 2) float32`  — refined image coordinates
     /// - `saddle_obj`:  `(S, 3) float64`  — board-frame 3D coordinates
-    /// - `board_pose`:  `(7,) float64` `[tx, ty, tz, qx, qy, qz, qw]` or `None`
+    /// - `board_pose`:  `(7,) float64` `[tx, ty, tz, qw, qx, qy, qz]` or `None`
     /// - `board_cov`:   `(6, 6) float64` **body-frame** se(3) pose covariance
     ///   (rotation first, `[ω, v]`; see `docs/explanation/coordinates.md §5.1`), or `None` if no
     ///   board was estimated **or** the LM Hessian was singular (the
@@ -938,10 +938,10 @@ impl CharucoRefiner {
                 ps[0] = t.x;
                 ps[1] = t.y;
                 ps[2] = t.z;
-                ps[3] = q.i;
-                ps[4] = q.j;
-                ps[5] = q.k;
-                ps[6] = q.w;
+                ps[3] = q.w;
+                ps[4] = q.i;
+                ps[5] = q.j;
+                ps[6] = q.k;
             }
             let cov_opt = if bp.covariance.iter().all(|v| v.is_finite()) {
                 // SAFETY: see "NumPy allocation safety contract" in module docs.
@@ -1300,7 +1300,7 @@ impl Detector {
             ));
         }
 
-        // Poses: Vectorized (N, 7) layout: [tx, ty, tz, qx, qy, qz, qw]
+        // Poses: Vectorized (N, 7) layout: [tx, ty, tz, qw, qx, qy, qz]
         let poses = if has_intrinsics && tag_size.is_some() {
             // SAFETY: see "NumPy allocation safety contract" in module docs.
             let poses_arr = unsafe { PyArray2::<f32>::new(py, [n, 7], false) };
@@ -1766,15 +1766,15 @@ fn build_detection_result_from_owned(
                 .map_err(|e| PyRuntimeError::new_err(format!("poses: {e}")))?;
             for (i, det) in detections.iter().enumerate() {
                 if let Some(ref pose) = det.pose {
-                    // Reconstruct [tx, ty, tz, qx, qy, qz, qw] from Pose struct.
+                    // Reconstruct [tx, ty, tz, qw, qx, qy, qz] from Pose struct.
                     let (q, t) = (pose.quaternion(), pose.translation());
                     poses_sl[i * 7] = t.x as f32;
                     poses_sl[i * 7 + 1] = t.y as f32;
                     poses_sl[i * 7 + 2] = t.z as f32;
-                    poses_sl[i * 7 + 3] = q.i as f32;
-                    poses_sl[i * 7 + 4] = q.j as f32;
-                    poses_sl[i * 7 + 5] = q.k as f32;
-                    poses_sl[i * 7 + 6] = q.w as f32;
+                    poses_sl[i * 7 + 3] = q.w as f32;
+                    poses_sl[i * 7 + 4] = q.i as f32;
+                    poses_sl[i * 7 + 5] = q.j as f32;
+                    poses_sl[i * 7 + 6] = q.k as f32;
                 }
             }
         }

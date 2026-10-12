@@ -41,7 +41,8 @@ pub struct Matrix3x3 {
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C, align(32))]
 pub struct Pose6D {
-    /// Translation (x, y, z) and Rotation as a unit quaternion (x, y, z, w).
+    /// Translation `(x, y, z)`, then the rotation as a unit quaternion, scalar first:
+    /// `[tx, ty, tz, qw, qx, qy, qz]`.
     pub data: [f32; 7],
     /// Padding to 32-byte alignment.
     pub padding: f32,
