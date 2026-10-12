@@ -8,8 +8,8 @@
 use crate::batch::{DetectionBatch, Point2f, Pose6D};
 use crate::image::ImageView;
 
-use helicoid::{Chart, Decoupled, LieGroup, Quat, SE3, SO3, Twist};
-use helicoid_linalg::{Mat3, Vec3, Vector};
+use helicoid::{Chart, Decoupled, Jac, LieGroup, Quat, SE3, SEn3Jac, SO3, Twist};
+use helicoid_linalg::{Mat3, Matrix, Vec3, Vector};
 use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, UnitQuaternion, Vector3, Vector6};
 
 /// Lens distortion coefficients stored alongside the intrinsic parameters.
@@ -293,7 +293,10 @@ impl CameraIntrinsics {
 /// pose to many points forms it once, outside the loop.
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(from = "SerializedPose", into = "SerializedPose"))]
+#[cfg_attr(
+    feature = "serde",
+    serde(from = "SerializedPose", into = "SerializedPose")
+)]
 pub struct Pose(SE3<f64>);
 
 /// `Pose`'s serialized form, unchanged from when it stored the matrix.
@@ -454,9 +457,9 @@ impl Pose {
         intrinsics.distort_normalized(p_cam.x / z, p_cam.y / z)
     }
 
-    /// Apply the **right** (body-frame) perturbation `δ = [t | ω]` (translation then
-    /// rotation-vector, matching the LM Jacobian column layout): `R' = R · Exp(ω)`,
-    /// `t' = t + R · δt`. That is `helicoid`'s `Decoupled` chart, not `T · Exp(δ)`: the
+    /// Apply the **right** (body-frame) perturbation `δ = [ω; v]` (rotation-first, matching
+    /// the LM Jacobian column layout and `helicoid`'s tangents): `R' = R · Exp(ω)`,
+    /// `t' = t + R · v`. That is `helicoid`'s `Decoupled` chart, not `T · Exp(δ)`: the
     /// increment is expressed in the tag's *own* frame and rotated into the camera by the
     /// current `R`, with no `V(ω)`.
     ///
@@ -475,8 +478,8 @@ impl Pose {
     #[must_use]
     pub(crate) fn retract(&self, delta: &Vector6<f64>) -> Self {
         let step = Twist {
-            phi: Vector([delta[3], delta[4], delta[5]]),
-            rho: [Vector([delta[0], delta[1], delta[2]])],
+            phi: Vector([delta[0], delta[1], delta[2]]),
+            rho: [Vector([delta[3], delta[4], delta[5]])],
         };
         Self(Decoupled::at(&self.0).retract(&step))
     }
@@ -488,11 +491,11 @@ impl Pose {
         Self(self.0.inverse())
     }
 
-    /// The 6×6 SE(3) adjoint `Ad_T` for the twist ordering `[t | ω]`, i.e. the map
+    /// The 6×6 SE(3) adjoint `Ad_T` for the rotation-first tangent `[ω; v]`, i.e. the map
     /// taking a **body**-frame (right) tangent vector to the equivalent
     /// **camera**-frame (left) one: `δ_camera = Ad_T · δ_body` (from
     /// `exp(δ_camera)·T = T·exp(δ_body)`). Layout:
-    /// `Ad_T = [[R, [t]_× R], [0, R]]`.
+    /// `Ad_T = [[R, 0], [[t]_× R, R]]`.
     ///
     /// Used to reframe a covariance between the camera and body tangent spaces:
     /// `Σ_camera = Ad_T · Σ_body · Ad_Tᵀ`, and inversely
@@ -503,7 +506,7 @@ impl Pose {
         let tx = self.translation().cross_matrix();
         let mut ad = Matrix6::zeros();
         ad.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
-        ad.fixed_view_mut::<3, 3>(0, 3).copy_from(&(tx * r));
+        ad.fixed_view_mut::<3, 3>(3, 0).copy_from(&(tx * r));
         ad.fixed_view_mut::<3, 3>(3, 3).copy_from(&r);
         ad
     }
@@ -518,21 +521,21 @@ impl Pose {
     /// NaN sentinels propagate unchanged.
     #[must_use]
     pub fn covariance_camera_to_body(&self, cov_camera: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
-        let ad_inv = self.inverse().adjoint();
-        let cov = Matrix6::from_fn(|i, j| cov_camera[i][j]);
-        let out = ad_inv * cov * ad_inv.transpose();
-        core::array::from_fn(|i| core::array::from_fn(|j| out[(i, j)]))
+        sandwich(&self.0.inverse().adjoint(), cov_camera)
     }
 
     /// Inverse of [`Pose::covariance_camera_to_body`]: body → camera tangent,
     /// `Σ_camera = Ad_T · Σ_body · Ad_Tᵀ`.
     #[must_use]
     pub fn covariance_body_to_camera(&self, cov_body: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
-        let ad = self.adjoint();
-        let cov = Matrix6::from_fn(|i, j| cov_body[i][j]);
-        let out = ad * cov * ad.transpose();
-        core::array::from_fn(|i| core::array::from_fn(|j| out[(i, j)]))
+        sandwich(&self.0.adjoint(), cov_body)
     }
+}
+
+/// `Ad Σ Adᵀ` through `helicoid`'s structured adjoint, whose tangent order is this crate's.
+fn sandwich(ad: &SEn3Jac<f64, 1>, cov: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
+    let out = ad.sandwich::<6>(&Matrix::from_rows(cov.map(Vector)));
+    core::array::from_fn(|i| core::array::from_fn(|j| out.get(i, j)))
 }
 
 /// Fills the lower triangle of a 6×6 normal-equations matrix from its upper triangle.
@@ -547,19 +550,19 @@ pub(crate) fn symmetrize_jtj6(jtj: &mut Matrix6<f64>) {
 
 /// One row of the SE(3) **right** (body-frame) perturbation Jacobian for a pixel
 /// coordinate, given the body-frame projection gradient `dq = Rᵀ·∂proj/∂P_cam`
-/// and the body point `pb`. Layout ξ = [t | ω]: translation columns are `dq`, the
-/// rotation columns are the cross-product `dq·(−[pb]_×)`. This is the single
+/// and the body point `pb`. Layout ξ = [ω; v]: the rotation columns are the
+/// cross-product `dq·(−[pb]_×)`, the translation columns are `dq`. This is the single
 /// definition of the sign-sensitive rotation-row math, verified by
 /// `corner_normal_equations_gradient_is_descent` and `test_jacobian_rotation_rows`.
 #[inline]
 pub(crate) fn body_frame_row(dq: &Vector3<f64>, pb: &Vector3<f64>) -> Vector6<f64> {
     Vector6::new(
-        dq[0],
-        dq[1],
-        dq[2],
         -(dq[1] * pb.z - dq[2] * pb.y),
         -(dq[2] * pb.x - dq[0] * pb.z),
         -(dq[0] * pb.y - dq[1] * pb.x),
+        dq[0],
+        dq[1],
+        dq[2],
     )
 }
 
@@ -1560,7 +1563,7 @@ fn project_with_distortion(p_cam: &Vector3<f64>, intrinsics: &CameraIntrinsics) 
 
 /// Assemble the Huber-weighted normal equations `(JᵀWJ, JᵀWr)` for the 4-corner
 /// reprojection problem at `pose`, plus the Huber cost at `pose`, shared by
-/// `refine_pose_lm` and its gradient tests. Layout: ξ = [tx, ty, tz, rx, ry, rz].
+/// `refine_pose_lm` and its gradient tests. Layout: ξ = [ωx, ωy, ωz, vx, vy, vz].
 ///
 /// The returned cost is bit-identical to [`huber_cost`] evaluated at the same
 /// pose (both route through the same clamped normalized projection), so the LM
@@ -3002,10 +3005,10 @@ mod tests {
         // Left: exp(Ad_T·δ_body)·T, built explicitly (rotation on the left, its
         // translation part added, matching the SE(3) left perturbation to O(δ²)).
         let delta_cam = pose.adjoint() * delta_body;
-        let rot_l = Rotation3::new(Vector3::new(delta_cam[3], delta_cam[4], delta_cam[5]))
+        let rot_l = Rotation3::new(Vector3::new(delta_cam[0], delta_cam[1], delta_cam[2]))
             .matrix()
             .into_owned();
-        let t_l = Vector3::new(delta_cam[0], delta_cam[1], delta_cam[2]);
+        let t_l = Vector3::new(delta_cam[3], delta_cam[4], delta_cam[5]);
         let left = Pose::new(
             rot_l * pose.rotation_matrix(),
             rot_l * pose.translation() + t_l,

@@ -454,15 +454,15 @@ impl BoardRegressionHarness {
                     let std_finite = (0..6).all(|i| est.covariance[(i, i)].is_finite());
                     if std_finite {
                         t_stds.push(
-                            (est.covariance[(0, 0)].max(0.0)
-                                + est.covariance[(1, 1)].max(0.0)
-                                + est.covariance[(2, 2)].max(0.0))
-                            .sqrt(),
-                        );
-                        r_stds.push(
                             (est.covariance[(3, 3)].max(0.0)
                                 + est.covariance[(4, 4)].max(0.0)
                                 + est.covariance[(5, 5)].max(0.0))
+                            .sqrt(),
+                        );
+                        r_stds.push(
+                            (est.covariance[(0, 0)].max(0.0)
+                                + est.covariance[(1, 1)].max(0.0)
+                                + est.covariance[(2, 2)].max(0.0))
                             .sqrt()
                             .to_degrees(),
                         );
@@ -1042,15 +1042,15 @@ mod tests {
                 let std_finite = (0..6).all(|i| est.covariance[(i, i)].is_finite());
                 if std_finite {
                     t_stds.push(
-                        (est.covariance[(0, 0)].max(0.0)
-                            + est.covariance[(1, 1)].max(0.0)
-                            + est.covariance[(2, 2)].max(0.0))
-                        .sqrt(),
-                    );
-                    r_stds.push(
                         (est.covariance[(3, 3)].max(0.0)
                             + est.covariance[(4, 4)].max(0.0)
                             + est.covariance[(5, 5)].max(0.0))
+                        .sqrt(),
+                    );
+                    r_stds.push(
+                        (est.covariance[(0, 0)].max(0.0)
+                            + est.covariance[(1, 1)].max(0.0)
+                            + est.covariance[(2, 2)].max(0.0))
                         .sqrt()
                         .to_degrees(),
                     );

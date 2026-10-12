@@ -358,7 +358,7 @@ pub struct BoardPose {
     /// The estimated 6-DOF pose.
     pub pose: Pose,
     /// The 6x6 pose covariance matrix in se(3) tangent space.
-    /// Order: [tx, ty, tz, rx, ry, rz]
+    /// Order: rotation first, `[ωx, ωy, ωz, vx, vy, vz]`, body frame.
     pub covariance: Matrix6<f64>,
 }
 

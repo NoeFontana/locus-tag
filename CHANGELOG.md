@@ -42,6 +42,25 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Breaking: pose tangents and covariances are rotation-first, `[ω, v]`.** Every 6×6 pose
+  covariance — `estimate_tag_pose`'s, `Detection::pose_covariance`, `BoardPose::covariance`
+  and Python's `board_cov` — and the LM's tangent, Jacobian columns and `Pose::adjoint` are
+  now ordered `[ωx, ωy, ωz, vx, vy, vz]`, the order of `helicoid`, GTSAM's `Pose3` and
+  `tf_tree`, so a covariance enters those libraries without a permutation. The frame is
+  unchanged (body, right perturbation). Code that reads the old `[t, ω]` blocks must swap
+  them: `cov[np.ix_(p, p)]` with `p = [3, 4, 5, 0, 1, 2]` converts either order to the
+  other (`docs/explanation/coordinates.md` §5.1). `covariance_camera_to_body` and
+  `covariance_body_to_camera` now use `helicoid`'s structured adjoint. Every discrete
+  output is unchanged; the board snapshots' continuous metrics move by at most 3e-9
+  relative, the rounding of the permuted normal equations.
+- **Breaking (Rust): `Pose` is `helicoid`'s SE(3).** `Pose` stores a unit quaternion and a
+  translation; its public fields become `rotation_matrix()`, `translation()`,
+  `quaternion()`, `with_translation()` and `from_quaternion()`, and `Pose::new` keeps its
+  signature. The LM's retraction is `helicoid`'s `Decoupled` chart, the same formula as
+  before. The serde form and the batch and Python layouts are unchanged. Latency is at
+  parity (`pose_real_bench`, `board_bench`: every row within the A/A noise of 0.5-1.4%).
+- **`locus-core` depends on `helicoid` and `helicoid-linalg`** (`no_std`, `libm` only).
+
 - **The dataset-backed snapshots are blessed, and the suites are green for the first time since
   2026-07-19.** `cargo nextest run --profile datasets --release --features bench-internals`
   reports 50 passed / 0 pending. The twelve snapshots that moved with the 179/400 tile cut were

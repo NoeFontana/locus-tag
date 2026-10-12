@@ -388,9 +388,9 @@ mod tests {
         let eps = 1e-7;
         for k in 0..3 {
             let mut d = Vector6::zeros();
-            d[3 + k] = eps;
+            d[k] = eps;
             let fwd = proj_u(&pose.retract(&d));
-            d[3 + k] = -eps;
+            d[k] = -eps;
             let bwd = proj_u(&pose.retract(&d));
             let num = (fwd - bwd) / (2.0 * eps);
             assert!(
