@@ -1,0 +1,80 @@
+{
+  "bench_quad_extraction": {
+    "(640, 480)": {
+      "fastest": 5.792,
+      "slowest": 11.95,
+      "median": 5.871,
+      "mean": 6.18
+    },
+    "(1280, 720)": {
+      "fastest": 18.74,
+      "slowest": 34.71,
+      "median": 19.18,
+      "mean": 19.56
+    },
+    "(1920, 1080)": {
+      "fastest": 33.67,
+      "slowest": 52.84,
+      "median": 34.35,
+      "mean": 34.63
+    },
+    "(3840, 2160)": {
+      "fastest": 142.2,
+      "slowest": 189.3,
+      "median": 143.7,
+      "mean": 144.5
+    }
+  },
+  "bench_segmentation": {
+    "(640, 480)": {
+      "fastest": 0.634,
+      "slowest": 1.305,
+      "median": 0.673,
+      "mean": 0.835
+    },
+    "(1280, 720)": {
+      "fastest": 1.489,
+      "slowest": 2.054,
+      "median": 1.528,
+      "mean": 1.55
+    },
+    "(1920, 1080)": {
+      "fastest": 2.902,
+      "slowest": 3.743,
+      "median": 2.945,
+      "mean": 2.97
+    },
+    "(3840, 2160)": {
+      "fastest": 9.774,
+      "slowest": 18.01,
+      "median": 9.966,
+      "mean": 10.12
+    }
+  },
+  "bench_thresholding": {
+    "(640, 480)": {
+      "fastest": 0.697,
+      "slowest": 1.016,
+      "median": 0.801,
+      "mean": 0.793
+    },
+    "(1280, 720)": {
+      "fastest": 1.953,
+      "slowest": 5.151,
+      "median": 2.181,
+      "mean": 2.263
+    },
+    "(1920, 1080)": {
+      "fastest": 3.018,
+      "slowest": 6.673,
+      "median": 4.256,
+      "mean": 4.465
+    },
+    "(3840, 2160)": {
+      "fastest": 10.05,
+      "slowest": 17.31,
+      "median": 16.29,
+      "mean": 15.95
+    }
+  }
+}
