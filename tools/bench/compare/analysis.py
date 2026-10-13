@@ -97,9 +97,9 @@ def _best_of(value_cols: list[str], names: list[str]) -> tuple[pl.Expr, pl.Expr]
     of an empty list is an error, so guard it here for the single-library case.
     """
     if not value_cols:
-        return pl.lit(None, dtype=pl.Float64), pl.lit(None, dtype=pl.Utf8)
+        return pl.lit(None, dtype=pl.Float64), pl.lit(None, dtype=pl.String)
     best_val = pl.min_horizontal([pl.col(c) for c in value_cols])
-    name_expr: pl.Expr = pl.lit(None, dtype=pl.Utf8)
+    name_expr: pl.Expr = pl.lit(None, dtype=pl.String)
     # Build nested when/otherwise so the FIRST-listed series wins ties.
     for col, name in zip(reversed(value_cols), reversed(names), strict=True):
         name_expr = (
@@ -172,7 +172,7 @@ def worst_locus(section: pl.DataFrame, *, metric: str, top_n: int) -> pl.DataFra
         .then(pl.lit("missed"))
         .when(pl.col("delta") > 0)
         .then(pl.lit(_FAILURE_KIND[metric]))
-        .otherwise(pl.lit(None, dtype=pl.Utf8))
+        .otherwise(pl.lit(None, dtype=pl.String))
         .alias("failure_kind")
     ).filter(pl.col("failure_kind").is_not_null())
     tagged = tagged.with_columns(
