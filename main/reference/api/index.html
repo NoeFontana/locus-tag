@@ -5036,7 +5036,7 @@ Adaptive routing lives in explicit opt-in profiles
     <span class="n">ids</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>  <span class="c1"># Shape: (N,), Dtype: int32</span>
     <span class="n">corners</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>  <span class="c1"># Shape: (N, 4, 2), Dtype: float32</span>
     <span class="n">error_rates</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>  <span class="c1"># Shape: (N,), Dtype: float32</span>
-    <span class="n">poses</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]</span>
+    <span class="n">poses</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Shape: (N, 7), Dtype: float32. [tx, ty, tz, qw, qx, qy, qz]</span>
     <span class="n">telemetry</span><span class="p">:</span> <span class="s2">&quot;PipelineTelemetry | None&quot;</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">rejected_corners</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Shape: (M, 4, 2), Dtype: float32</span>
     <span class="n">rejected_error_rates</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>  <span class="c1"># Shape: (M,), Dtype: float32</span>
@@ -5371,12 +5371,12 @@ are pre-allocated at construction; <code>estimate()</code> performs <strong>zero
 <tr>
 <td style="text-align: left;"><code>board_pose</code></td>
 <td style="text-align: left;"><code>(7,) float64</code> or <code>None</code></td>
-<td style="text-align: left;"><code>[tx, ty, tz, qx, qy, qz, qw]</code> in camera frame — <code>None</code> if insufficient observations. Pose origin is the board's top-left marker corner.</td>
+<td style="text-align: left;"><code>[tx, ty, tz, qw, qx, qy, qz]</code> (Hamilton, scalar first) in camera frame — <code>None</code> if insufficient observations. Pose origin is the board's geometric centre.</td>
 </tr>
 <tr>
 <td style="text-align: left;"><code>board_cov</code></td>
 <td style="text-align: left;"><code>(6, 6) float64</code> or <code>None</code></td>
-<td style="text-align: left;">Pose covariance in <span class="arithmatex">\(\mathfrak{se}(3)\)</span> tangent space <code>[t, ω]</code>.</td>
+<td style="text-align: left;">Body-frame pose covariance in <span class="arithmatex">\(\mathfrak{se}(3)\)</span> tangent space, rotation first: <code>[ω, v]</code>.</td>
 </tr>
 </tbody>
 </table>

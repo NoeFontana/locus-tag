@@ -2822,9 +2822,9 @@
 <p><strong>Feature Discipline for Math Crates:</strong></p>
 </li>
 <li>❌ <strong>Forbidden:</strong> Bare version strings (e.g., <code>nalgebra = "0.34"</code>) for heavy mathematical crates. Default features can silently expand across minor releases.</li>
-<li>✅ <strong>Required:</strong> Always set <code>default-features = false</code> with an explicit <code>features = [...]</code> allowlist for <code>nalgebra</code> and <code>ndarray</code>. Pin only what is actually used.</li>
+<li>✅ <strong>Required:</strong> Always set <code>default-features = false</code> with an explicit <code>features = [...]</code> allowlist for <code>nalgebra</code>, <code>ndarray</code>, <code>helicoid</code> and <code>helicoid-linalg</code>. Pin only what is actually used.</li>
 <li>
-<p><strong>Current allowlists:</strong> <code>nalgebra = { ..., default-features = false, features = ["std"] }</code> · <code>ndarray = { ..., default-features = false, features = ["std"] }</code>.</p>
+<p><strong>Current allowlists:</strong> <code>nalgebra = { ..., default-features = false, features = ["std"] }</code> · <code>ndarray = { ..., default-features = false, features = ["std"] }</code> · <code>helicoid = { ..., default-features = false }</code> · <code>helicoid-linalg = { ..., default-features = false }</code> (no features used).</p>
 </li>
 <li>
 <p><strong>Telemetry Erasure:</strong></p>
