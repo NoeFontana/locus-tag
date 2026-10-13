@@ -18,7 +18,7 @@ The DetectionBatch struct encapsulates the following parallel arrays (slices):
 *   `ids`: `[u32; MAX_CANDIDATES]` (The decoded tag IDs).
 *   `payloads`: `[u64; MAX_CANDIDATES]` (The extracted bitstrings).
 *   `error_rates`: `[f32; MAX_CANDIDATES]` (The Hamming distance or confidence scores).
-*   `poses`: `[Pose6D; MAX_CANDIDATES]` (Translation vectors and unit quaternions, padded to 32 bytes).
+*   `poses`: `[Pose6D; MAX_CANDIDATES]` (`[tx, ty, tz, qw, qx, qy, qz]`: translation, then a Hamilton unit quaternion scalar first; padded to 32 bytes).
 *   `status_mask`: `[CandidateState; MAX_CANDIDATES]` (A dense byte-array tracking the lifecycle. e.g., Empty, Active, FailedDecode, Valid).
 *   `funnel_status`: `[FunnelStatus; MAX_CANDIDATES]` (Detailed status from the fast-path funnel for rejected quads).
 *   `corner_covariances`: `[[f32; 16]; MAX_CANDIDATES]` (Four 2×2 per-corner covariance matrices, packed row-major as 16 floats; written by Phase A — EdLines' Gauss-Newton per-corner covariances, zeros on every other route. The board `BoardEstimator` inverts them into its per-corner information matrices; they are **not** fed to the single-tag pose LM — Phase D takes its per-corner information matrices from the image structure tensor).

@@ -41,7 +41,8 @@ pub struct Matrix3x3 {
 #[derive(Debug, Clone, Copy, Default)]
 #[repr(C, align(32))]
 pub struct Pose6D {
-    /// Translation (x, y, z) and Rotation as a unit quaternion (x, y, z, w).
+    /// Translation `(x, y, z)`, then the rotation as a unit quaternion, scalar first:
+    /// `[tx, ty, tz, qw, qx, qy, qz]`.
     pub data: [f32; 7],
     /// Padding to 32-byte alignment.
     pub padding: f32,
@@ -272,24 +273,7 @@ impl DetectionBatch {
                 (corners[0][1] + corners[1][1] + corners[2][1] + corners[3][1]) / 4.0,
             ];
 
-            // Reconstruct Pose if available (Z translation > 0)
-            let pose = if self.poses[i].data[2] > 0.0 {
-                let d = self.poses[i].data;
-                // layout: [tx, ty, tz, qx, qy, qz, qw]
-                let t = nalgebra::Vector3::new(f64::from(d[0]), f64::from(d[1]), f64::from(d[2]));
-                let q = nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                    f64::from(d[6]), // w
-                    f64::from(d[3]), // x
-                    f64::from(d[4]), // y
-                    f64::from(d[5]), // z
-                ));
-                Some(crate::pose::Pose {
-                    rotation: q.to_rotation_matrix().into_inner(),
-                    translation: t,
-                })
-            } else {
-                None
-            };
+            let pose = crate::pose::Pose::try_from_pose6d(&self.poses[i].data);
 
             detections.push(crate::Detection {
                 id: self.ids[i],
@@ -429,22 +413,7 @@ impl DetectionBatchView<'_> {
                 (corners[0][0] + corners[1][0] + corners[2][0] + corners[3][0]) / 4.0,
                 (corners[0][1] + corners[1][1] + corners[2][1] + corners[3][1]) / 4.0,
             ];
-            let pose = if self.poses[i].data[2] > 0.0 {
-                let d = self.poses[i].data;
-                let t = nalgebra::Vector3::new(f64::from(d[0]), f64::from(d[1]), f64::from(d[2]));
-                let q = nalgebra::UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                    f64::from(d[6]),
-                    f64::from(d[3]),
-                    f64::from(d[4]),
-                    f64::from(d[5]),
-                ));
-                Some(crate::pose::Pose {
-                    rotation: q.to_rotation_matrix().into_inner(),
-                    translation: t,
-                })
-            } else {
-                None
-            };
+            let pose = crate::pose::Pose::try_from_pose6d(&self.poses[i].data);
             detections.push(crate::Detection {
                 id: self.ids[i],
                 center,

@@ -3066,6 +3066,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
+name = "helicoid"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "032f92fd5f597e9d9fbf920676480a603aa835ea2a11a8490bdbeedcc5e9116c"
+dependencies = [
+ "helicoid-linalg",
+ "libm",
+]
+
+[[package]]
+name = "helicoid-linalg"
+version = "0.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f820ee22d97925a8f273fba12e5882f3eea643401b5652c4a7e65a96136a034e"
+dependencies = [
+ "libm",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3868,6 +3887,8 @@ dependencies = [
  "crossbeam-queue",
  "csv",
  "divan",
+ "helicoid",
+ "helicoid-linalg",
  "image",
  "insta",
  "libm",

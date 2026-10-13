@@ -104,21 +104,16 @@ class HubDatasetLoader:
                     board_config_entry = entry.get("board_definition")
 
                 pos = entry["position"]
-                quat = entry["rotation_quaternion"]  # [w, x, y, z]
-                gt_map[img_name]["board_pose"] = np.array(
-                    [pos[0], pos[1], pos[2], quat[1], quat[2], quat[3], quat[0]], dtype=np.float64
-                )
+                quat = entry["rotation_quaternion"]  # [w, x, y, z], Locus's order
+                gt_map[img_name]["board_pose"] = np.array([*pos[:3], *quat], dtype=np.float64)
 
             elif record_type == "TAG":
                 tid = int(entry["tag_id"])
                 tag_data: dict[str, Any] = {"corners": np.array(entry["corners"], dtype=np.float32)}
                 if "position" in entry and "rotation_quaternion" in entry:
                     pos = entry["position"]
-                    quat = entry["rotation_quaternion"]  # [w, x, y, z]
-                    tag_data["pose"] = np.array(
-                        [pos[0], pos[1], pos[2], quat[1], quat[2], quat[3], quat[0]],
-                        dtype=np.float64,
-                    )
+                    quat = entry["rotation_quaternion"]  # [w, x, y, z], Locus's order
+                    tag_data["pose"] = np.array([*pos[:3], *quat], dtype=np.float64)
                 gt_map[img_name]["tags"][tid] = tag_data
 
         tag_size = tag_size_mm / 1000.0 if tag_size_mm else None
@@ -383,10 +378,9 @@ class DatasetLoader:
 
             corners = np.array(entry["corners"], dtype=np.float32)
 
-            # Hub quaternion is [w, x, y, z]; pose output is [tx,ty,tz,qx,qy,qz,qw].
-            w, x, y, z = entry["rotation_quaternion"]
+            # Hub quaternion is [w, x, y, z], as is the pose output [tx, ty, tz, qw, qx, qy, qz].
             pos = entry["position"]
-            pose = np.array([pos[0], pos[1], pos[2], x, y, z, w], dtype=np.float64)
+            pose = np.array([*pos[:3], *entry["rotation_quaternion"]], dtype=np.float64)
 
             gt_tags = gt_map.setdefault(img_name, [])
             gt_tags.append(TagGroundTruth(tag_id=int(entry["tag_id"]), corners=corners, pose=pose))
@@ -557,7 +551,7 @@ class HubBenchmarkLoader:
 
 
 def _pose_from_R_t(R: np.ndarray, t: np.ndarray) -> list[float]:
-    """Pack a rotation matrix + translation into [tx, ty, tz, qx, qy, qz, qw]."""
+    """Pack a rotation matrix + translation into [tx, ty, tz, qw, qx, qy, qz]."""
     qw = math.sqrt(max(0.0, 1.0 + R[0, 0] + R[1, 1] + R[2, 2])) * 0.5
     if qw > 1e-8:
         qx = (R[2, 1] - R[1, 2]) / (4.0 * qw)
@@ -581,10 +575,10 @@ def _pose_from_R_t(R: np.ndarray, t: np.ndarray) -> list[float]:
             qx = (R[0, 2] + R[2, 0]) / (4.0 * qz)
             qy = (R[1, 2] + R[2, 1]) / (4.0 * qz)
             qw = (R[1, 0] - R[0, 1]) / (4.0 * qz)
-    return [float(t[0]), float(t[1]), float(t[2]), float(qx), float(qy), float(qz), float(qw)]
+    return [float(t[0]), float(t[1]), float(t[2]), float(qw), float(qx), float(qy), float(qz)]
 
 
-def _quat_to_rot(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
+def _quat_to_rot(qw: float, qx: float, qy: float, qz: float) -> np.ndarray:
     return np.array(
         [
             [1 - 2 * (qy * qy + qz * qz), 2 * (qx * qy - qz * qw), 2 * (qx * qz + qy * qw)],
@@ -594,11 +588,10 @@ def _quat_to_rot(qx: float, qy: float, qz: float, qw: float) -> np.ndarray:
     )
 
 
-def rotation_error_deg(det_pose: np.ndarray, gt_quat_xyzw: np.ndarray) -> float:
+def rotation_error_deg(det_pose: np.ndarray, gt_quat_wxyz: np.ndarray) -> float:
     """Geodesic angle (degrees) between detected and GT rotations."""
     R_det = _quat_to_rot(*[float(v) for v in det_pose[3:7]])
-    qx, qy, qz, qw = (float(v) for v in gt_quat_xyzw)
-    R_gt = _quat_to_rot(qx, qy, qz, qw)
+    R_gt = _quat_to_rot(*[float(v) for v in gt_quat_wxyz])
     cos_theta = (np.trace(R_det.T @ R_gt) - 1.0) * 0.5
     return float(math.degrees(math.acos(max(-1.0, min(1.0, cos_theta)))))
 
@@ -717,7 +710,7 @@ class Metrics:
 
         Args:
             gt_pos: [x, y, z] position in camera frame.
-            gt_quat: [x, y, z, w] quaternion.
+            gt_quat: [w, x, y, z] quaternion.
             tag_size: Physical side length of the tag.
 
         Returns:

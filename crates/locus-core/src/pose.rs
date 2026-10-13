@@ -8,6 +8,8 @@
 use crate::batch::{DetectionBatch, Point2f, Pose6D};
 use crate::image::ImageView;
 
+use helicoid::{Chart, Decoupled, Jac, LieGroup, Quat, SE3, SEn3Jac, SO3, Twist};
+use helicoid_linalg::{Mat3, Matrix, StridedMut, Vec3, Vector};
 use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, UnitQuaternion, Vector3, Vector6};
 
 /// Lens distortion coefficients stored alongside the intrinsic parameters.
@@ -283,24 +285,187 @@ impl CameraIntrinsics {
 }
 
 // 3D Pose Estimation using PnP (Perspective-n-Point).
-/// A 3D pose representing rotation and translation.
+/// A rigid transform `T_camera_tag`: `p_cam = R·p_tag + t`.
+///
+/// Stored as `helicoid`'s SE(3), a unit quaternion and a translation, so the group operations
+/// (the LM's retraction, the inverse, the quaternion the batch emits) need no conversion. The
+/// rotation matrix is formed on demand by [`Pose::rotation_matrix`]: a loop that applies the
+/// pose to many points forms it once, outside the loop.
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Pose {
-    /// 3x3 Rotation matrix.
-    pub rotation: Matrix3<f64>,
-    /// 3x1 Translation vector.
-    pub translation: Vector3<f64>,
+#[cfg_attr(
+    feature = "serde",
+    serde(from = "SerializedPose", into = "SerializedPose")
+)]
+pub struct Pose(SE3<f64>);
+
+/// `Pose`'s serialized form, unchanged from when it stored the matrix.
+#[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SerializedPose {
+    rotation: Matrix3<f64>,
+    translation: Vector3<f64>,
+}
+
+#[cfg(feature = "serde")]
+impl From<SerializedPose> for Pose {
+    fn from(m: SerializedPose) -> Self {
+        Self::new(m.rotation, m.translation)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl From<Pose> for SerializedPose {
+    fn from(p: Pose) -> Self {
+        Self {
+            rotation: p.rotation_matrix(),
+            translation: p.translation(),
+        }
+    }
+}
+
+/// A pose in matrix form, `p ↦ R·p + t`: what code applying one pose to many points reads,
+/// and what IPPE produces.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct PoseMatrix {
+    pub r: Matrix3<f64>,
+    pub t: Vector3<f64>,
+}
+
+impl PoseMatrix {
+    #[inline]
+    pub(crate) fn apply(&self, p: &Vector3<f64>) -> Vector3<f64> {
+        self.r * p + self.t
+    }
+}
+
+impl From<PoseMatrix> for Pose {
+    #[inline]
+    fn from(m: PoseMatrix) -> Self {
+        Self::new(m.r, m.t)
+    }
+}
+
+#[inline]
+fn vec3_to_na(v: Vec3<f64>) -> Vector3<f64> {
+    Vector3::new(v.0[0], v.0[1], v.0[2])
+}
+
+#[inline]
+fn vec3_from_na(v: &Vector3<f64>) -> Vec3<f64> {
+    Vector([v.x, v.y, v.z])
 }
 
 impl Pose {
-    /// Create a new pose.
+    /// From a rotation matrix and a translation.
+    ///
+    /// `rotation` must be a rotation matrix: it is converted to a quaternion by Shepperd's
+    /// closed form, which is not a projection onto SO(3).
     #[must_use]
     pub fn new(rotation: Matrix3<f64>, translation: Vector3<f64>) -> Self {
-        Self {
-            rotation,
-            translation,
+        let r = Mat3::from_cols(core::array::from_fn(|c| {
+            Vector([rotation[(0, c)], rotation[(1, c)], rotation[(2, c)]])
+        }));
+        Self(SE3::from_rt(
+            SO3::from_matrix(&r),
+            vec3_from_na(&translation),
+        ))
+    }
+
+    /// From a unit quaternion and a translation.
+    #[must_use]
+    pub fn from_quaternion(rotation: &UnitQuaternion<f64>, translation: Vector3<f64>) -> Self {
+        let q = rotation.quaternion();
+        let q = Quat {
+            w: q.w,
+            x: q.i,
+            y: q.j,
+            z: q.k,
+        };
+        Self(SE3::from_rt(
+            SO3::from_quat_unchecked(q),
+            vec3_from_na(&translation),
+        ))
+    }
+
+    /// The pose a [`Pose6D`] row, `[tx, ty, tz, qw, qx, qy, qz]` in `f32`, holds, normalizing
+    /// the quaternion its rounding left off unit.
+    ///
+    /// `None` for a row that holds no pose: `tz > 0` is what marks one (a rejected pose is the
+    /// all-zero row), and a zero or non-finite quaternion has no rotation to normalize. Every
+    /// reader of a row goes through this one check.
+    #[must_use]
+    pub(crate) fn try_from_pose6d(d: &[f32; 7]) -> Option<Self> {
+        let [tx, ty, tz, w, x, y, z] = d.map(f64::from);
+        // Squares of `f32` values cannot overflow or underflow in `f64`, so a positive, finite
+        // `‖q‖²` normalizes to unit.
+        let norm_sq = w * w + x * x + y * y + z * z;
+        (tz > 0.0 && norm_sq > 0.0 && norm_sq.is_finite()).then(|| {
+            Self(SE3::from_rt(
+                SO3::from_quat_normalized(Quat { w, x, y, z }),
+                Vector([tx, ty, tz]),
+            ))
+        })
+    }
+
+    /// The packed pose, `[tx, ty, tz, qw, qx, qy, qz]`: the layout of every packed pose Locus
+    /// emits (the batch `Pose6D`, the Python `poses` and `board_pose` arrays).
+    ///
+    /// The quaternion is in the `qw ≥ 0` hemisphere: `q` and `−q` are the same rotation, and
+    /// which one the solver ends on depends on its path (the Shepperd pivot of the seed, the LM
+    /// steps), so the packed form fixes the sign rather than leak that path into the output.
+    #[must_use]
+    pub fn to_packed(&self) -> [f64; 7] {
+        let q = self.0.rotation().quat();
+        let s = 1.0f64.copysign(q.w);
+        let t = self.0.translation().0;
+        [t[0], t[1], t[2], s * q.w, s * q.x, s * q.y, s * q.z]
+    }
+
+    /// The [`Pose6D`] row: [`Pose::to_packed`] rounded to `f32`.
+    #[must_use]
+    pub(crate) fn to_pose6d(self) -> [f32; 7] {
+        self.to_packed().map(|v| v as f32)
+    }
+
+    /// The rotation `R` as a matrix, formed from the stored quaternion on each call.
+    #[inline]
+    #[must_use]
+    pub fn rotation_matrix(&self) -> Matrix3<f64> {
+        let r = self.0.rotation().to_matrix();
+        Matrix3::from_fn(|i, j| r.get(i, j))
+    }
+
+    /// The pose in matrix form, the rotation formed once.
+    #[inline]
+    #[must_use]
+    pub(crate) fn matrix(&self) -> PoseMatrix {
+        PoseMatrix {
+            r: self.rotation_matrix(),
+            t: self.translation(),
         }
+    }
+
+    /// The rotation as a unit quaternion.
+    #[inline]
+    #[must_use]
+    pub fn quaternion(&self) -> UnitQuaternion<f64> {
+        let q = self.0.rotation().quat();
+        UnitQuaternion::new_unchecked(nalgebra::Quaternion::new(q.w, q.x, q.y, q.z))
+    }
+
+    /// The translation `t`.
+    #[inline]
+    #[must_use]
+    pub fn translation(&self) -> Vector3<f64> {
+        vec3_to_na(self.0.translation())
+    }
+
+    /// The same rotation with translation `t`.
+    #[inline]
+    #[must_use]
+    pub fn with_translation(&self, t: Vector3<f64>) -> Self {
+        Self(SE3::from_rt(self.0.rotation(), vec3_from_na(&t)))
     }
 
     /// Project a 3D point into the image using this pose and intrinsics, applying
@@ -308,16 +473,16 @@ impl Pose {
     /// so undistorted results are unchanged).
     #[must_use]
     pub fn project(&self, point: &Vector3<f64>, intrinsics: &CameraIntrinsics) -> [f64; 2] {
-        let p_cam = self.rotation * point + self.translation;
+        let p_cam = self.rotation_matrix() * point + self.translation();
         let z = p_cam.z.max(1e-4);
         intrinsics.distort_normalized(p_cam.x / z, p_cam.y / z)
     }
 
-    /// Apply an SE(3) **right** (body-frame) perturbation `pose · exp(δ)`, with
-    /// `δ = [t | ω]` (translation then rotation-vector, matching the LM Jacobian
-    /// column layout). To first order (`V(ω) ≈ I`): `R' = R · exp(ω)`,
-    /// `t' = R · δt + t` — the increment is expressed in the tag's *own* frame and
-    /// rotated into the camera by the current `R`.
+    /// Apply the **right** (body-frame) perturbation `δ = [ω; v]` (rotation-first, matching
+    /// the LM Jacobian column layout and `helicoid`'s tangents): `R' = R · Exp(ω)`,
+    /// `t' = t + R · v`. That is `helicoid`'s `Decoupled` chart, not `T · Exp(δ)`: the
+    /// increment is expressed in the tag's *own* frame and rotated into the camera by the
+    /// current `R`, with no `V(ω)`.
     ///
     /// This is the single manifold update shared by **all** pose LMs (the corner
     /// unweighted/weighted solvers and `board.rs`). The body frame is used
@@ -327,49 +492,44 @@ impl Pose {
     /// faster convergence and a body-frame pose covariance — see
     /// `docs/explanation/coordinates.md` and the `right_perturbation` study.
     ///
-    /// `R · exp(ω)` is a product of two exactly-orthonormal matrices, so the
-    /// result stays on SO(3) to ~1e-16 per step; over the ≤20 LM iterations the
-    /// accumulated drift (~1e-13) is far below the pose tolerances and needs no
-    /// re-orthonormalization (the corner LMs have always used this raw-product
-    /// update). Downstream quaternion extraction (`quat_from_so3`) tolerates it.
+    /// The rotation is a product of unit quaternions, which keeps its norm to a few
+    /// ulps per step; over the ≤20 LM iterations the drift stays far inside
+    /// `helicoid`'s unit tolerance and needs no renormalization.
     #[inline]
     #[must_use]
     pub(crate) fn retract(&self, delta: &Vector6<f64>) -> Self {
-        let exp_omega = Rotation3::new(Vector3::new(delta[3], delta[4], delta[5]))
-            .matrix()
-            .into_owned();
-        let dt_body = Vector3::new(delta[0], delta[1], delta[2]);
-        Self::new(
-            self.rotation * exp_omega,
-            self.rotation * dt_body + self.translation,
-        )
+        let step = Twist {
+            phi: Vector([delta[0], delta[1], delta[2]]),
+            rho: [Vector([delta[3], delta[4], delta[5]])],
+        };
+        Self(Decoupled::at(&self.0).retract(&step))
     }
 
     /// SE(3) inverse: maps camera-frame points back into the tag body frame.
     /// `R' = Rᵀ`, `t' = -Rᵀ t`.
     #[must_use]
     pub fn inverse(&self) -> Self {
-        let rt = self.rotation.transpose();
-        Self::new(rt, -(rt * self.translation))
+        Self(self.0.inverse())
     }
 
-    /// The 6×6 SE(3) adjoint `Ad_T` for the twist ordering `[t | ω]`, i.e. the map
+    /// The 6×6 SE(3) adjoint `Ad_T` for the rotation-first tangent `[ω; v]`, i.e. the map
     /// taking a **body**-frame (right) tangent vector to the equivalent
     /// **camera**-frame (left) one: `δ_camera = Ad_T · δ_body` (from
     /// `exp(δ_camera)·T = T·exp(δ_body)`). Layout:
-    /// `Ad_T = [[R, [t]_× R], [0, R]]`.
+    /// `Ad_T = [[R, 0], [[t]_× R, R]]`.
     ///
     /// Used to reframe a covariance between the camera and body tangent spaces:
     /// `Σ_camera = Ad_T · Σ_body · Ad_Tᵀ`, and inversely
     /// `Σ_body = Ad_{T⁻¹} · Σ_camera · Ad_{T⁻¹}ᵀ`.
+    ///
+    /// This is `helicoid`'s adjoint, densified: the same matrix the covariance reframes apply,
+    /// so a test of this one is a test of theirs.
     #[must_use]
     pub fn adjoint(&self) -> Matrix6<f64> {
-        let r = self.rotation;
-        let tx = self.translation.cross_matrix();
         let mut ad = Matrix6::zeros();
-        ad.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
-        ad.fixed_view_mut::<3, 3>(0, 3).copy_from(&(tx * r));
-        ad.fixed_view_mut::<3, 3>(3, 3).copy_from(&r);
+        self.0
+            .adjoint()
+            .write_dense(&mut StridedMut::col_major(ad.as_mut_slice(), 6, 6));
         ad
     }
 
@@ -383,21 +543,21 @@ impl Pose {
     /// NaN sentinels propagate unchanged.
     #[must_use]
     pub fn covariance_camera_to_body(&self, cov_camera: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
-        let ad_inv = self.inverse().adjoint();
-        let cov = Matrix6::from_fn(|i, j| cov_camera[i][j]);
-        let out = ad_inv * cov * ad_inv.transpose();
-        core::array::from_fn(|i| core::array::from_fn(|j| out[(i, j)]))
+        sandwich(&self.0.inverse().adjoint(), cov_camera)
     }
 
     /// Inverse of [`Pose::covariance_camera_to_body`]: body → camera tangent,
     /// `Σ_camera = Ad_T · Σ_body · Ad_Tᵀ`.
     #[must_use]
     pub fn covariance_body_to_camera(&self, cov_body: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
-        let ad = self.adjoint();
-        let cov = Matrix6::from_fn(|i, j| cov_body[i][j]);
-        let out = ad * cov * ad.transpose();
-        core::array::from_fn(|i| core::array::from_fn(|j| out[(i, j)]))
+        sandwich(&self.0.adjoint(), cov_body)
     }
+}
+
+/// `Ad Σ Adᵀ` through `helicoid`'s structured adjoint, whose tangent order is this crate's.
+fn sandwich(ad: &SEn3Jac<f64, 1>, cov: &[[f64; 6]; 6]) -> [[f64; 6]; 6] {
+    let out = ad.sandwich::<6>(&Matrix::from_rows(cov.map(Vector)));
+    core::array::from_fn(|i| core::array::from_fn(|j| out.get(i, j)))
 }
 
 /// Fills the lower triangle of a 6×6 normal-equations matrix from its upper triangle.
@@ -412,19 +572,19 @@ pub(crate) fn symmetrize_jtj6(jtj: &mut Matrix6<f64>) {
 
 /// One row of the SE(3) **right** (body-frame) perturbation Jacobian for a pixel
 /// coordinate, given the body-frame projection gradient `dq = Rᵀ·∂proj/∂P_cam`
-/// and the body point `pb`. Layout ξ = [t | ω]: translation columns are `dq`, the
-/// rotation columns are the cross-product `dq·(−[pb]_×)`. This is the single
+/// and the body point `pb`. Layout ξ = [ω; v]: the rotation columns are the
+/// cross-product `dq·(−[pb]_×)`, the translation columns are `dq`. This is the single
 /// definition of the sign-sensitive rotation-row math, verified by
 /// `corner_normal_equations_gradient_is_descent` and `test_jacobian_rotation_rows`.
 #[inline]
 pub(crate) fn body_frame_row(dq: &Vector3<f64>, pb: &Vector3<f64>) -> Vector6<f64> {
     Vector6::new(
-        dq[0],
-        dq[1],
-        dq[2],
         -(dq[1] * pb.z - dq[2] * pb.y),
         -(dq[2] * pb.x - dq[0] * pb.z),
         -(dq[0] * pb.y - dq[1] * pb.x),
+        dq[0],
+        dq[1],
+        dq[2],
     )
 }
 
@@ -463,7 +623,7 @@ pub(crate) fn projection_and_gradient(
 
 /// Shared body-frame (right-perturbation) SE(3) normal-equations accumulator used
 /// by **every** pose LM (corner unweighted/weighted and the three `board.rs`
-/// solvers). Construct once from the linearization pose (captures `Rᵀ`), `add`
+/// solvers). Construct once from the linearization rotation (captures `Rᵀ`), `add`
 /// each correspondence with its already-computed projection gradient — so the
 /// distortion model is the caller's choice and this stays frame-canonical without
 /// pinning pinhole — then `finish` for the symmetric `(JᵀWJ, JᵀWr)`.
@@ -480,11 +640,11 @@ pub(crate) struct BodyFrameNormalEquations {
 
 impl BodyFrameNormalEquations {
     #[inline]
-    pub(crate) fn new(pose: &Pose) -> Self {
+    pub(crate) fn new(rotation: &Matrix3<f64>) -> Self {
         Self {
             jtj: Matrix6::zeros(),
             jtr: Vector6::zeros(),
-            rt: pose.rotation.transpose(),
+            rt: rotation.transpose(),
         }
     }
 
@@ -507,13 +667,44 @@ impl BodyFrameNormalEquations {
         let (w00, w01, w10, w11) = (w[(0, 0)], w[(0, 1)], w[(1, 0)], w[(1, 1)]);
         // JᵀWr = row_u·(W r)_u + row_v·(W r)_v
         self.jtr += row_u * (w00 * res_u + w01 * res_v) + row_v * (w10 * res_u + w11 * res_v);
-        // JᵀWJ upper triangle: wᵢⱼ folded outer products, symmetrized in `finish`.
+        // JᵀWJ upper triangle, symmetrized in `finish`. The four weighted outer products
+        // `w₀₀uuᵀ + w₁₁vvᵀ + w₀₁uvᵀ + w₁₀vuᵀ` are `u pᵀ + v qᵀ` with `p = w₀₀u + w₀₁v` and
+        // `q = w₁₀u + w₁₁v`: two multiplies per entry instead of eight.
+        // The triangle's bounds are constants, so the loop unrolls to 21 straight-line updates:
+        // measured 18 ns per call, against 20 ns for the full 6×6 (36 updates) and 57 ns for
+        // two nalgebra `ger` rank-1 updates.
+        let p = row_u * w00 + row_v * w01;
+        let q = row_u * w10 + row_v * w11;
         for i in 0..6 {
             for j in i..6 {
-                self.jtj[(i, j)] += w00 * row_u[i] * row_u[j]
-                    + w11 * row_v[i] * row_v[j]
-                    + w01 * row_u[i] * row_v[j]
-                    + w10 * row_v[i] * row_u[j];
+                self.jtj[(i, j)] += row_u[i] * p[j] + row_v[i] * q[j];
+            }
+        }
+    }
+
+    /// Accumulate one residual measured along the unit direction `n`: the 1-D residual
+    /// `res = n·r` with weight `w`, i.e. [`Self::add`] with the rank-1 `W = w·n nᵀ`.
+    ///
+    /// The Jacobian row is linear in the projection gradient, so `n₀·rowᵤ + n₁·rowᵥ` is the
+    /// row of `n₀·∂u/∂P + n₁·∂v/∂P`: one row and one rank-1 update where [`Self::add`] builds
+    /// two rows and a rank-2 update. Equal to it up to rounding, at half the cost (measured
+    /// 9.6 ns against 18 ns per call).
+    #[inline]
+    pub(crate) fn add_along(
+        &mut self,
+        pb: &Vector3<f64>,
+        du_dp: &Vector3<f64>,
+        dv_dp: &Vector3<f64>,
+        n: [f64; 2],
+        res: f64,
+        w: f64,
+    ) {
+        let row = body_frame_row(&(self.rt * (du_dp * n[0] + dv_dp * n[1])), pb);
+        let w_row = row * w;
+        self.jtr += w_row * res;
+        for i in 0..6 {
+            for j in i..6 {
+                self.jtj[(i, j)] += row[i] * w_row[j];
             }
         }
     }
@@ -933,6 +1124,8 @@ pub(crate) fn estimate_tag_pose_with_diagnostics(
         (pose, branch_diag)
     };
 
+    // The one conversion to a quaternion: only the chosen branch is refined.
+    let best_pose = Pose::from(best_pose);
     let (mut refined_pose, mut covariance) = if let Some(covs) = covariances {
         let (p, c) = crate::pose_weighted::refine_pose_lm_weighted(
             intrinsics, corners, tag_size, best_pose, &covs,
@@ -1058,8 +1251,13 @@ fn maybe_drop_outlier_corner(
     threshold: f64,
 ) -> Option<(u8, Pose, [[f64; 6]; 6])> {
     let obj_pts = centered_tag_corners(tag_size);
-    let (per_corner_4, _) =
-        per_corner_d2(intrinsics, corners, &obj_pts, info_matrices, &refined_pose);
+    let (per_corner_4, _) = per_corner_d2(
+        intrinsics,
+        corners,
+        &obj_pts,
+        info_matrices,
+        &refined_pose.matrix(),
+    );
 
     let (i_worst, d2_worst) =
         per_corner_4
@@ -1095,7 +1293,13 @@ fn maybe_drop_outlier_corner(
     // Self-rejection over the 3 kept corners (using the original,
     // un-masked info matrices so the comparison metric matches the
     // trigger's).
-    let (per_corner_3, _) = per_corner_d2(intrinsics, corners, &obj_pts, info_matrices, &pose_3);
+    let (per_corner_3, _) = per_corner_d2(
+        intrinsics,
+        corners,
+        &obj_pts,
+        info_matrices,
+        &pose_3.matrix(),
+    );
     let kept_sum = |per_corner: &[f64; 4]| -> f64 {
         per_corner
             .iter()
@@ -1223,7 +1427,7 @@ fn disabled_branch_diagnostics(
     corners: &[[f64; 2]; 4],
     info_matrices: &[Matrix2<f64>; 4],
     tag_size: f64,
-    candidates: &[Pose; 2],
+    candidates: &[PoseMatrix; 2],
 ) -> BranchDiagnostics {
     #[cfg(feature = "bench-internals")]
     {
@@ -1262,10 +1466,10 @@ fn disabled_branch_diagnostics(
 /// metres centred at the tag origin) to normalised image coordinates `[x_n, y_n, 1]^T`
 /// (i.e. `K^{-1} · H_pixel · diag(2/L, 2/L, 1)` where `L = tag_size`).
 ///
-/// **Output convention**: both returned [`Pose`]s are in the *camera-from-tag* frame
+/// **Output convention**: both returned poses are in the *camera-from-tag* frame
 /// (tag plane at z=0, centred at origin, +x right / +y down for typical AprilTag /
 /// ArUco corner orderings `[TL, TR, BR, BL]`).
-pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
+pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[PoseMatrix; 2]> {
     // Analytical SVD of the 3x2 Jacobian J = [h1, h2] via the 2x2 Gram matrix
     // B = J^T J = [[a, c], [c, b]].
     let h1 = h.column(0);
@@ -1319,7 +1523,7 @@ pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
         let tz = 1.0 / gamma;
         let t = h.column(2) * tz;
 
-        let pose = Pose::new(rot, t);
+        let pose = PoseMatrix { r: rot, t };
         return Some([pose, pose]);
     }
 
@@ -1353,7 +1557,7 @@ pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
     let gamma = (s1 + s2) * 0.5;
     let tz = 1.0 / gamma;
     let t_a = h.column(2) * tz;
-    let pose_a = Pose::new(rot_a, t_a);
+    let pose_a = PoseMatrix { r: rot_a, t: t_a };
 
     // Second (Necker-reversed) solution: reflect the plane normal across the
     // line of sight and rebuild rotation B via Gram-Schmidt from (h1, n_b).
@@ -1382,7 +1586,7 @@ pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[Pose; 2]> {
 
     let y_b = n_b.cross(&x_b);
     let rot_b = Matrix3::from_columns(&[x_b, y_b, n_b]);
-    let pose_b = Pose::new(rot_b, t_a);
+    let pose_b = PoseMatrix { r: rot_b, t: t_a };
 
     Some([pose_a, pose_b])
 }
@@ -1412,7 +1616,7 @@ fn project_with_distortion(p_cam: &Vector3<f64>, intrinsics: &CameraIntrinsics) 
 
 /// Assemble the Huber-weighted normal equations `(JᵀWJ, JᵀWr)` for the 4-corner
 /// reprojection problem at `pose`, plus the Huber cost at `pose`, shared by
-/// `refine_pose_lm` and its gradient tests. Layout: ξ = [tx, ty, tz, rx, ry, rz].
+/// `refine_pose_lm` and its gradient tests. Layout: ξ = [ωx, ωy, ωz, vx, vy, vz].
 ///
 /// The returned cost is bit-identical to [`huber_cost`] evaluated at the same
 /// pose (both route through the same clamped normalized projection), so the LM
@@ -1425,11 +1629,12 @@ fn corner_normal_equations(
     pose: &Pose,
     huber_delta: f64,
 ) -> (Matrix6<f64>, Vector6<f64>, f64) {
-    let mut ne = BodyFrameNormalEquations::new(pose);
+    let m = pose.matrix();
+    let mut ne = BodyFrameNormalEquations::new(&m.r);
     let mut cost = 0.0;
     for i in 0..4 {
         let pb = obj_pts[i];
-        let p_cam = pose.rotation * pb + pose.translation;
+        let p_cam = m.apply(&pb);
         // Behind-camera policy (deliberately differs from the board/weighted LMs,
         // which DROP such correspondences): a single tag has exactly four corners
         // we want to keep, so we clamp `z` and let the Huber weight softly reject
@@ -1532,8 +1737,9 @@ fn huber_cost(
     delta: f64,
 ) -> f64 {
     let mut cost = 0.0;
+    let m = pose.matrix();
     for i in 0..4 {
-        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let p_cam = m.apply(&obj_pts[i]);
         let p = project_with_distortion(&p_cam, intrinsics);
         let r_u = corners[i][0] - p[0];
         let r_v = corners[i][1] - p[1];
@@ -1548,15 +1754,17 @@ fn huber_cost(
     cost
 }
 
-fn reprojection_error(
+/// Sum over the four corners of the squared pixel distance between `corners` and `obj_pts`
+/// projected under `pose` (distortion included).
+pub(crate) fn reprojection_error(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
     obj_pts: &[Vector3<f64>; 4],
-    pose: &Pose,
+    pose: &PoseMatrix,
 ) -> f64 {
     let mut err_sq = 0.0;
     for i in 0..4 {
-        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let p_cam = pose.apply(&obj_pts[i]);
         let p = project_with_distortion(&p_cam, intrinsics);
         err_sq += (p[0] - corners[i][0]).powi(2) + (p[1] - corners[i][1]).powi(2);
     }
@@ -1603,12 +1811,12 @@ pub(crate) fn per_corner_d2(
     corners: &[[f64; 2]; 4],
     obj_pts: &[Vector3<f64>; 4],
     info_matrices: &[Matrix2<f64>; 4],
-    pose: &Pose,
+    pose: &PoseMatrix,
 ) -> ([f64; 4], f64) {
     let mut per_corner = [0.0_f64; 4];
     let mut aggregate = 0.0_f64;
     for i in 0..4 {
-        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let p_cam = pose.apply(&obj_pts[i]);
         let p = project_with_distortion(&p_cam, intrinsics);
         let res = [corners[i][0] - p[0], corners[i][1] - p[1]];
         let d2 = mahalanobis_d2(res, &info_matrices[i]);
@@ -1658,8 +1866,8 @@ fn find_best_pose(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
     tag_size: f64,
-    candidates: &[Pose; 2],
-) -> Pose {
+    candidates: &[PoseMatrix; 2],
+) -> PoseMatrix {
     let obj_pts = centered_tag_corners(tag_size);
 
     let err0 = reprojection_error(intrinsics, corners, &obj_pts, &candidates[0]);
@@ -1732,9 +1940,9 @@ fn select_ippe_branch(
     observed_corners: &[[f64; 2]; 4],
     info_matrices: &[Matrix2<f64>; 4],
     tag_size: f64,
-    candidates: &[Pose; 2],
+    candidates: &[PoseMatrix; 2],
     thresholds: ConsistencyThresholds,
-) -> (Pose, BranchDiagnostics) {
+) -> (PoseMatrix, BranchDiagnostics) {
     let obj_pts = centered_tag_corners(tag_size);
 
     let (_, agg0) = per_corner_d2(
@@ -1829,7 +2037,7 @@ fn pose_consistency_check(
                 observed_corners,
                 &obj_pts,
                 info_matrices,
-                refined_pose,
+                &refined_pose.matrix(),
             );
             return ConsistencyVerdict {
                 accepted: true,
@@ -1860,7 +2068,7 @@ fn pose_consistency_check(
         observed_corners,
         &obj_pts,
         info_matrices,
-        refined_pose,
+        &refined_pose.matrix(),
     );
     let max_corner_d2 = per_corner.iter().copied().fold(0.0_f64, f64::max);
     let chi2_ok = aggregate_d2 <= t.aggregate && max_corner_d2 <= t.per_corner;
@@ -2022,19 +2230,7 @@ pub fn refine_poses_soa_with_config(
                     diag.max_corner_d2 = v.max_corner_d2 as f32;
                 }
             }
-            let q = quat_from_so3(pose.rotation);
-            let t = pose.translation;
-
-            // Data layout: [tx, ty, tz, qx, qy, qz, qw]
-            let mut data = [0.0f32; 7];
-            data[0] = t.x as f32;
-            data[1] = t.y as f32;
-            data[2] = t.z as f32;
-            data[3] = q.coords.x as f32;
-            data[4] = q.coords.y as f32;
-            data[5] = q.coords.z as f32;
-            data[6] = q.coords.w as f32;
-            Some(data)
+            Some(pose.to_pose6d())
         } else {
             None
         };
@@ -2235,8 +2431,8 @@ mod tests {
                             3f64.to_radians(),
                         )
                         .matrix()
-                            * gt.rotation,
-                        gt.translation
+                            * gt.rotation_matrix(),
+                        gt.translation()
                             + Vector3::new(
                                 0.01 * rng.normal(),
                                 0.01 * rng.normal(),
@@ -2248,7 +2444,10 @@ mod tests {
                         calls.set(calls.get() + 1);
                         corner_normal_equations(&intr, &corners, &obj, p, 1.5)
                     });
-                    errs.push(rot_err_deg(&refined.rotation, &gt.rotation));
+                    errs.push(rot_err_deg(
+                        &refined.rotation_matrix(),
+                        &gt.rotation_matrix(),
+                    ));
                     total_it += calls.get().saturating_sub(1); // minus the initial build
                 }
             }
@@ -2468,8 +2667,8 @@ mod tests {
                             3f64.to_radians(),
                         )
                         .matrix()
-                            * gt.rotation,
-                        gt.translation
+                            * gt.rotation_matrix(),
+                        gt.translation()
                             + k * Vector3::new(
                                 0.02 * rng.normal(),
                                 0.02 * rng.normal(),
@@ -2479,7 +2678,10 @@ mod tests {
                     let (refined, it) = nielsen_lm_gated(seed, &NielsenConfig::POSE, gate, |p| {
                         corner_normal_equations(&intr, &corners, &obj, p, 1.5)
                     });
-                    errs.push(rot_err_deg(&refined.rotation, &gt.rotation));
+                    errs.push(rot_err_deg(
+                        &refined.rotation_matrix(),
+                        &gt.rotation_matrix(),
+                    ));
                     it_total += u64::from(it);
                 }
                 errs.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -2538,10 +2740,11 @@ mod tests {
         pose: &Pose,
         huber_delta: f64,
     ) -> (Matrix6<f64>, Vector6<f64>, f64) {
-        let mut ne = BodyFrameNormalEquations::new(pose);
+        let m = pose.matrix();
+        let mut ne = BodyFrameNormalEquations::new(&m.r);
         let mut cost = 0.0;
         for (ob, pb) in obs.iter().zip(obj.iter()) {
-            let p_cam = pose.rotation * pb + pose.translation;
+            let p_cam = m.apply(pb);
             let z = p_cam.z.max(1e-4);
             let z_inv = 1.0 / z;
             let ([u_est, v_est], du_dp, dv_dp) =
@@ -2639,8 +2842,8 @@ mod tests {
             let seed = Pose::new(
                 Rotation3::from_axis_angle(&nalgebra::Unit::new_normalize(axis), 4f64.to_radians())
                     .matrix()
-                    * gt.rotation,
-                gt.translation
+                    * gt.rotation_matrix(),
+                gt.translation()
                     + Vector3::new(
                         0.02 * rng.normal(),
                         0.02 * rng.normal(),
@@ -2652,11 +2855,23 @@ mod tests {
             let (l2_pose, it_l2) = nielsen_lm_gated(seed, &NielsenConfig::POSE, Gate::L2(1e-7), ne);
             let (fr_pose, it_fr) =
                 nielsen_lm_gated(seed, &NielsenConfig::POSE, Gate::FuncRel(1e-6), ne);
-            ref_gt.push(rot_err_deg(&converged.rotation, &gt.rotation));
-            l2_gt.push(rot_err_deg(&l2_pose.rotation, &gt.rotation));
+            ref_gt.push(rot_err_deg(
+                &converged.rotation_matrix(),
+                &gt.rotation_matrix(),
+            ));
+            l2_gt.push(rot_err_deg(
+                &l2_pose.rotation_matrix(),
+                &gt.rotation_matrix(),
+            ));
             l2_it += u64::from(it_l2);
-            fr_gt.push(rot_err_deg(&fr_pose.rotation, &gt.rotation));
-            fr_dev.push(rot_err_deg(&fr_pose.rotation, &converged.rotation));
+            fr_gt.push(rot_err_deg(
+                &fr_pose.rotation_matrix(),
+                &gt.rotation_matrix(),
+            ));
+            fr_dev.push(rot_err_deg(
+                &fr_pose.rotation_matrix(),
+                &converged.rotation_matrix(),
+            ));
             fr_it += u64::from(it_fr);
         }
         let sorted = |mut v: Vec<f64>| {
@@ -2780,8 +2995,8 @@ mod tests {
                 .clamp(-1.0, 1.0)
                 .acos()
         };
-        let init_err = ang(&init.rotation, &true_rot);
-        let refined_err = ang(&refined.rotation, &true_rot);
+        let init_err = ang(&init.rotation_matrix(), &true_rot);
+        let refined_err = ang(&refined.rotation_matrix(), &true_rot);
         assert!(
             refined_err < 0.1 * init_err,
             "rotation not refined: init_err={init_err:.4} refined_err={refined_err:.4}"
@@ -2800,7 +3015,8 @@ mod tests {
         let init = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 0.5));
 
         let finite = |p: &Pose| {
-            p.translation.iter().all(|v| v.is_finite()) && p.rotation.iter().all(|v| v.is_finite())
+            p.translation().iter().all(|v| v.is_finite())
+                && p.rotation_matrix().iter().all(|v| v.is_finite())
         };
 
         // Case 1: all four corners coincident (zero-area quad, fully rank-deficient).
@@ -2844,22 +3060,98 @@ mod tests {
         // Left: exp(Ad_T·δ_body)·T, built explicitly (rotation on the left, its
         // translation part added, matching the SE(3) left perturbation to O(δ²)).
         let delta_cam = pose.adjoint() * delta_body;
-        let rot_l = Rotation3::new(Vector3::new(delta_cam[3], delta_cam[4], delta_cam[5]))
+        let rot_l = Rotation3::new(Vector3::new(delta_cam[0], delta_cam[1], delta_cam[2]))
             .matrix()
             .into_owned();
-        let t_l = Vector3::new(delta_cam[0], delta_cam[1], delta_cam[2]);
-        let left = Pose::new(rot_l * pose.rotation, rot_l * pose.translation + t_l);
+        let t_l = Vector3::new(delta_cam[3], delta_cam[4], delta_cam[5]);
+        let left = Pose::new(
+            rot_l * pose.rotation_matrix(),
+            rot_l * pose.translation() + t_l,
+        );
 
         assert!(
-            (right.rotation - left.rotation).abs().max() < 1e-7,
+            (right.rotation_matrix() - left.rotation_matrix())
+                .abs()
+                .max()
+                < 1e-7,
             "rotation mismatch: {}",
-            (right.rotation - left.rotation).abs().max()
+            (right.rotation_matrix() - left.rotation_matrix())
+                .abs()
+                .max()
         );
         assert!(
-            (right.translation - left.translation).norm() < 1e-7,
+            (right.translation() - left.translation()).norm() < 1e-7,
             "translation mismatch: {}",
-            (right.translation - left.translation).norm()
+            (right.translation() - left.translation()).norm()
         );
+    }
+
+    // `add_along` is `add` with the rank-1 weight `W = w·n nᵀ`, up to rounding.
+    #[test]
+    fn add_along_is_add_with_the_rank_one_weight() {
+        let r = Rotation3::new(Vector3::new(0.2, 0.5, -0.3))
+            .matrix()
+            .into_owned();
+        let (mut full, mut along) = (
+            BodyFrameNormalEquations::new(&r),
+            BodyFrameNormalEquations::new(&r),
+        );
+        for k in 0..32 {
+            let s = f64::from(k);
+            let pb = Vector3::new((0.7 * s).sin(), (1.3 * s).cos(), 0.0) * 0.05;
+            let du = Vector3::new(900.0 + s, 0.3 * s, -250.0 + 2.0 * s);
+            let dv = Vector3::new(-0.2 * s, 880.0 - s, 310.0 - s);
+            let (sin, cos) = (0.37 * s).sin_cos();
+            let n = [cos, sin];
+            let (res_u, res_v) = ((0.9 * s).sin(), (0.4 * s).cos());
+            let w = 0.25 + 0.02 * s;
+            let res = n[0] * res_u + n[1] * res_v;
+            let wm = Matrix2::new(n[0] * n[0], n[0] * n[1], n[0] * n[1], n[1] * n[1]) * w;
+            full.add(&pb, &du, &dv, res_u, res_v, &wm);
+            along.add_along(&pb, &du, &dv, n, res, w);
+        }
+        let ((jtj_a, jtr_a), (jtj_b, jtr_b)) = (full.finish(), along.finish());
+        assert!((jtj_a - jtj_b).norm() <= 1e-13 * jtj_a.norm());
+        assert!((jtr_a - jtr_b).norm() <= 1e-13 * jtr_a.norm());
+    }
+
+    // `Pose::adjoint` is `helicoid`'s, the one the covariance reframes apply. Pin it to the
+    // closed form for this crate's rotation-first tangent, `[[R, 0], [[t]_× R, R]]`, and the
+    // reframe to the dense `Ad Σ Adᵀ`: a different tangent order or perturbation side in a
+    // `helicoid` release fails here, where the round trip below cannot see it.
+    #[test]
+    fn adjoint_is_the_rotation_first_closed_form() {
+        let r = Rotation3::new(Vector3::new(0.3, -0.2, 0.15))
+            .matrix()
+            .into_owned();
+        let t = Vector3::new(0.12, -0.05, 0.7);
+        let pose = Pose::new(r, t);
+        let (r, t) = (pose.rotation_matrix(), pose.translation());
+
+        let mut want = Matrix6::zeros();
+        want.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
+        want.fixed_view_mut::<3, 3>(3, 0)
+            .copy_from(&(t.cross_matrix() * r));
+        want.fixed_view_mut::<3, 3>(3, 3).copy_from(&r);
+        let ad = pose.adjoint();
+        assert!((ad - want).abs().max() < 1e-15, "{ad}\nvs\n{want}");
+
+        let a = Matrix6::from_fn(|i, j| ((i * 7 + j * 3) % 11) as f64 - 5.0);
+        let cov = a * a.transpose() + Matrix6::identity();
+        let cov_rows: [[f64; 6]; 6] =
+            core::array::from_fn(|i| core::array::from_fn(|j| cov[(i, j)]));
+        let dense = want * cov * want.transpose();
+        let got = pose.covariance_body_to_camera(&cov_rows);
+        for i in 0..6 {
+            for j in 0..6 {
+                assert!(
+                    (got[i][j] - dense[(i, j)]).abs() < 1e-12 * dense.abs().max(),
+                    "({i},{j}): {} vs {}",
+                    got[i][j],
+                    dense[(i, j)]
+                );
+            }
+        }
     }
 
     // Reframing a covariance camera→body→camera must be the identity (the two
@@ -2903,6 +3195,63 @@ mod tests {
                 assert!((cov_cam[i][j] - cov_cam[j][i]).abs() < 1e-12);
             }
         }
+    }
+
+    // The packed layout is `[tx, ty, tz, qw, qx, qy, qz]`: a quarter turn about z puts
+    // `cos 45°` at index 3 and `sin 45°` at index 6, and reading the row back gives the pose.
+    #[test]
+    fn pose6d_is_translation_then_scalar_first_quaternion() {
+        let r = Rotation3::new(Vector3::new(0.0, 0.0, core::f64::consts::FRAC_PI_2))
+            .matrix()
+            .into_owned();
+        let pose = Pose::new(r, Vector3::new(0.1, -0.2, 0.9));
+        let d = pose.to_pose6d();
+        let h = core::f32::consts::FRAC_1_SQRT_2;
+        let want = [0.1, -0.2, 0.9, h, 0.0, 0.0, h];
+        for (got, want) in d.iter().zip(want) {
+            assert!((got.abs() - want.abs()).abs() < 1e-6, "{d:?}");
+        }
+        assert!(
+            d[3] * d[6] > 0.0,
+            "qw and qz share a sign for +90° about z: {d:?}"
+        );
+        let back = Pose::try_from_pose6d(&d).expect("a row with tz > 0 holds a pose");
+        assert!((back.rotation_matrix() - r).abs().max() < 1e-6);
+    }
+
+    // `q` and `−q` are one rotation: the row carries the `qw ≥ 0` one whichever the pose
+    // stores, so the same rotation always packs to the same row.
+    #[test]
+    fn pose6d_quaternion_is_in_the_nonnegative_hemisphere() {
+        let t = Vector3::new(0.1, -0.2, 0.9);
+        let q = UnitQuaternion::from_euler_angles(0.4, -1.1, 2.9);
+        let neg = UnitQuaternion::new_unchecked(-q.into_inner());
+        let (a, b) = (
+            Pose::from_quaternion(&q, t).to_pose6d(),
+            Pose::from_quaternion(&neg, t).to_pose6d(),
+        );
+        assert!(a[3] >= 0.0, "{a:?}");
+        assert_eq!(a.map(f32::to_bits), b.map(f32::to_bits));
+    }
+
+    // `tz > 0` marks a row as holding a pose; a row without one — the all-zero row of a
+    // rejected pose, a translation-only row, a non-finite quaternion — reads as `None`
+    // instead of reaching the quaternion normalization (a debug-build panic on zero).
+    #[test]
+    fn pose6d_without_a_pose_reads_as_none() {
+        let rows = [
+            [0.0; 7],
+            [0.1, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0],
+            [0.1, 0.2, -1.0, 1.0, 0.0, 0.0, 0.0],
+            [0.1, 0.2, f32::NAN, 1.0, 0.0, 0.0, 0.0],
+            [0.1, 0.2, 1.0, f32::NAN, 0.0, 0.0, 0.0],
+            [0.1, 0.2, 1.0, f32::INFINITY, 0.0, 0.0, 0.0],
+        ];
+        for row in rows {
+            assert!(Pose::try_from_pose6d(&row).is_none(), "{row:?}");
+        }
+        // Off-unit by `f32` rounding is still a pose.
+        assert!(Pose::try_from_pose6d(&[0.0, 0.0, 1.0, 0.5, 0.5, 0.5, 0.5001]).is_some());
     }
 
     #[test]
@@ -2973,12 +3322,12 @@ mod tests {
         let est_pose = est_pose.expect("Pose estimation failed");
 
         // Check translation
-        assert!((est_pose.translation.x - gt_t.x).abs() < 1e-3);
-        assert!((est_pose.translation.y - gt_t.y).abs() < 1e-3);
-        assert!((est_pose.translation.z - gt_t.z).abs() < 1e-3);
+        assert!((est_pose.translation().x - gt_t.x).abs() < 1e-3);
+        assert!((est_pose.translation().y - gt_t.y).abs() < 1e-3);
+        assert!((est_pose.translation().z - gt_t.z).abs() < 1e-3);
 
         // Check rotation (identity)
-        let diff_rot = est_pose.rotation - gt_rot;
+        let diff_rot = est_pose.rotation_matrix() - gt_rot;
         assert!(diff_rot.norm() < 1e-3);
     }
 
@@ -3033,10 +3382,10 @@ mod tests {
             if let (Some(est_pose), _) = estimate_tag_pose(&intrinsics, &img_pts, tag_size, None) {
                 // Check if recovered pose is reasonably close
                 // Note: noise decreases accuracy, so we use a loose threshold
-                let t_err = (est_pose.translation - translation).norm();
+                let t_err = (est_pose.translation() - translation).norm();
                 prop_assert!(t_err < 0.1 + noise * 0.1, "Translation error {} too high for noise {}", t_err, noise);
 
-                let r_err = (est_pose.rotation - rotation).norm();
+                let r_err = (est_pose.rotation_matrix() - rotation).norm();
                 prop_assert!(r_err < 0.1 + noise * 0.1, "Rotation error {} too high for noise {}", r_err, noise);
             }
         }
@@ -3094,8 +3443,8 @@ mod tests {
 
         let (idx, pose_3, _cov_3) = dropped.expect("drop should fire on +25 px outlier");
         assert_eq!(idx, 0, "expected to drop corner 0");
-        let err_dropped = (pose_3.translation - gt_pose.translation).norm();
-        let err_full = (pose_4.translation - gt_pose.translation).norm();
+        let err_dropped = (pose_3.translation() - gt_pose.translation()).norm();
+        let err_full = (pose_4.translation() - gt_pose.translation()).norm();
         assert!(
             err_dropped < err_full,
             "drop should improve translation error: dropped={err_dropped} full={err_full}",
@@ -3161,7 +3510,7 @@ mod tests {
             &info,
         );
 
-        let err = (pose.translation - gt_pose.translation).norm();
+        let err = (pose.translation() - gt_pose.translation()).norm();
         assert!(
             err < 1e-3,
             "masked LM should ignore corner 0 outlier; translation error {err}",

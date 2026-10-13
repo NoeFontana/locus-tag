@@ -201,12 +201,13 @@ fn build_normal_equations(
     info_matrices: &[Matrix2<f64>; 4],
     huber_k: f64,
 ) -> (Matrix6<f64>, Vector6<f64>, f64) {
-    let mut ne = BodyFrameNormalEquations::new(pose);
+    let m = pose.matrix();
+    let mut ne = BodyFrameNormalEquations::new(&m.r);
     let mut total_cost = 0.0;
 
     for i in 0..4 {
         let pb = obj_pts[i];
-        let p_cam = pose.rotation * pb + pose.translation;
+        let p_cam = m.apply(&pb);
         if p_cam.z < 1e-4 {
             total_cost += 1e6;
             continue;
@@ -250,8 +251,10 @@ fn huber_mahalanobis_cost(
 ) -> f64 {
     let mut cost = 0.0;
 
+    let m = pose.matrix();
+
     for i in 0..4 {
-        let p_cam = pose.rotation * obj_pts[i] + pose.translation;
+        let p_cam = m.apply(&obj_pts[i]);
         if p_cam.z < 1e-4 {
             cost += 1e6;
             continue;
@@ -379,15 +382,15 @@ mod tests {
 
         // Finite-difference ∂u/∂ω through the right retract.
         let proj_u = |p: &Pose| {
-            let pc = p.rotation * pb + p.translation;
+            let pc = p.rotation_matrix() * pb + p.translation();
             intrinsics.fx * (pc.x / pc.z) + intrinsics.cx
         };
         let eps = 1e-7;
         for k in 0..3 {
             let mut d = Vector6::zeros();
-            d[3 + k] = eps;
+            d[k] = eps;
             let fwd = proj_u(&pose.retract(&d));
-            d[3 + k] = -eps;
+            d[k] = -eps;
             let bwd = proj_u(&pose.retract(&d));
             let num = (fwd - bwd) / (2.0 * eps);
             assert!(
@@ -429,9 +432,9 @@ mod tests {
         let (result, _cov) =
             refine_pose_lm_weighted(&intrinsics, &corners, s, init_pose, &identity_covs);
 
-        let t_err = (result.translation - gt_t).norm() * 1000.0; // mm
+        let t_err = (result.translation() - gt_t).norm() * 1000.0; // mm
         let q_gt = crate::pose::quat_from_so3(gt_rot);
-        let q_est = crate::pose::quat_from_so3(result.rotation);
+        let q_est = result.quaternion();
         let r_err_deg = q_gt.angle_to(&q_est).to_degrees();
 
         assert!(t_err < 0.01, "translation error too large: {t_err:.4} mm");
@@ -484,7 +487,7 @@ mod tests {
             .into_owned();
         let close = Pose::new(steep, nalgebra::Vector3::new(0.02, 0.01, 0.02));
         let behind: usize = (0..4)
-            .filter(|&i| (close.rotation * obj_pts[i] + close.translation).z < 1e-4)
+            .filter(|&i| (close.rotation_matrix() * obj_pts[i] + close.translation()).z < 1e-4)
             .count();
         assert!(
             behind > 0,
@@ -606,7 +609,7 @@ mod tests {
 
         // Perfect observations projected THROUGH the distortion model.
         let corners: [[f64; 2]; 4] = core::array::from_fn(|i| {
-            let pc = gt.rotation * obj[i] + gt.translation;
+            let pc = gt.rotation_matrix() * obj[i] + gt.translation();
             let z_inv = 1.0 / pc.z;
             intr_distorted.distort_normalized(pc.x * z_inv, pc.y * z_inv)
         });
@@ -616,7 +619,7 @@ mod tests {
         // because the observations do not fit a pinhole model.
         let init = Pose::new(
             nalgebra::Rotation3::new(nalgebra::Vector3::new(0.01, 0.01, -0.008)).matrix() * gt_rot,
-            gt.translation + nalgebra::Vector3::new(0.003, -0.002, 0.004),
+            gt.translation() + nalgebra::Vector3::new(0.003, -0.002, 0.004),
         );
         let covs = [Matrix2::<f64>::identity(); 4];
 
@@ -628,8 +631,8 @@ mod tests {
             let q = crate::pose::quat_from_so3(*r);
             q_gt.angle_to(&q).to_degrees()
         };
-        let err_d = rot_err(&refined_d.rotation);
-        let err_p = rot_err(&refined_p.rotation);
+        let err_d = rot_err(&refined_d.rotation_matrix());
+        let err_p = rot_err(&refined_p.rotation_matrix());
 
         // Distortion-aware LM recovers the exact zero-residual truth; the pinhole
         // interpretation drifts to a materially biased optimum (~8°).

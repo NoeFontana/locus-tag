@@ -111,16 +111,36 @@ $$
 - $R$: A $3 \times 3$ rotation matrix.
 - $t$: A $3 \times 1$ translation vector (representing the tag's **geometric center** in the camera frame).
 
+Packed poses (`DetectionBatch.poses`, the batch `Pose6D`, `board_pose`; `Pose::to_packed` in
+Rust) are the 7-vector $[t_x, t_y, t_z, q_w, q_x, q_y, q_z]$: the translation, then $R$ as a unit
+Hamilton quaternion, **scalar first** (`helicoid`'s quaternion component order, and the hub ground
+truth's `position` + `rotation_quaternion`). The quaternion is in the $q_w \ge 0$ hemisphere: $q$
+and $-q$ are the same rotation, and the packed form picks one so the same rotation always packs
+to the same row. Libraries that take the scalar last (ROS, Eigen's `coeffs()`, rerun's `xyzw=`)
+need `[qx, qy, qz, qw]`; SciPy reads this order with `Rotation.from_quat(q, scalar_first=True)`
+(SciPy ≥ 1.14).
+
+> **The packed pose and the tangent are in different orders.** The packed pose is
+> translation first (`pose[:3]` is $t$, `pose[3:7]` is $q$); the covariance and every tangent
+> vector (Section 5.1) are **rotation first**, $[\boldsymbol{\omega}, \mathbf{v}]$
+> (`cov[:3, :3]` is the rotation block). Do not pair `pose[:3]` with `cov[:3, :3]`. The packed
+> form keeps the translation first because it is a storage layout, read by slicing, and every
+> consumer (the hub ground truth, TUM trajectories, ROS `Pose`) reads it that way; the tangent
+> follows `helicoid`, GTSAM and Sophus.
+
 ### 5.1 Pose Covariance & Perturbation Frame
 
 The optional $6 \times 6$ covariance returned alongside a pose lives in the
-$\mathfrak{se}(3)$ tangent space, ordered $[\mathbf{t}, \boldsymbol{\omega}]$
-(translation first, then the rotation vector).
+$\mathfrak{se}(3)$ tangent space, ordered $[\boldsymbol{\omega}, \mathbf{v}]$
+(rotation vector first, then translation), the order of `helicoid`, GTSAM's `Pose3` and
+`tf_tree`.
 
 The pose Levenberg–Marquardt solvers parameterise the update as a **right
 (body-frame) perturbation** $T' = T \cdot \exp(\delta)$ — the increment
-$\delta = [\mathbf{t}\;|\;\boldsymbol{\omega}]$ is expressed in the tag's *own*
-(body) frame and mapped into the camera by the current rotation. Because the
+$\delta = [\boldsymbol{\omega};\,\mathbf{v}]$ is expressed in the tag's *own*
+(body) frame and mapped into the camera by the current rotation:
+$R' = R\,\mathrm{Exp}(\boldsymbol{\omega})$, $t' = t + R\,\mathbf{v}$ (`helicoid`'s
+`Decoupled` chart). Because the
 object points are symmetric about the body origin, this decouples rotation from
 translation in the normal equations (a $\sim\!3.4\times$ better-conditioned
 $J^\top W J$ and $\sim\!0.999 \to 0.06$ rotation$\leftrightarrow$translation
@@ -133,9 +153,12 @@ and its inverse $\Sigma_{\text{body}} = \mathrm{Ad}_{T^{-1}}\,\Sigma_{\text{came
 (`Pose::adjoint`, `Pose::covariance_camera_to_body`,
 `Pose::covariance_body_to_camera`).
 
-> **Migration note.** Prior to the right-perturbation migration the emitted
-> covariance was expressed in the **camera** (left/spatial) frame. Consumers that
-> relied on the old frame can recover it with `covariance_body_to_camera`.
+> **Migration notes.** Before the rotation-first change the covariance was ordered
+> $[\mathbf{t}, \boldsymbol{\omega}]$. The two orders differ by `P Σ Pᵀ`,
+> `P = [[0, I], [I, 0]]`, its own inverse: in NumPy, `cov[np.ix_(p, p)]` with
+> `p = [3, 4, 5, 0, 1, 2]` converts either order to the other.
+> Before the right-perturbation migration it was expressed in the **camera**
+> (left/spatial) frame; `covariance_body_to_camera` recovers that frame.
 
 ## 6. Board Coordinate Systems
 
@@ -168,4 +191,4 @@ A board pose $(R, t)$ transforms a point $P_{\text{board}}$ from board coordinat
 
 $$P_{\text{camera}} = R \cdot P_{\text{board}} + t$$
 
-This is the same convention as the single-tag pose (Section 5). The covariance matrix returned alongside the board pose is a $6 \times 6$ matrix in $\mathfrak{se}(3)$ tangent space, ordered $[\mathbf{t}, \boldsymbol{\omega}]$, in the **body (board) frame** — see [Section 5.1](#51-pose-covariance-perturbation-frame) for the perturbation convention and frame-conversion helpers.
+This is the same convention as the single-tag pose (Section 5). The covariance matrix returned alongside the board pose is a $6 \times 6$ matrix in $\mathfrak{se}(3)$ tangent space, ordered $[\boldsymbol{\omega}, \mathbf{v}]$, in the **body (board) frame** — see [Section 5.1](#51-pose-covariance-perturbation-frame) for the perturbation convention and frame-conversion helpers.

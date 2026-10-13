@@ -206,8 +206,8 @@ result: BoardEstimateResult = estimator.estimate(
 | :--- | :--- | :--- |
 | `ids` | `(N,) int32` | Decoded tag IDs visible in this frame. |
 | `corners` | `(N, 4, 2) float32` | Refined tag corner image coordinates. |
-| `board_pose` | `(7,) float64` or `None` | `[tx, ty, tz, qx, qy, qz, qw]` in camera frame — `None` if insufficient observations. Pose origin is the board's top-left marker corner. |
-| `board_cov` | `(6, 6) float64` or `None` | Pose covariance in $\mathfrak{se}(3)$ tangent space `[t, ω]`. |
+| `board_pose` | `(7,) float64` or `None` | `[tx, ty, tz, qw, qx, qy, qz]` (Hamilton, scalar first) in camera frame — `None` if insufficient observations. Pose origin is the board's geometric centre. |
+| `board_cov` | `(6, 6) float64` or `None` | Body-frame pose covariance in $\mathfrak{se}(3)$ tangent space, rotation first: `[ω, v]`. |
 
 ## Enumerations
 

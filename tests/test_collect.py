@@ -58,24 +58,24 @@ class TestRotationErrorDeg:
     """
 
     @staticmethod
-    def _pose(qxyzw: list[float]) -> np.ndarray:
+    def _pose(qwxyz: list[float]) -> np.ndarray:
         """Pack a quaternion into the 7-vector pose layout the util expects."""
-        return np.array([0.0, 0.0, 0.0, *qxyzw], dtype=np.float64)
+        return np.array([0.0, 0.0, 0.0, *qwxyz], dtype=np.float64)
 
     def test_identity_is_zero(self) -> None:
-        q = [0.0, 0.0, 0.0, 1.0]
+        q = [1.0, 0.0, 0.0, 0.0]
         assert rotation_error_deg(self._pose(q), np.array(q)) == pytest.approx(0.0, abs=1e-6)
 
     def test_180_deg_about_z(self) -> None:
-        q_id = [0.0, 0.0, 0.0, 1.0]
-        q_180 = [0.0, 0.0, 1.0, 0.0]
+        q_id = [1.0, 0.0, 0.0, 0.0]
+        q_180 = [0.0, 0.0, 0.0, 1.0]
         assert rotation_error_deg(self._pose(q_id), np.array(q_180)) == pytest.approx(
             180.0, abs=1e-4
         )
 
     def test_sign_flip_is_zero(self) -> None:
         """Quaternions q and -q represent the same rotation."""
-        q = np.array([0.1, 0.2, 0.3, 0.927])
+        q = np.array([0.927, 0.1, 0.2, 0.3])
         q = q / np.linalg.norm(q)
         assert rotation_error_deg(self._pose(q.tolist()), -q) == pytest.approx(0.0, abs=1e-4)
 

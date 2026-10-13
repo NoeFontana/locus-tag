@@ -67,7 +67,7 @@ struct SweepReport {
 }
 
 fn project(intrinsics: &CameraIntrinsics, pose: &Pose, p_world: &Vector3<f64>) -> [f64; 2] {
-    let p_cam = pose.rotation * p_world + pose.translation;
+    let p_cam = pose.rotation_matrix() * p_world + pose.translation();
     [
         intrinsics.fx * (p_cam.x / p_cam.z) + intrinsics.cx,
         intrinsics.fy * (p_cam.y / p_cam.z) + intrinsics.cy,

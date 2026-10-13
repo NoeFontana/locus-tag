@@ -20,7 +20,9 @@ use locus_core::bench_api::{
     DetectionBatch, ThresholdEngine, extract_quads_soa, label_components_lsl,
 };
 use locus_core::{DetectorConfig, ImageView};
-use std::path::PathBuf;
+use utils::hub_dir;
+
+mod utils;
 
 fn main() {
     // Force rayon to a single thread for microbenchmarks to avoid cache thrashing.
@@ -31,13 +33,8 @@ fn main() {
     divan::main();
 }
 
-fn get_hub_dir() -> PathBuf {
-    std::env::var("LOCUS_HUB_DATASET_DIR")
-        .map_or_else(|_| PathBuf::from("tests/data/hub_cache"), PathBuf::from)
-}
-
 fn load_image(dataset: &str, filename: &str) -> (Vec<u8>, usize, usize) {
-    let path = get_hub_dir().join(dataset).join("images").join(filename);
+    let path = hub_dir().join(dataset).join("images").join(filename);
     let img = image::open(path)
         .expect("Failed to open hub image")
         .to_luma8();

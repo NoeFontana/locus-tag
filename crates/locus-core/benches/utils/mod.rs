@@ -1,6 +1,40 @@
 #![allow(clippy::expect_used, clippy::unwrap_used, dead_code)]
 use locus_core::bench_api::{CandidateState, DetectionBatch, Point2f};
+use serde::de::DeserializeOwned;
 use std::path::PathBuf;
+
+/// The hub dataset cache: `$LOCUS_HUB_DATASET_DIR`, else the repository's
+/// `tests/data/hub_cache`, anchored at the manifest (a bench's working directory is the package
+/// root, not the repository root).
+#[must_use]
+pub fn hub_dir() -> PathBuf {
+    std::env::var("LOCUS_HUB_DATASET_DIR").map_or_else(
+        |_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/hub_cache"),
+        PathBuf::from,
+    )
+}
+
+/// The records of a hub dataset's `rich_truth.json`, in either schema: v1 is a bare list of
+/// records, v2 wraps it as `{"version", "records", ...}`.
+///
+/// # Panics
+/// Panics if the file is missing or its records do not parse as `T`.
+#[must_use]
+pub fn rich_truth_records<T: DeserializeOwned>(dataset: &str) -> Vec<T> {
+    #[derive(serde::Deserialize)]
+    #[serde(untagged, bound(deserialize = "T: DeserializeOwned"))]
+    enum RichTruth<T> {
+        V2 { records: Vec<T> },
+        V1(Vec<T>),
+    }
+    let path = hub_dir().join(dataset).join("rich_truth.json");
+    let file = std::fs::File::open(&path)
+        .map_err(|e| format!("{}: {e}", path.display()))
+        .unwrap();
+    match serde_json::from_reader(std::io::BufReader::new(file)).unwrap() {
+        RichTruth::V2 { records } | RichTruth::V1(records) => records,
+    }
+}
 
 /// A utility struct to hold image data loaded from the ICRA 2020 dataset for benchmarking.
 pub struct BenchDataset {

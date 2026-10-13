@@ -49,7 +49,7 @@ BASE_PROFILE = os.environ.get("MODEL_EDGE_BASE_PROFILE", "high_accuracy")
 
 def _project(model: np.ndarray, pose: np.ndarray, intr: object) -> np.ndarray:
     """Pinhole-project body-frame `model` points (N×3) through `pose`
-    `[tx,ty,tz,qx,qy,qz,qw]`. Reuses the shared `utils._quat_to_rot` so the
+    `[tx,ty,tz,qw,qx,qy,qz]`. Reuses the shared `utils._quat_to_rot` so the
     quaternion convention cannot drift from the pose-error harness. **Pinhole
     only** — callers must assert the intrinsics carry no distortion.
     """

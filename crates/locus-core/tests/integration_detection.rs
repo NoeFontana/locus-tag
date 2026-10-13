@@ -100,5 +100,5 @@ fn test_pose_accuracy() {
     let (pose, _) = estimate_tag_pose(&intrinsics, &corners, tag_size_m, Some(&img));
 
     assert!(pose.is_some());
-    assert!(pose.unwrap().translation.z > 0.0);
+    assert!(pose.unwrap().translation().z > 0.0);
 }

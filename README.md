@@ -64,7 +64,7 @@ batch = detector.detect(
 )
 
 if batch.poses is not None:
-    print(batch.poses[0])  # [tx, ty, tz, qx, qy, qz, qw]
+    print(batch.poses[0])  # [tx, ty, tz, qw, qx, qy, qz]
 ```
 
 Configuration is nested and Pydantic-validated: start from a shipped profile, edit the group you care about, and hand it back to the detector. The [detection guide](https://noefontana.github.io/locus-tag/latest/tutorials/guide/) walks through the `DetectorConfig` API.

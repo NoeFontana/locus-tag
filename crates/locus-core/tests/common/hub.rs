@@ -5,7 +5,6 @@ use super::DetectOptions;
 use locus_core::{
     CameraIntrinsics, Detector, DetectorConfig, ImageView, Pose, TagFamily,
     config::{CornerRefinementMode, QuadExtractionMode},
-    pose::quat_from_so3,
 };
 use nalgebra::{UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
@@ -284,18 +283,18 @@ impl RegressionHarness {
                                 f64::from(det_pose_data[2]),
                             );
                             let det_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(
-                                f64::from(det_pose_data[6]),
                                 f64::from(det_pose_data[3]),
                                 f64::from(det_pose_data[4]),
                                 f64::from(det_pose_data[5]),
+                                f64::from(det_pose_data[6]),
                             ));
 
                             if let (Some(gt_pose), Some(intr), Some(size)) =
                                 (gt.poses.get(&det_id), intrinsics, tag_size)
                             {
-                                let q_gt = quat_from_so3(gt_pose.rotation);
+                                let q_gt = gt_pose.quaternion();
                                 let r_err = det_q.angle_to(&q_gt);
-                                let t_err = (det_t - gt_pose.translation).norm();
+                                let t_err = (det_t - gt_pose.translation()).norm();
 
                                 image_translation_error_sum += t_err;
                                 image_rotation_error_sum += r_err;
@@ -312,8 +311,7 @@ impl RegressionHarness {
                                     Vector3::new(-h, h, 0.0),
                                 ];
 
-                                let est_pose =
-                                    Pose::new(det_q.to_rotation_matrix().into_inner(), det_t);
+                                let est_pose = Pose::from_quaternion(&det_q, det_t);
 
                                 let mut repro_rmse_sq = 0.0;
                                 for k in 0..4 {
@@ -658,19 +656,14 @@ impl HubProvider {
                 entry.rotation_quaternion[1],
                 entry.rotation_quaternion[2],
                 entry.rotation_quaternion[3],
-            ))
-            .to_rotation_matrix();
+            ));
 
             gt.poses.insert(
                 entry.tag_id,
-                Pose {
-                    rotation: *rotation.matrix(),
-                    translation: Vector3::new(
-                        entry.position[0],
-                        entry.position[1],
-                        entry.position[2],
-                    ),
-                },
+                Pose::from_quaternion(
+                    &rotation,
+                    Vector3::new(entry.position[0], entry.position[1], entry.position[2]),
+                ),
             );
         }
 

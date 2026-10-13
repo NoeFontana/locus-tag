@@ -31,11 +31,11 @@
 //! robust Huber loss so the clean bulk (not a few latched/biased edges) controls
 //! the rotation. See `docs/engineering/benchmarking/model_edge_refinement_*`.
 
-use nalgebra::{Matrix2, Matrix3, Vector3, Vector6};
+use nalgebra::{Matrix3, Vector3, Vector6};
 
 use crate::image::ImageView;
 use crate::pose::{
-    BodyFrameNormalEquations, CameraIntrinsics, NielsenConfig, Pose, nielsen_lm,
+    BodyFrameNormalEquations, CameraIntrinsics, NielsenConfig, Pose, PoseMatrix, nielsen_lm,
     projection_and_gradient,
 };
 
@@ -245,20 +245,20 @@ fn measure_crossing(
     Some((-half + (k as f64 + frac) * SCAN_STEP, contrast))
 }
 
-/// Project a tag-frame point + tangent under `pose`, returning the projected
-/// image point and unit edge normal, or `None` if behind the camera / degenerate.
+/// Project a tag-frame point + tangent under `pose`, returning the projected image point and
+/// unit edge normal, or `None` if behind the camera / degenerate.
 fn project_with_normal(
     intr: &CameraIntrinsics,
-    pose: &Pose,
+    pose: &PoseMatrix,
     p_tag: Vector3<f64>,
     tan_tag: Vector3<f64>,
 ) -> Option<([f64; 2], [f64; 2])> {
-    let p_cam = pose.rotation * p_tag + pose.translation;
+    let p_cam = pose.apply(&p_tag);
     if p_cam.z < 1e-4 {
         return None;
     }
     let [pu, pv] = intr.distort_normalized(p_cam.x / p_cam.z, p_cam.y / p_cam.z);
-    let p2 = pose.rotation * (p_tag + tan_tag) + pose.translation;
+    let p2 = pose.apply(&(p_tag + tan_tag));
     if p2.z < 1e-4 {
         return None;
     }
@@ -290,6 +290,7 @@ fn measure_samples(
     out: &mut [Sample; MAX_SAMPLES],
 ) -> usize {
     let mut ns = 0;
+    let pose = pose.matrix();
     for k in 0..=n {
         let g = -1.0 + (k as f64) * cell; // boundary canonical coord
         for j in 0..n {
@@ -310,7 +311,7 @@ fn measure_samples(
                     if ns >= MAX_SAMPLES {
                         return ns;
                     }
-                    let Some(([pu, pv], nrm)) = project_with_normal(intr, pose, p_tag, tan_tag)
+                    let Some(([pu, pv], nrm)) = project_with_normal(intr, &pose, p_tag, tan_tag)
                     else {
                         continue;
                     };
@@ -347,8 +348,9 @@ fn measure_samples(
 #[cfg(test)]
 fn fixed_cost(intr: &CameraIntrinsics, pose: &Pose, samples: &[Sample]) -> f64 {
     let mut cost = 0.0;
+    let pose = pose.matrix();
     for s in samples {
-        let p_cam = pose.rotation * s.p + pose.translation;
+        let p_cam = pose.apply(&s.p);
         if p_cam.z < 1e-4 {
             cost += BEHIND_PENALTY;
             continue;
@@ -367,8 +369,8 @@ fn fixed_cost(intr: &CameraIntrinsics, pose: &Pose, samples: &[Sample]) -> f64 {
 ///
 /// Each edge observation is a **1-D residual along the edge normal** `n`. That is
 /// *exactly* the 2-D pixel residual `r = measured − projected` weighted by the
-/// rank-1 projector `W = n·nᵀ`: for that `W`, [`BodyFrameNormalEquations::add`]
-/// accumulates `Σ jⱼᵀ` and `Σ j·(n·r)` with `j = n₀·rowᵤ + n₁·rowᵥ` — i.e. the
+/// rank-1 projector `W = n·nᵀ`, which [`BodyFrameNormalEquations::add_along`]
+/// accumulates as `Σ j jᵀ` and `Σ j·(n·r)` with `j = n₀·rowᵤ + n₁·rowᵥ` — i.e. the
 /// projection-onto-normal Jacobian and 1-D residual. So the shared, distortion-
 /// aware, body-frame-correct accumulator drives the edge fit with no bespoke
 /// Jacobian, and the estimator is consistent with `Pose::retract` by construction.
@@ -377,10 +379,11 @@ fn edge_normal_equations(
     pose: &Pose,
     samples: &[Sample],
 ) -> (nalgebra::Matrix6<f64>, Vector6<f64>, f64) {
-    let mut ne = BodyFrameNormalEquations::new(pose);
+    let pose = pose.matrix();
+    let mut ne = BodyFrameNormalEquations::new(&pose.r);
     let mut cost = 0.0;
     for s in samples {
-        let p_cam = pose.rotation * s.p + pose.translation;
+        let p_cam = pose.apply(&s.p);
         let z = p_cam.z;
         if z < 1e-4 {
             cost += BEHIND_PENALTY; // consistent with `fixed_cost`
@@ -397,11 +400,9 @@ fn edge_normal_equations(
         let res = n0 * res_u + n1 * res_v;
         let (wh, c) = edge_huber(res);
         cost += c;
-        // Rank-1 projector onto the edge normal, scaled by the Huber weight:
-        // reduces the 2-D corner accumulator to the 1-D-along-normal robust edge
-        // fit (see the fn doc).
-        let w = Matrix2::new(n0 * n0, n0 * n1, n0 * n1, n1 * n1) * wh;
-        ne.add(&s.p, &du, &dv, res_u, res_v, &w);
+        // The 1-D residual along the edge normal under its Huber weight: the corner
+        // accumulator with the rank-1 projector `W = wh·n nᵀ` (see the fn doc).
+        ne.add_along(&s.p, &du, &dv, [n0, n1], res, wh);
     }
     let (jtj, jtr) = ne.finish();
     (jtj, jtr, cost)
@@ -484,8 +485,8 @@ pub(crate) fn refine_pose_model_edges(
         // (translation) into the emitted body-frame covariance — do not reuse the
         // corner-solve covariance for the refined pose.
         let (refined, _jtj) = nielsen_lm(pose, &EDGE_LM, |p| edge_normal_equations(intr, p, set));
-        if !refined.translation.iter().all(|x| x.is_finite())
-            || !refined.rotation.iter().all(|x| x.is_finite())
+        if !refined.translation().iter().all(|x| x.is_finite())
+            || !refined.rotation_matrix().iter().all(|x| x.is_finite())
         {
             return None;
         }
@@ -508,18 +509,21 @@ fn finalize(
     // (edges weakly constrain depth/scale; the outer corners constrain it best).
     // If the re-anchor is singular (degenerate corner geometry) or a corner projects
     // behind the camera under the refined rotation, fall back to the *trusted corner
-    // translation* (`init.translation`) rather than discarding the whole refinement —
+    // translation* (`init.translation()`) rather than discarding the whole refinement —
     // the edge-refined ROTATION (the stage's actual product) is still kept. The χ²
     // re-validation in `compute_one` is the backstop if this hybrid is inconsistent.
     let obj = crate::pose::centered_tag_corners(tag_size);
+    // Only the translation moves here.
+    let rot = pose.rotation_matrix();
     'reanchor: for _ in 0..TRANS_ITERS {
         let mut ata = Matrix3::<f64>::zeros();
         let mut atb = Vector3::<f64>::zeros();
+        let trans = pose.translation();
         for i in 0..4 {
-            let p_cam = pose.rotation * obj[i] + pose.translation;
+            let p_cam = rot * obj[i] + trans;
             let z = p_cam.z;
             if z < 1e-4 {
-                pose.translation = init.translation;
+                pose = pose.with_translation(init.translation());
                 break 'reanchor;
             }
             let z_inv = 1.0 / z;
@@ -533,23 +537,23 @@ fn finalize(
             .map(|c| c.solve(&atb))
             .filter(|d| d.iter().all(|x| x.is_finite()))
         else {
-            pose.translation = init.translation;
+            pose = pose.with_translation(init.translation());
             break 'reanchor;
         };
-        pose.translation += dt;
+        pose = pose.with_translation(pose.translation() + dt);
         if dt.norm() < 1e-9 {
             break;
         }
     }
 
     // --- No-worse gate: reject implausibly large jumps from the corner pose.
-    let r_rel = init.rotation.transpose() * pose.rotation;
+    let r_rel = init.rotation_matrix().transpose() * pose.rotation_matrix();
     let cos_ang = ((r_rel.trace() - 1.0) * 0.5).clamp(-1.0, 1.0);
     if cos_ang.acos() > MAX_ROT_CHANGE_RAD {
         return None;
     }
-    let dist = init.translation.norm().max(1e-6);
-    if (pose.translation - init.translation).norm() / dist > MAX_TRANS_CHANGE_FRAC {
+    let dist = init.translation().norm().max(1e-6);
+    if (pose.translation() - init.translation()).norm() / dist > MAX_TRANS_CHANGE_FRAC {
         return None;
     }
     Some(pose)
@@ -601,7 +605,7 @@ mod tests {
             .enumerate()
             .map(|(i, [x, y])| {
                 let p = Vector3::new(*x, *y, 0.0);
-                let pc = pose.rotation * p + pose.translation;
+                let pc = pose.rotation_matrix() * p + pose.translation();
                 let [u, v] = intr.distort_normalized(pc.x / pc.z, pc.y / pc.z);
                 let ang = 0.3 * i as f64; // vary the normal per sample
                 let (nx, ny) = (ang.cos(), ang.sin());

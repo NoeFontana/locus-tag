@@ -487,7 +487,7 @@ fn euroc_distorted_pose_validation() {
         let mut frame_has_pose = false;
         for i in 0..dets.len() {
             let pose = dets.poses[i];
-            // pose.data layout: [tx, ty, tz, qx, qy, qz, qw]
+            // pose.data layout: [tx, ty, tz, qw, qx, qy, qz]
             let tz = pose.data[2];
             if tz > 0.0 {
                 // Physical plausibility: calibration board is 0.1–3.0 m away

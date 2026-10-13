@@ -7,6 +7,19 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **The debug-telemetry reprojection error measured the wrong points.** It projected tag
+  corners with the origin at the tag's top-left corner through a pose whose origin is the tag
+  centre, so every value was inflated by about half the tag diagonal: 67.9 px on a clean
+  100 px synthetic tag, now under 1 px. It now uses the same object points and projection as
+  the pose solver, and `test_reprojection_error_telemetry` asserts the values, not only that
+  the pointer is non-null.
+- **Reading a packed pose without a valid rotation no longer panics in debug builds.**
+  `DetectionBatch::reassemble` / `reassemble_owned` and the telemetry pass go through one
+  checked reader: a row holds a pose only if `tz > 0` and its quaternion has a finite,
+  non-zero norm. A translation-only row such as `[x, y, 1, 0, 0, 0, 0]` used to reach
+  `helicoid`'s quaternion normalization and fail its `debug_assert!`; it now reads as no
+  pose.
+
 - **The EuRoC corner cells across the benchmarking docs are re-baselined for the inexact
   undistortion inverse.** Recomputing the fourteen archived EuRoC runs both ways shows the
   artefact is a near-fixed **absolute** shift of -0.005 to +0.011 px, close to constant across
@@ -41,6 +54,65 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   both ways) and no SOTA ordering changes, so this re-baselines the corner columns only.
 
 ### Changed
+
+- **Breaking: pose tangents and covariances are rotation-first, `[ω, v]`.** Every 6×6 pose
+  covariance — `estimate_tag_pose`'s, `Detection::pose_covariance`, `BoardPose::covariance`
+  and Python's `board_cov` — and the LM's tangent, Jacobian columns and `Pose::adjoint` are
+  now ordered `[ωx, ωy, ωz, vx, vy, vz]`, the order of `helicoid`, GTSAM's `Pose3` and
+  `tf_tree`, so a covariance enters those libraries without a permutation. The frame is
+  unchanged (body, right perturbation). Code that reads the old `[t, ω]` blocks must swap
+  them: `cov[np.ix_(p, p)]` with `p = [3, 4, 5, 0, 1, 2]` converts either order to the
+  other (`docs/explanation/coordinates.md` §5.1). `covariance_camera_to_body` and
+  `covariance_body_to_camera` now use `helicoid`'s structured adjoint. Every discrete
+  output is unchanged; the board snapshots' continuous metrics move by at most 3e-9
+  relative, the rounding of the permuted normal equations.
+- **Breaking: packed poses are `[tx, ty, tz, qw, qx, qy, qz]`, the quaternion scalar first.**
+  `DetectionBatch.poses` (Python `(N, 7) float32`), the batch `Pose6D` and `board_pose` move
+  `qw` from index 6 to index 3, matching `helicoid`, the hub ground truth and the
+  scalar-first libraries; `Pose::quaternion()` is unchanged (nalgebra's `UnitQuaternion`).
+  Code that reads the old order converts with `pose[..., [0, 1, 2, 6, 3, 4, 5]]`; ROS and
+  rerun take the scalar last, SciPy (≥ 1.14) reads this order with `scalar_first=True`.
+  `tools/` reads and writes the new order throughout, and `viz_rerun_hub.py` no longer hands
+  the hub's `[w, x, y, z]` ground truth to rerun as `xyzw`. The API reference's `board_pose`
+  row also stops claiming a top-left origin: the origin is the board's centre.
+- **Breaking (Rust): `Pose` is `helicoid`'s SE(3).** `Pose` stores a unit quaternion and a
+  translation; its public fields become `rotation_matrix()`, `translation()`,
+  `quaternion()`, `with_translation()` and `from_quaternion()`, and `Pose::new` keeps its
+  signature. The LM's retraction is `helicoid`'s `Decoupled` chart, the same formula as
+  before. The serde form and the batch and Python layouts are unchanged. Latency is at
+  parity (`pose_real_bench`, `board_bench`: every row within the A/A noise of 0.5-1.4%).
+- **`locus-core` depends on `helicoid` and `helicoid-linalg` 0.0.3** from crates.io (`no_std`,
+  `libm` only). helicoid 0.0.3's `SO3::from_matrix` normalizes a column of `K + I` with one
+  `sqrt` (helicoid record 0079): its maximum error falls and its output bits move, so seven
+  board snapshots (`regression_board_{charuco,aprilgrid}_v1_golden{,_forstner,_high_accuracy}`
+  and `regression_charuco_refiner_v1_golden`) are re-blessed. Only pose-error and pose-std
+  statistics move, by at most 4.2e-9 relative; no count, recall or other discrete field changes.
+- **The pose LMs' normal equations factor the weighted outer products.** Each
+  correspondence's `w₀₀uuᵀ + w₁₁vvᵀ + w₀₁uvᵀ + w₁₀vuᵀ` is accumulated as `u pᵀ + v qᵀ`
+  (`p = w₀₀u + w₀₁v`, `q = w₁₀u + w₁₁v`), two multiplies per entry instead of eight. The
+  board estimator is 2.6-2.8 % faster (`board_bench`); the tag rows are unchanged, and the
+  snapshots move by at most 5.6e-13 relative.
+- **Packed quaternions are in the `qw ≥ 0` hemisphere.** `q` and `−q` are one rotation, and
+  which one a solve ended on depended on its path (the seed's Shepperd pivot, the LM steps).
+  `DetectionBatch.poses`, `Pose6D` and Python's `poses` / `board_pose` now pick `qw ≥ 0`, so
+  one rotation always packs to one row. Every packer goes through the new `Pose::to_packed()`
+  (`[tx, ty, tz, qw, qx, qy, qz]`, `f64`); the Python bindings no longer lay the row out by
+  hand in three places. `docs/explanation/coordinates.md` §5 now says outright that the packed
+  pose is translation-first while the tangent and covariance are rotation-first.
+- **Model-edge pose refinement accumulates each edge sample as one rank-1 update.** An edge
+  residual is 1-D along the edge normal, so its Jacobian row is built once from
+  `n₀·∂u/∂P + n₁·∂v/∂P` instead of as two rows under a rank-1 2×2 weight
+  (`BodyFrameNormalEquations::add_along`): 9.6 ns per sample instead of 18 ns, equal to
+  rounding. `high_accuracy`'s batch pose stage is 7.0 % faster (`pose_real_bench`
+  `refine_soa_high_accuracy`, the 50 frames of `locus_v1_tag36h11_1920x1080`: 73.6 → 68.5 ms;
+  A-B-B-A medians, `--release` bench profile, one rayon thread, AMD EPYC-Milan, 8 vCPU); every
+  other `pose_real_bench` / `board_bench` row is within its run-to-run noise (±1 %). The
+  board snapshots' rotation-error fields move by at most 8.8e-13 relative because the test
+  metrics now read `Pose::quaternion()` instead of re-extracting it from the rotation matrix;
+  every translation, std, count and coverage field is unchanged.
+- **`helicoid` and `helicoid-linalg` are declared `default-features = false`**, as
+  `docs/engineering/constraints.md` §5 requires of the math crates (neither enables any
+  feature today).
 
 - **The dataset-backed snapshots are blessed, and the suites are green for the first time since
   2026-07-19.** `cargo nextest run --profile datasets --release --features bench-internals`

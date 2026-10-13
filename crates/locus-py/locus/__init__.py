@@ -155,7 +155,7 @@ class DetectionBatch:
     ids: np.ndarray  # Shape: (N,), Dtype: int32
     corners: np.ndarray  # Shape: (N, 4, 2), Dtype: float32
     error_rates: np.ndarray  # Shape: (N,), Dtype: float32
-    poses: np.ndarray | None = None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qx, qy, qz, qw]
+    poses: np.ndarray | None = None  # Shape: (N, 7), Dtype: float32. [tx, ty, tz, qw, qx, qy, qz]
     telemetry: "PipelineTelemetry | None" = None
     rejected_corners: np.ndarray | None = None  # Shape: (M, 4, 2), Dtype: float32
     rejected_error_rates: np.ndarray | None = None  # Shape: (M,), Dtype: float32
