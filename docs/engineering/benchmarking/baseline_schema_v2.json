@@ -158,6 +158,19 @@
           "title": "Locus Version",
           "type": "string"
         },
+        "opencv_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "cv2.__version__ when a comparison run includes the OpenCV baseline; None otherwise.",
+          "title": "Opencv Version"
+        },
         "rayon_threads": {
           "anyOf": [
             {

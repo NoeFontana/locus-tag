@@ -14,8 +14,10 @@ The ``stratum_id`` string format is specified in
 
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -149,18 +151,20 @@ class BaselineV2(BaseModel):
 # JSON Schema export
 
 
+JSON_SCHEMA_PATH = (
+    Path(__file__).resolve().parents[2] / "docs/engineering/benchmarking/baseline_schema_v2.json"
+)
+
+
+def render_json_schema() -> str:
+    """The checked-in form of ``JSON_SCHEMA_PATH``; ``tests/test_strata.py`` pins the two equal."""
+    return json.dumps(BaselineV2.model_json_schema(), indent=2, sort_keys=True) + "\n"
+
+
 def _export_json_schema() -> None:
     """Write ``baseline_schema_v2.json`` next to this module's docs target."""
-    import json
-    import pathlib
-
-    here = pathlib.Path(__file__).resolve()
-    repo_root = here.parents[2]
-    out = repo_root / "docs" / "engineering" / "benchmarking" / "baseline_schema_v2.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    schema = BaselineV2.model_json_schema()
-    out.write_text(json.dumps(schema, indent=2, sort_keys=True) + "\n")
-    print(f"wrote {out}")
+    JSON_SCHEMA_PATH.write_text(render_json_schema())
+    print(f"wrote {JSON_SCHEMA_PATH}")
 
 
 if __name__ == "__main__":
