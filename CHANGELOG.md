@@ -68,7 +68,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   signature. The LM's retraction is `helicoid`'s `Decoupled` chart, the same formula as
   before. The serde form and the batch and Python layouts are unchanged. Latency is at
   parity (`pose_real_bench`, `board_bench`: every row within the A/A noise of 0.5-1.4%).
-- **`locus-core` depends on `helicoid` and `helicoid-linalg`** (`no_std`, `libm` only).
+- **`locus-core` depends on `helicoid` and `helicoid-linalg` 0.0.3** from crates.io (`no_std`,
+  `libm` only). helicoid 0.0.3's `SO3::from_matrix` normalizes a column of `K + I` with one
+  `sqrt` (helicoid record 0079): its maximum error falls and its output bits move, so seven
+  board snapshots (`regression_board_{charuco,aprilgrid}_v1_golden{,_forstner,_high_accuracy}`
+  and `regression_charuco_refiner_v1_golden`) are re-blessed. Only pose-error and pose-std
+  statistics move, by at most 4.2e-9 relative; no count, recall or other discrete field changes.
 - **The pose LMs' normal equations factor the weighted outer products.** Each
   correspondence's `w₀₀uuᵀ + w₁₁vvᵀ + w₀₁uvᵀ + w₁₀vuᵀ` is accumulated as `u pᵀ + v qᵀ`
   (`p = w₀₀u + w₀₁v`, `q = w₁₀u + w₁₁v`), two multiplies per entry instead of eight. The
