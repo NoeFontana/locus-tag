@@ -5,7 +5,6 @@ use super::DetectOptions;
 use locus_core::{
     CameraIntrinsics, Detector, DetectorConfig, ImageView, Pose, TagFamily,
     config::{CornerRefinementMode, QuadExtractionMode},
-    pose::quat_from_so3,
 };
 use nalgebra::{UnitQuaternion, Vector3};
 use serde::{Deserialize, Serialize};
@@ -293,7 +292,7 @@ impl RegressionHarness {
                             if let (Some(gt_pose), Some(intr), Some(size)) =
                                 (gt.poses.get(&det_id), intrinsics, tag_size)
                             {
-                                let q_gt = quat_from_so3(gt_pose.rotation_matrix());
+                                let q_gt = gt_pose.quaternion();
                                 let r_err = det_q.angle_to(&q_gt);
                                 let t_err = (det_t - gt_pose.translation()).norm();
 
@@ -312,8 +311,7 @@ impl RegressionHarness {
                                     Vector3::new(-h, h, 0.0),
                                 ];
 
-                                let est_pose =
-                                    Pose::new(det_q.to_rotation_matrix().into_inner(), det_t);
+                                let est_pose = Pose::from_quaternion(&det_q, det_t);
 
                                 let mut repro_rmse_sq = 0.0;
                                 for k in 0..4 {

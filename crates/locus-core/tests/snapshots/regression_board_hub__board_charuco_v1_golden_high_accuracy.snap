@@ -1,6 +1,5 @@
 ---
 source: crates/locus-core/tests/regression_board_hub.rs
-assertion_line: 516
 expression: report
 ---
 summary:
@@ -10,10 +9,10 @@ summary:
   p50_board_translation_error_m: 0.000008725016426968493
   p95_board_translation_error_m: 0.00019999034355983232
   p99_board_translation_error_m: 0.0014879096118458213
-  mean_board_rotation_error_deg: 0.003999640653585078
+  mean_board_rotation_error_deg: 0.003999640653585193
   p50_board_rotation_error_deg: 0.0015245646366632518
   p95_board_rotation_error_deg: 0.013827171289103756
-  p99_board_rotation_error_deg: 0.04770457819061266
+  p99_board_rotation_error_deg: 0.04770457819061679
   mean_board_translation_std_m: 0.0015796392838103837
   mean_board_rotation_std_deg: 0.18457818884969987
   mean_tag_coverage: 0.8996296296296297

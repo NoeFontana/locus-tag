@@ -201,13 +201,13 @@ fn build_normal_equations(
     info_matrices: &[Matrix2<f64>; 4],
     huber_k: f64,
 ) -> (Matrix6<f64>, Vector6<f64>, f64) {
-    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
-    let mut ne = BodyFrameNormalEquations::new(&rot);
+    let m = pose.matrix();
+    let mut ne = BodyFrameNormalEquations::new(&m.r);
     let mut total_cost = 0.0;
 
     for i in 0..4 {
         let pb = obj_pts[i];
-        let p_cam = rot * pb + trans;
+        let p_cam = m.apply(&pb);
         if p_cam.z < 1e-4 {
             total_cost += 1e6;
             continue;
@@ -251,10 +251,10 @@ fn huber_mahalanobis_cost(
 ) -> f64 {
     let mut cost = 0.0;
 
-    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
+    let m = pose.matrix();
 
     for i in 0..4 {
-        let p_cam = rot * obj_pts[i] + trans;
+        let p_cam = m.apply(&obj_pts[i]);
         if p_cam.z < 1e-4 {
             cost += 1e6;
             continue;
@@ -434,7 +434,7 @@ mod tests {
 
         let t_err = (result.translation() - gt_t).norm() * 1000.0; // mm
         let q_gt = crate::pose::quat_from_so3(gt_rot);
-        let q_est = crate::pose::quat_from_so3(result.rotation_matrix());
+        let q_est = result.quaternion();
         let r_err_deg = q_gt.angle_to(&q_est).to_degrees();
 
         assert!(t_err < 0.01, "translation error too large: {t_err:.4} mm");

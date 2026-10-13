@@ -9,7 +9,7 @@ use crate::batch::{DetectionBatch, Point2f, Pose6D};
 use crate::image::ImageView;
 
 use helicoid::{Chart, Decoupled, Jac, LieGroup, Quat, SE3, SEn3Jac, SO3, Twist};
-use helicoid_linalg::{Mat3, Matrix, Vec3, Vector};
+use helicoid_linalg::{Mat3, Matrix, StridedMut, Vec3, Vector};
 use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, UnitQuaternion, Vector3, Vector6};
 
 /// Lens distortion coefficients stored alongside the intrinsic parameters.
@@ -521,14 +521,15 @@ impl Pose {
     /// Used to reframe a covariance between the camera and body tangent spaces:
     /// `Σ_camera = Ad_T · Σ_body · Ad_Tᵀ`, and inversely
     /// `Σ_body = Ad_{T⁻¹} · Σ_camera · Ad_{T⁻¹}ᵀ`.
+    ///
+    /// This is `helicoid`'s adjoint, densified: the same matrix the covariance reframes apply,
+    /// so a test of this one is a test of theirs.
     #[must_use]
     pub fn adjoint(&self) -> Matrix6<f64> {
-        let r = self.rotation_matrix();
-        let tx = self.translation().cross_matrix();
         let mut ad = Matrix6::zeros();
-        ad.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
-        ad.fixed_view_mut::<3, 3>(3, 0).copy_from(&(tx * r));
-        ad.fixed_view_mut::<3, 3>(3, 3).copy_from(&r);
+        self.0
+            .adjoint()
+            .write_dense(&mut StridedMut::col_major(ad.as_mut_slice(), 6, 6));
         ad
     }
 
@@ -1598,12 +1599,12 @@ fn corner_normal_equations(
     pose: &Pose,
     huber_delta: f64,
 ) -> (Matrix6<f64>, Vector6<f64>, f64) {
-    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
-    let mut ne = BodyFrameNormalEquations::new(&rot);
+    let m = pose.matrix();
+    let mut ne = BodyFrameNormalEquations::new(&m.r);
     let mut cost = 0.0;
     for i in 0..4 {
         let pb = obj_pts[i];
-        let p_cam = rot * pb + trans;
+        let p_cam = m.apply(&pb);
         // Behind-camera policy (deliberately differs from the board/weighted LMs,
         // which DROP such correspondences): a single tag has exactly four corners
         // we want to keep, so we clamp `z` and let the Huber weight softly reject
@@ -1706,9 +1707,9 @@ fn huber_cost(
     delta: f64,
 ) -> f64 {
     let mut cost = 0.0;
-    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
+    let m = pose.matrix();
     for i in 0..4 {
-        let p_cam = rot * obj_pts[i] + trans;
+        let p_cam = m.apply(&obj_pts[i]);
         let p = project_with_distortion(&p_cam, intrinsics);
         let r_u = corners[i][0] - p[0];
         let r_v = corners[i][1] - p[1];
@@ -2709,11 +2710,11 @@ mod tests {
         pose: &Pose,
         huber_delta: f64,
     ) -> (Matrix6<f64>, Vector6<f64>, f64) {
-        let (rot, trans) = (pose.rotation_matrix(), pose.translation());
-        let mut ne = BodyFrameNormalEquations::new(&rot);
+        let m = pose.matrix();
+        let mut ne = BodyFrameNormalEquations::new(&m.r);
         let mut cost = 0.0;
         for (ob, pb) in obs.iter().zip(obj.iter()) {
-            let p_cam = rot * pb + trans;
+            let p_cam = m.apply(pb);
             let z = p_cam.z.max(1e-4);
             let z_inv = 1.0 / z;
             let ([u_est, v_est], du_dp, dv_dp) =
@@ -3053,6 +3054,45 @@ mod tests {
             "translation mismatch: {}",
             (right.translation() - left.translation()).norm()
         );
+    }
+
+    // `Pose::adjoint` is `helicoid`'s, the one the covariance reframes apply. Pin it to the
+    // closed form for this crate's rotation-first tangent, `[[R, 0], [[t]_× R, R]]`, and the
+    // reframe to the dense `Ad Σ Adᵀ`: a different tangent order or perturbation side in a
+    // `helicoid` release fails here, where the round trip below cannot see it.
+    #[test]
+    fn adjoint_is_the_rotation_first_closed_form() {
+        let r = Rotation3::new(Vector3::new(0.3, -0.2, 0.15))
+            .matrix()
+            .into_owned();
+        let t = Vector3::new(0.12, -0.05, 0.7);
+        let pose = Pose::new(r, t);
+        let (r, t) = (pose.rotation_matrix(), pose.translation());
+
+        let mut want = Matrix6::zeros();
+        want.fixed_view_mut::<3, 3>(0, 0).copy_from(&r);
+        want.fixed_view_mut::<3, 3>(3, 0)
+            .copy_from(&(t.cross_matrix() * r));
+        want.fixed_view_mut::<3, 3>(3, 3).copy_from(&r);
+        let ad = pose.adjoint();
+        assert!((ad - want).abs().max() < 1e-15, "{ad}\nvs\n{want}");
+
+        let a = Matrix6::from_fn(|i, j| ((i * 7 + j * 3) % 11) as f64 - 5.0);
+        let cov = a * a.transpose() + Matrix6::identity();
+        let cov_rows: [[f64; 6]; 6] =
+            core::array::from_fn(|i| core::array::from_fn(|j| cov[(i, j)]));
+        let dense = want * cov * want.transpose();
+        let got = pose.covariance_body_to_camera(&cov_rows);
+        for i in 0..6 {
+            for j in 0..6 {
+                assert!(
+                    (got[i][j] - dense[(i, j)]).abs() < 1e-12 * dense.abs().max(),
+                    "({i},{j}): {} vs {}",
+                    got[i][j],
+                    dense[(i, j)]
+                );
+            }
+        }
     }
 
     // Reframing a covariance camera→body→camera must be the identity (the two

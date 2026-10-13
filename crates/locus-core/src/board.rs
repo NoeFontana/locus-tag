@@ -2,8 +2,8 @@
 
 use crate::batch::{MAX_CANDIDATES, Point2f};
 use crate::pose::{
-    BodyFrameNormalEquations, CameraIntrinsics, MAHALANOBIS_HUBER_K, Pose, mahalanobis_huber,
-    projection_and_gradient, solve_ippe_square,
+    BodyFrameNormalEquations, CameraIntrinsics, MAHALANOBIS_HUBER_K, Pose, PoseMatrix,
+    mahalanobis_huber, projection_and_gradient, solve_ippe_square,
 };
 use nalgebra::{Matrix2, Matrix3, Matrix6, Vector3, Vector6};
 use std::sync::Arc;
@@ -453,7 +453,7 @@ fn corner_class(corner_classes: &[u8], k: usize) -> usize {
 /// Image projections of the four corners of the marker whose corners are `start..start + 4`,
 /// in their cyclic order.
 fn project_marker(
-    (rot, trans): (&Matrix3<f64>, &Vector3<f64>),
+    pose: &PoseMatrix,
     corr: &PointCorrespondences<'_>,
     intrinsics: &CameraIntrinsics,
     start: usize,
@@ -463,7 +463,7 @@ fn project_marker(
         .iter_mut()
         .zip(&corr.object_points[start..start + MARKER_GROUP])
     {
-        let p_cam = rot * Vector3::new(obj[0], obj[1], obj[2]) + trans;
+        let p_cam = pose.apply(&Vector3::new(obj[0], obj[1], obj[2]));
         if p_cam.z < 1e-4 {
             return None;
         }
@@ -519,7 +519,7 @@ fn estimate_corner_inset(
     if corr.group_size != MARKER_GROUP {
         return None;
     }
-    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
+    let pose = pose.matrix();
     // Calls `f` with each inlier marker corner's own least-squares inset.
     let for_each_residual = |f: &mut dyn FnMut(f64)| -> u32 {
         let mut groups = 0;
@@ -528,7 +528,7 @@ fn estimate_corner_inset(
                 continue;
             }
             let start = g * MARKER_GROUP;
-            let Some(quad) = project_marker((&rot, &trans), corr, intrinsics, start) else {
+            let Some(quad) = project_marker(&pose, corr, intrinsics, start) else {
                 continue;
             };
             groups += 1;
@@ -592,14 +592,13 @@ fn sample_reprojection_score(
     let gs = corr.group_size;
     let mut sum_sq = 0.0f64;
     let mut count = 0usize;
-    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
+    let pose = pose.matrix();
 
     for &s_val in sample {
         let start = s_val * gs;
         for k in start..(start + gs) {
             let obj = corr.object_points[k];
-            let p_world = Vector3::new(obj[0], obj[1], obj[2]);
-            let p_cam = rot * p_world + trans;
+            let p_cam = pose.apply(&Vector3::new(obj[0], obj[1], obj[2]));
             if p_cam.z < 1e-4 {
                 return f64::INFINITY;
             }
@@ -639,8 +638,8 @@ fn gn_step_on_sample(
     corr: &PointCorrespondences<'_>,
     intrinsics: &CameraIntrinsics,
 ) -> Pose {
-    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
-    let mut ne = BodyFrameNormalEquations::new(&rot);
+    let m = pose.matrix();
+    let mut ne = BodyFrameNormalEquations::new(&m.r);
     let gs = corr.group_size;
     let w = Matrix2::identity();
 
@@ -649,7 +648,7 @@ fn gn_step_on_sample(
         for k in start..(start + gs) {
             let obj = corr.object_points[k];
             let p_world = Vector3::new(obj[0], obj[1], obj[2]);
-            let p_cam = rot * p_world + trans;
+            let p_cam = m.apply(&p_world);
             if p_cam.z < 1e-4 {
                 continue;
             }
@@ -1214,7 +1213,7 @@ impl RobustPoseSolver {
     ) -> ([u64; 16], usize) {
         let mut mask = [0u64; 16];
         let mut count = 0usize;
-        let (rot, trans) = (pose.rotation_matrix(), pose.translation());
+        let pose = pose.matrix();
         let num_groups = corr.num_groups();
         let gs = corr.group_size;
 
@@ -1227,8 +1226,7 @@ impl RobustPoseSolver {
 
             for k in start..(start + gs) {
                 let obj = corr.object_points[k];
-                let p_world = Vector3::new(obj[0], obj[1], obj[2]);
-                let p_cam = rot * p_world + trans;
+                let p_cam = pose.apply(&Vector3::new(obj[0], obj[1], obj[2]));
                 if p_cam.z < 1e-4 {
                     valid_group = false;
                     break;
@@ -1270,8 +1268,8 @@ impl RobustPoseSolver {
         intrinsics: &CameraIntrinsics,
         inlier_mask: &[u64; 16],
     ) -> Pose {
-        let (rot, trans) = (pose.rotation_matrix(), pose.translation());
-        let mut ne = BodyFrameNormalEquations::new(&rot);
+        let m = pose.matrix();
+        let mut ne = BodyFrameNormalEquations::new(&m.r);
         let gs = corr.group_size;
         let num_groups = corr.num_groups();
         let w = Matrix2::identity();
@@ -1285,7 +1283,7 @@ impl RobustPoseSolver {
             for k in start..(start + gs) {
                 let obj = corr.object_points[k];
                 let p_world = Vector3::new(obj[0], obj[1], obj[2]);
-                let p_cam = rot * p_world + trans;
+                let p_cam = m.apply(&p_world);
                 if p_cam.z < 1e-4 {
                     continue;
                 }
@@ -1318,13 +1316,13 @@ impl RobustPoseSolver {
     /// same condition).
     #[inline]
     fn observation_d2(
-        (rot, trans): (&Matrix3<f64>, &Vector3<f64>),
+        pose: &PoseMatrix,
         corr: &PointCorrespondences<'_>,
         intrinsics: &CameraIntrinsics,
         k: usize,
     ) -> Option<f64> {
         let obj = corr.object_points[k];
-        let p_cam = rot * Vector3::new(obj[0], obj[1], obj[2]) + trans;
+        let p_cam = pose.apply(&Vector3::new(obj[0], obj[1], obj[2]));
         if p_cam.z < 1e-4 {
             return None;
         }
@@ -1356,7 +1354,7 @@ impl RobustPoseSolver {
         let mut k_worst = usize::MAX;
         let mut d2_worst = 0.0_f64;
         let mut d2_second = 0.0_f64;
-        let (rot, trans) = (pose.rotation_matrix(), pose.translation());
+        let pose = pose.matrix();
 
         for g in 0..num_groups {
             if (inlier_mask[g / 64] & (1 << (g % 64))) == 0 {
@@ -1364,7 +1362,7 @@ impl RobustPoseSolver {
             }
             let start = g * gs;
             for k in start..(start + gs) {
-                let Some(d2) = Self::observation_d2((&rot, &trans), corr, intrinsics, k) else {
+                let Some(d2) = Self::observation_d2(&pose, corr, intrinsics, k) else {
                     continue;
                 };
                 if d2 > d2_worst {
@@ -1397,8 +1395,7 @@ impl RobustPoseSolver {
         let num_groups = corr.num_groups();
         let mut sum_a = 0.0_f64;
         let mut sum_b = 0.0_f64;
-        let a = (pose_a.rotation_matrix(), pose_a.translation());
-        let b = (pose_b.rotation_matrix(), pose_b.translation());
+        let (a, b) = (pose_a.matrix(), pose_b.matrix());
 
         for g in 0..num_groups {
             if g == skip_group {
@@ -1409,10 +1406,10 @@ impl RobustPoseSolver {
             }
             let start = g * gs;
             for k in start..(start + gs) {
-                if let Some(d2) = Self::observation_d2((&a.0, &a.1), corr, intrinsics, k) {
+                if let Some(d2) = Self::observation_d2(&a, corr, intrinsics, k) {
                     sum_a += d2;
                 }
-                if let Some(d2) = Self::observation_d2((&b.0, &b.1), corr, intrinsics, k) {
+                if let Some(d2) = Self::observation_d2(&b, corr, intrinsics, k) {
                     sum_b += d2;
                 }
             }
@@ -1525,8 +1522,8 @@ impl RobustPoseSolver {
         let inset = inset.filter(|_| gs == MARKER_GROUP);
 
         let compute_equations = |current_pose: &Pose| -> (f64, Matrix6<f64>, Vector6<f64>) {
-            let (rot, trans) = (current_pose.rotation_matrix(), current_pose.translation());
-            let mut ne = BodyFrameNormalEquations::new(&rot);
+            let m = current_pose.matrix();
+            let mut ne = BodyFrameNormalEquations::new(&m.r);
             let mut total_cost = 0.0;
 
             for g in 0..num_groups {
@@ -1534,13 +1531,12 @@ impl RobustPoseSolver {
                     continue;
                 }
                 let start = g * gs;
-                let quad =
-                    inset.and_then(|_| project_marker((&rot, &trans), corr, intrinsics, start));
+                let quad = inset.and_then(|_| project_marker(&m, corr, intrinsics, start));
 
                 for k in start..(start + gs) {
                     let obj = corr.object_points[k];
                     let p_world = Vector3::new(obj[0], obj[1], obj[2]);
-                    let p_cam = rot * p_world + trans;
+                    let p_cam = m.apply(&p_world);
                     if p_cam.z < 1e-4 {
                         total_cost += 1e6;
                         continue;
@@ -1755,7 +1751,6 @@ impl BoardEstimator {
 mod tests {
     use super::*;
     use crate::batch::{CandidateState, DetectionBatch, DetectionBatchView, Point2f};
-    use crate::pose::quat_from_so3;
     use nalgebra::{Matrix3, UnitQuaternion};
 
     // ── Helpers ──────────────────────────────────────────────────────────────
@@ -1797,7 +1792,7 @@ mod tests {
         let mut batch = DetectionBatch::new_boxed();
         let mut n = 0usize;
 
-        let q = quat_from_so3(pose.rotation_matrix());
+        let q = pose.quaternion();
 
         for (tag_id, opt_pts) in obj_points.iter().enumerate() {
             let Some(obj) = opt_pts else { continue };
@@ -2418,8 +2413,8 @@ mod tests {
         let t_error = (board_pose.pose.translation() - true_pose.translation()).norm();
         assert!(t_error < 1e-3, "translation error {t_error} m exceeds 1 mm");
 
-        let est_q = quat_from_so3(board_pose.pose.rotation_matrix());
-        let true_q = quat_from_so3(true_pose.rotation_matrix());
+        let est_q = board_pose.pose.quaternion();
+        let true_q = true_pose.quaternion();
         let r_error = est_q.angle_to(&true_q).to_degrees();
         assert!(r_error < 0.1, "rotation error {r_error}° exceeds 0.1°");
     }
@@ -2707,8 +2702,8 @@ mod tests {
             t_err < 1e-3,
             "translation error {t_err} m exceeds 1 mm on noise-free input"
         );
-        let q_true = quat_from_so3(true_pose.rotation_matrix());
-        let q_est = quat_from_so3(seed.rotation_matrix());
+        let q_true = true_pose.quaternion();
+        let q_est = seed.quaternion();
         let r_err = q_true.angle_to(&q_est).to_degrees();
         assert!(
             r_err < 0.5,
@@ -2723,10 +2718,7 @@ mod tests {
         let config = math_test_config();
         let intrinsics = test_intrinsics();
         let rot = UnitQuaternion::from_axis_angle(&Vector3::x_axis(), 20f64.to_radians());
-        let true_pose = Pose::new(
-            *rot.to_rotation_matrix().matrix(),
-            Vector3::new(0.05, -0.02, 1.5),
-        );
+        let true_pose = Pose::from_quaternion(&rot, Vector3::new(0.05, -0.02, 1.5));
         let (img, obj, info) = build_four_tag_corr(&config.obj_points, &true_pose, &intrinsics);
         let corr = PointCorrespondences {
             image_points: &img,
@@ -2742,8 +2734,8 @@ mod tests {
             t_err < 5e-3,
             "translation error {t_err} m exceeds 5 mm on oblique input"
         );
-        let q_true = quat_from_so3(true_pose.rotation_matrix());
-        let q_est = quat_from_so3(seed.rotation_matrix());
+        let q_true = true_pose.quaternion();
+        let q_est = seed.quaternion();
         let r_err = q_true.angle_to(&q_est).to_degrees();
         assert!(
             r_err < 1.0,
