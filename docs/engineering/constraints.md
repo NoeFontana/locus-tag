@@ -43,8 +43,8 @@ Keeping the dependency graph lean is as important as keeping the hot loop lean �
 
 * **Feature Discipline for Math Crates:**
   * ❌ **Forbidden:** Bare version strings (e.g., `nalgebra = "0.34"`) for heavy mathematical crates. Default features can silently expand across minor releases.
-  * ✅ **Required:** Always set `default-features = false` with an explicit `features = [...]` allowlist for `nalgebra` and `ndarray`. Pin only what is actually used.
-  * **Current allowlists:** `nalgebra = { ..., default-features = false, features = ["std"] }` · `ndarray = { ..., default-features = false, features = ["std"] }`.
+  * ✅ **Required:** Always set `default-features = false` with an explicit `features = [...]` allowlist for `nalgebra`, `ndarray`, `helicoid` and `helicoid-linalg`. Pin only what is actually used.
+  * **Current allowlists:** `nalgebra = { ..., default-features = false, features = ["std"] }` · `ndarray = { ..., default-features = false, features = ["std"] }` · `helicoid = { ..., default-features = false }` · `helicoid-linalg = { ..., default-features = false }` (no features used).
 
 * **Telemetry Erasure:**
   * ❌ **Forbidden:** `tracing` dependencies without `release_max_level_info` in any Locus crate.

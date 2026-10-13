@@ -110,6 +110,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   board snapshots' rotation-error fields move by at most 8.8e-13 relative because the test
   metrics now read `Pose::quaternion()` instead of re-extracting it from the rotation matrix;
   every translation, std, count and coverage field is unchanged.
+- **`helicoid` and `helicoid-linalg` are declared `default-features = false`**, as
+  `docs/engineering/constraints.md` §5 requires of the math crates (neither enables any
+  feature today).
 
 - **The dataset-backed snapshots are blessed, and the suites are green for the first time since
   2026-07-19.** `cargo nextest run --profile datasets --release --features bench-internals`
