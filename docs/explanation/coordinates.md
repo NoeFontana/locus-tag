@@ -111,12 +111,22 @@ $$
 - $R$: A $3 \times 3$ rotation matrix.
 - $t$: A $3 \times 1$ translation vector (representing the tag's **geometric center** in the camera frame).
 
-Packed poses (`DetectionBatch.poses`, the batch `Pose6D`, `board_pose`) are the 7-vector
-$[t_x, t_y, t_z, q_w, q_x, q_y, q_z]$: the translation, then $R$ as a unit Hamilton quaternion,
-**scalar first** — `helicoid`'s order, and the hub ground truth's `rotation_quaternion`. The sign of
-$q$ is not normalized: $q$ and $-q$ are the same rotation. Libraries that take the scalar last
-(ROS, Eigen's `coeffs()`, rerun's `xyzw=`) need `[qx, qy, qz, qw]`; SciPy reads this order with
-`Rotation.from_quat(q, scalar_first=True)` (SciPy ≥ 1.14).
+Packed poses (`DetectionBatch.poses`, the batch `Pose6D`, `board_pose`; `Pose::to_packed` in
+Rust) are the 7-vector $[t_x, t_y, t_z, q_w, q_x, q_y, q_z]$: the translation, then $R$ as a unit
+Hamilton quaternion, **scalar first** (`helicoid`'s quaternion component order, and the hub ground
+truth's `position` + `rotation_quaternion`). The quaternion is in the $q_w \ge 0$ hemisphere: $q$
+and $-q$ are the same rotation, and the packed form picks one so the same rotation always packs
+to the same row. Libraries that take the scalar last (ROS, Eigen's `coeffs()`, rerun's `xyzw=`)
+need `[qx, qy, qz, qw]`; SciPy reads this order with `Rotation.from_quat(q, scalar_first=True)`
+(SciPy ≥ 1.14).
+
+> **The packed pose and the tangent are in different orders.** The packed pose is
+> translation first (`pose[:3]` is $t$, `pose[3:7]` is $q$); the covariance and every tangent
+> vector (Section 5.1) are **rotation first**, $[\boldsymbol{\omega}, \mathbf{v}]$
+> (`cov[:3, :3]` is the rotation block). Do not pair `pose[:3]` with `cov[:3, :3]`. The packed
+> form keeps the translation first because it is a storage layout, read by slicing, and every
+> consumer (the hub ground truth, TUM trajectories, ROS `Pose`) reads it that way; the tangent
+> follows `helicoid`, GTSAM and Sophus.
 
 ### 5.1 Pose Covariance & Perturbation Frame
 

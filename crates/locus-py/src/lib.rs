@@ -666,21 +666,12 @@ impl BoardEstimator {
         // `np.isnan(cov).any()`. The pose itself remains a best-effort
         // estimate.
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
-            let q = bp.pose.quaternion();
-            let t = bp.pose.translation();
-
             // SAFETY: see "NumPy allocation safety contract" in module docs.
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
             // SAFETY: see "NumPy allocation safety contract" in module docs.
             let ps = unsafe { pose_arr.as_slice_mut() }
                 .map_err(|e| PyRuntimeError::new_err(format!("pose array layout error: {e}")))?;
-            ps[0] = t.x;
-            ps[1] = t.y;
-            ps[2] = t.z;
-            ps[3] = q.w;
-            ps[4] = q.i;
-            ps[5] = q.j;
-            ps[6] = q.k;
+            ps.copy_from_slice(&bp.pose.to_packed());
 
             let cov_opt = if bp.covariance.iter().all(|v| v.is_finite()) {
                 // SAFETY: see "NumPy allocation safety contract" in module docs.
@@ -926,22 +917,14 @@ impl CharucoRefiner {
         // Surface to Python as `board_cov = None` so the typed
         // `NDArray | None` contract is honored.
         let (board_pose, board_cov) = if let Some(bp) = board_pose_raw {
-            let q = bp.pose.quaternion();
-            let t = bp.pose.translation();
             // SAFETY: see "NumPy allocation safety contract" in module docs.
             let pose_arr = unsafe { PyArray1::<f64>::new(py, [7], false) };
             // SAFETY: see "NumPy allocation safety contract" in module docs.
             unsafe {
-                let ps = pose_arr
+                pose_arr
                     .as_slice_mut()
-                    .map_err(|e| PyRuntimeError::new_err(format!("pose slice: {e}")))?;
-                ps[0] = t.x;
-                ps[1] = t.y;
-                ps[2] = t.z;
-                ps[3] = q.w;
-                ps[4] = q.i;
-                ps[5] = q.j;
-                ps[6] = q.k;
+                    .map_err(|e| PyRuntimeError::new_err(format!("pose slice: {e}")))?
+                    .copy_from_slice(&bp.pose.to_packed());
             }
             let cov_opt = if bp.covariance.iter().all(|v| v.is_finite()) {
                 // SAFETY: see "NumPy allocation safety contract" in module docs.
@@ -1766,15 +1749,9 @@ fn build_detection_result_from_owned(
                 .map_err(|e| PyRuntimeError::new_err(format!("poses: {e}")))?;
             for (i, det) in detections.iter().enumerate() {
                 if let Some(ref pose) = det.pose {
-                    // Reconstruct [tx, ty, tz, qw, qx, qy, qz] from Pose struct.
-                    let (q, t) = (pose.quaternion(), pose.translation());
-                    poses_sl[i * 7] = t.x as f32;
-                    poses_sl[i * 7 + 1] = t.y as f32;
-                    poses_sl[i * 7 + 2] = t.z as f32;
-                    poses_sl[i * 7 + 3] = q.w as f32;
-                    poses_sl[i * 7 + 4] = q.i as f32;
-                    poses_sl[i * 7 + 5] = q.j as f32;
-                    poses_sl[i * 7 + 6] = q.k as f32;
+                    for (dst, v) in poses_sl[i * 7..i * 7 + 7].iter_mut().zip(pose.to_packed()) {
+                        *dst = v as f32;
+                    }
                 }
             }
         }

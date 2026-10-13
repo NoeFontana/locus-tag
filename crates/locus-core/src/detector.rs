@@ -691,32 +691,19 @@ fn run_pose_refinement(
             num_repro = v;
             let repro_errors = arena.alloc_slice_fill_copy(num_repro, 0.0f32);
 
-            let model_pts = [
-                nalgebra::Vector3::new(0.0, 0.0, 0.0),
-                nalgebra::Vector3::new(size, 0.0, 0.0),
-                nalgebra::Vector3::new(size, size, 0.0),
-                nalgebra::Vector3::new(0.0, size, 0.0),
-            ];
+            // The object points the pose was estimated against: origin at the tag centre.
+            let model_pts = crate::pose::centered_tag_corners(size);
 
             for (i, repro_error) in repro_errors.iter_mut().enumerate().take(v) {
-                // A rejected pose is the all-zero row (`tz > 0` marks a pose, as in
-                // `DetectionBatch`): its quaternion has no rotation to normalize, so its error is
-                // NaN, as it was when nalgebra normalized the zero quaternion silently.
-                let tz = batch.poses[i].data[2];
-                if tz <= 0.0 || tz.is_nan() {
+                // A row without a pose (rejected, or not estimated) has no error to report.
+                let Some(pose) = crate::pose::Pose::try_from_pose6d(&batch.poses[i].data) else {
                     *repro_error = f32::NAN;
                     continue;
-                }
-                let pose = crate::pose::Pose::from_pose6d(&batch.poses[i].data);
-
-                let mut sum_sq_err = 0.0;
-                for (j, model_pt) in model_pts.iter().enumerate() {
-                    let proj = pose.project(model_pt, intr);
-                    let dx = proj[0] - f64::from(batch.corners[i][j].x);
-                    let dy = proj[1] - f64::from(batch.corners[i][j].y);
-                    sum_sq_err += dx * dx + dy * dy;
-                }
-                *repro_error = (sum_sq_err / 4.0).sqrt() as f32;
+                };
+                let corners = batch.corners[i].map(|p| [f64::from(p.x), f64::from(p.y)]);
+                let sum_sq =
+                    crate::pose::reprojection_error(intr, &corners, &model_pts, &pose.matrix());
+                *repro_error = (sum_sq / 4.0).sqrt() as f32;
             }
             repro_errors_ptr = repro_errors.as_ptr();
         }

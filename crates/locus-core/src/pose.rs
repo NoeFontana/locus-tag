@@ -388,23 +388,44 @@ impl Pose {
         ))
     }
 
-    /// From a [`Pose6D`] row, `[tx, ty, tz, qw, qx, qy, qz]` in `f32`, normalizing the
-    /// quaternion its rounding left off unit.
+    /// The pose a [`Pose6D`] row, `[tx, ty, tz, qw, qx, qy, qz]` in `f32`, holds, normalizing
+    /// the quaternion its rounding left off unit.
+    ///
+    /// `None` for a row that holds no pose: `tz > 0` is what marks one (a rejected pose is the
+    /// all-zero row), and a zero or non-finite quaternion has no rotation to normalize. Every
+    /// reader of a row goes through this one check.
     #[must_use]
-    pub(crate) fn from_pose6d(d: &[f32; 7]) -> Self {
+    pub(crate) fn try_from_pose6d(d: &[f32; 7]) -> Option<Self> {
         let [tx, ty, tz, w, x, y, z] = d.map(f64::from);
-        Self(SE3::from_rt(
-            SO3::from_quat_normalized(Quat { w, x, y, z }),
-            Vector([tx, ty, tz]),
-        ))
+        // Squares of `f32` values cannot overflow or underflow in `f64`, so a positive, finite
+        // `‖q‖²` normalizes to unit.
+        let norm_sq = w * w + x * x + y * y + z * z;
+        (tz > 0.0 && norm_sq > 0.0 && norm_sq.is_finite()).then(|| {
+            Self(SE3::from_rt(
+                SO3::from_quat_normalized(Quat { w, x, y, z }),
+                Vector([tx, ty, tz]),
+            ))
+        })
     }
 
-    /// The [`Pose6D`] row, `[tx, ty, tz, qw, qx, qy, qz]`, rounded to `f32`.
+    /// The packed pose, `[tx, ty, tz, qw, qx, qy, qz]`: the layout of every packed pose Locus
+    /// emits (the batch `Pose6D`, the Python `poses` and `board_pose` arrays).
+    ///
+    /// The quaternion is in the `qw ≥ 0` hemisphere: `q` and `−q` are the same rotation, and
+    /// which one the solver ends on depends on its path (the Shepperd pivot of the seed, the LM
+    /// steps), so the packed form fixes the sign rather than leak that path into the output.
+    #[must_use]
+    pub fn to_packed(&self) -> [f64; 7] {
+        let q = self.0.rotation().quat();
+        let s = 1.0f64.copysign(q.w);
+        let t = self.0.translation().0;
+        [t[0], t[1], t[2], s * q.w, s * q.x, s * q.y, s * q.z]
+    }
+
+    /// The [`Pose6D`] row: [`Pose::to_packed`] rounded to `f32`.
     #[must_use]
     pub(crate) fn to_pose6d(self) -> [f32; 7] {
-        let q = self.0.rotation().quat();
-        let t = self.0.translation().0;
-        [t[0], t[1], t[2], q.w, q.x, q.y, q.z].map(|v| v as f32)
+        self.to_packed().map(|v| v as f32)
     }
 
     /// The rotation `R` as a matrix, formed from the stored quaternion on each call.
@@ -1702,7 +1723,9 @@ fn huber_cost(
     cost
 }
 
-fn reprojection_error(
+/// Sum over the four corners of the squared pixel distance between `corners` and `obj_pts`
+/// projected under `pose` (distortion included).
+pub(crate) fn reprojection_error(
     intrinsics: &CameraIntrinsics,
     corners: &[[f64; 2]; 4],
     obj_pts: &[Vector3<f64>; 4],
@@ -3093,8 +3116,43 @@ mod tests {
             d[3] * d[6] > 0.0,
             "qw and qz share a sign for +90° about z: {d:?}"
         );
-        let back = Pose::from_pose6d(&d);
+        let back = Pose::try_from_pose6d(&d).expect("a row with tz > 0 holds a pose");
         assert!((back.rotation_matrix() - r).abs().max() < 1e-6);
+    }
+
+    // `q` and `−q` are one rotation: the row carries the `qw ≥ 0` one whichever the pose
+    // stores, so the same rotation always packs to the same row.
+    #[test]
+    fn pose6d_quaternion_is_in_the_nonnegative_hemisphere() {
+        let t = Vector3::new(0.1, -0.2, 0.9);
+        let q = UnitQuaternion::from_euler_angles(0.4, -1.1, 2.9);
+        let neg = UnitQuaternion::new_unchecked(-q.into_inner());
+        let (a, b) = (
+            Pose::from_quaternion(&q, t).to_pose6d(),
+            Pose::from_quaternion(&neg, t).to_pose6d(),
+        );
+        assert!(a[3] >= 0.0, "{a:?}");
+        assert_eq!(a.map(f32::to_bits), b.map(f32::to_bits));
+    }
+
+    // `tz > 0` marks a row as holding a pose; a row without one — the all-zero row of a
+    // rejected pose, a translation-only row, a non-finite quaternion — reads as `None`
+    // instead of reaching the quaternion normalization (a debug-build panic on zero).
+    #[test]
+    fn pose6d_without_a_pose_reads_as_none() {
+        let rows = [
+            [0.0; 7],
+            [0.1, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0],
+            [0.1, 0.2, -1.0, 1.0, 0.0, 0.0, 0.0],
+            [0.1, 0.2, f32::NAN, 1.0, 0.0, 0.0, 0.0],
+            [0.1, 0.2, 1.0, f32::NAN, 0.0, 0.0, 0.0],
+            [0.1, 0.2, 1.0, f32::INFINITY, 0.0, 0.0, 0.0],
+        ];
+        for row in rows {
+            assert!(Pose::try_from_pose6d(&row).is_none(), "{row:?}");
+        }
+        // Off-unit by `f32` rounding is still a pose.
+        assert!(Pose::try_from_pose6d(&[0.0, 0.0, 1.0, 0.5, 0.5, 0.5, 0.5001]).is_some());
     }
 
     #[test]

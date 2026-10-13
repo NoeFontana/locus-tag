@@ -7,6 +7,19 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **The debug-telemetry reprojection error measured the wrong points.** It projected tag
+  corners with the origin at the tag's top-left corner through a pose whose origin is the tag
+  centre, so every value was inflated by about half the tag diagonal: 67.9 px on a clean
+  100 px synthetic tag, now under 1 px. It now uses the same object points and projection as
+  the pose solver, and `test_reprojection_error_telemetry` asserts the values, not only that
+  the pointer is non-null.
+- **Reading a packed pose without a valid rotation no longer panics in debug builds.**
+  `DetectionBatch::reassemble` / `reassemble_owned` and the telemetry pass go through one
+  checked reader: a row holds a pose only if `tz > 0` and its quaternion has a finite,
+  non-zero norm. A translation-only row such as `[x, y, 1, 0, 0, 0, 0]` used to reach
+  `helicoid`'s quaternion normalization and fail its `debug_assert!`; it now reads as no
+  pose.
+
 - **The EuRoC corner cells across the benchmarking docs are re-baselined for the inexact
   undistortion inverse.** Recomputing the fourteen archived EuRoC runs both ways shows the
   artefact is a near-fixed **absolute** shift of -0.005 to +0.011 px, close to constant across
@@ -79,6 +92,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`p = w₀₀u + w₀₁v`, `q = w₁₀u + w₁₁v`), two multiplies per entry instead of eight. The
   board estimator is 2.6-2.8 % faster (`board_bench`); the tag rows are unchanged, and the
   snapshots move by at most 5.6e-13 relative.
+- **Packed quaternions are in the `qw ≥ 0` hemisphere.** `q` and `−q` are one rotation, and
+  which one a solve ended on depended on its path (the seed's Shepperd pivot, the LM steps).
+  `DetectionBatch.poses`, `Pose6D` and Python's `poses` / `board_pose` now pick `qw ≥ 0`, so
+  one rotation always packs to one row. Every packer goes through the new `Pose::to_packed()`
+  (`[tx, ty, tz, qw, qx, qy, qz]`, `f64`); the Python bindings no longer lay the row out by
+  hand in three places. `docs/explanation/coordinates.md` §5 now says outright that the packed
+  pose is translation-first while the tangent and covariance are rotation-first.
 
 - **The dataset-backed snapshots are blessed, and the suites are green for the first time since
   2026-07-19.** `cargo nextest run --profile datasets --release --features bench-internals`

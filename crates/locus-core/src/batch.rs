@@ -273,13 +273,7 @@ impl DetectionBatch {
                 (corners[0][1] + corners[1][1] + corners[2][1] + corners[3][1]) / 4.0,
             ];
 
-            // Reconstruct Pose if available (Z translation > 0)
-            let pose = if self.poses[i].data[2] > 0.0 {
-                let d = self.poses[i].data;
-                Some(crate::pose::Pose::from_pose6d(&d))
-            } else {
-                None
-            };
+            let pose = crate::pose::Pose::try_from_pose6d(&self.poses[i].data);
 
             detections.push(crate::Detection {
                 id: self.ids[i],
@@ -419,12 +413,7 @@ impl DetectionBatchView<'_> {
                 (corners[0][0] + corners[1][0] + corners[2][0] + corners[3][0]) / 4.0,
                 (corners[0][1] + corners[1][1] + corners[2][1] + corners[3][1]) / 4.0,
             ];
-            let pose = if self.poses[i].data[2] > 0.0 {
-                let d = self.poses[i].data;
-                Some(crate::pose::Pose::from_pose6d(&d))
-            } else {
-                None
-            };
+            let pose = crate::pose::Pose::try_from_pose6d(&self.poses[i].data);
             detections.push(crate::Detection {
                 id: self.ids[i],
                 center,
