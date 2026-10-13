@@ -27,8 +27,10 @@ use locus_core::{
     bench_api::DetectionBatch,
     board::{BoardEstimator, LoRansacConfig},
 };
-use std::path::PathBuf;
 use std::sync::Arc;
+use utils::{hub_dir, rich_truth_records};
+
+mod utils;
 
 fn main() {
     // Single-threaded mandate: prevents Rayon / OS scheduler from thrashing L1.
@@ -40,17 +42,6 @@ fn main() {
 }
 
 // ── Dataset helpers ──────────────────────────────────────────────────────────
-
-fn hub_dir() -> PathBuf {
-    std::env::var("LOCUS_HUB_DATASET_DIR").map_or_else(
-        |_| {
-            // CWD for bench binaries is the package root (crates/locus-core/),
-            // so relative paths must be anchored via CARGO_MANIFEST_DIR.
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/hub_cache")
-        },
-        PathBuf::from,
-    )
-}
 
 /// Parses the board config and camera intrinsics from `rich_truth.json`.
 fn load_board_meta(dataset: &str) -> (Arc<AprilGridTopology>, CameraIntrinsics) {
@@ -73,18 +64,7 @@ fn load_board_meta(dataset: &str) -> (Arc<AprilGridTopology>, CameraIntrinsics) 
         marker_size_mm: f64,
     }
 
-    /// v1 is a bare list of records; v2 wraps it as `{"version", "records", ...}`.
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum RichTruth {
-        V2 { records: Vec<Entry> },
-        V1(Vec<Entry>),
-    }
-
-    let path = hub_dir().join(dataset).join("rich_truth.json");
-    let raw = match serde_json::from_reader(std::fs::File::open(&path).unwrap()).unwrap() {
-        RichTruth::V2 { records } | RichTruth::V1(records) => records,
-    };
+    let raw: Vec<Entry> = rich_truth_records(dataset);
 
     let mut board_cfg: Option<Arc<AprilGridTopology>> = None;
     let mut intrinsics = None;

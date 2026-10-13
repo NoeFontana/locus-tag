@@ -20,7 +20,9 @@ use divan::{Bencher, black_box};
 use locus_core::bench_api::{DetectionBatch, refine_poses_soa_with_config};
 use locus_core::pose::estimate_tag_pose_with_config;
 use locus_core::{CameraIntrinsics, Detector, DetectorConfig, ImageView, TagFamily};
-use std::path::PathBuf;
+use utils::{hub_dir, rich_truth_records};
+
+mod utils;
 
 const DATASET: &str = "locus_v1_tag36h11_1920x1080";
 /// tag36h11's grid dimension, the `edge_refine_dim` the detector derives.
@@ -59,19 +61,8 @@ impl Frame {
     }
 }
 
-fn hub_dir() -> PathBuf {
-    std::env::var("LOCUS_HUB_DATASET_DIR").map_or_else(
-        |_| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../tests/data/hub_cache"),
-        PathBuf::from,
-    )
-}
-
 /// Every frame of the dataset, detected once with the `standard` profile.
 fn scene() -> Scene {
-    #[derive(serde::Deserialize)]
-    struct Truth {
-        records: Vec<Record>,
-    }
     #[derive(serde::Deserialize)]
     struct Record {
         image_id: String,
@@ -80,14 +71,13 @@ fn scene() -> Scene {
     }
 
     let dir = hub_dir().join(DATASET);
-    let truth: Truth =
-        serde_json::from_reader(std::fs::File::open(dir.join("rich_truth.json")).unwrap()).unwrap();
-    let first = &truth.records[0];
+    let records: Vec<Record> = rich_truth_records(DATASET);
+    let first = &records[0];
     let k = &first.k_matrix;
     let intrinsics = CameraIntrinsics::new(k[0][0], k[1][1], k[0][2], k[1][2]);
     let tag_size = first.tag_size_mm / 1000.0;
 
-    let mut ids: Vec<&str> = truth.records.iter().map(|r| r.image_id.as_str()).collect();
+    let mut ids: Vec<&str> = records.iter().map(|r| r.image_id.as_str()).collect();
     ids.sort_unstable();
     ids.dedup();
 
