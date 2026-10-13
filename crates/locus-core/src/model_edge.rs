@@ -31,11 +31,11 @@
 //! robust Huber loss so the clean bulk (not a few latched/biased edges) controls
 //! the rotation. See `docs/engineering/benchmarking/model_edge_refinement_*`.
 
-use nalgebra::{Matrix2, Matrix3, Vector3, Vector6};
+use nalgebra::{Matrix3, Vector3, Vector6};
 
 use crate::image::ImageView;
 use crate::pose::{
-    BodyFrameNormalEquations, CameraIntrinsics, NielsenConfig, Pose, nielsen_lm,
+    BodyFrameNormalEquations, CameraIntrinsics, NielsenConfig, Pose, PoseMatrix, nielsen_lm,
     projection_and_gradient,
 };
 
@@ -245,20 +245,20 @@ fn measure_crossing(
     Some((-half + (k as f64 + frac) * SCAN_STEP, contrast))
 }
 
-/// Project a tag-frame point + tangent under the pose `(rot, trans)`, returning the projected
-/// image point and unit edge normal, or `None` if behind the camera / degenerate.
+/// Project a tag-frame point + tangent under `pose`, returning the projected image point and
+/// unit edge normal, or `None` if behind the camera / degenerate.
 fn project_with_normal(
     intr: &CameraIntrinsics,
-    (rot, trans): (&Matrix3<f64>, &Vector3<f64>),
+    pose: &PoseMatrix,
     p_tag: Vector3<f64>,
     tan_tag: Vector3<f64>,
 ) -> Option<([f64; 2], [f64; 2])> {
-    let p_cam = rot * p_tag + trans;
+    let p_cam = pose.apply(&p_tag);
     if p_cam.z < 1e-4 {
         return None;
     }
     let [pu, pv] = intr.distort_normalized(p_cam.x / p_cam.z, p_cam.y / p_cam.z);
-    let p2 = rot * (p_tag + tan_tag) + trans;
+    let p2 = pose.apply(&(p_tag + tan_tag));
     if p2.z < 1e-4 {
         return None;
     }
@@ -290,7 +290,7 @@ fn measure_samples(
     out: &mut [Sample; MAX_SAMPLES],
 ) -> usize {
     let mut ns = 0;
-    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
+    let pose = pose.matrix();
     for k in 0..=n {
         let g = -1.0 + (k as f64) * cell; // boundary canonical coord
         for j in 0..n {
@@ -311,8 +311,7 @@ fn measure_samples(
                     if ns >= MAX_SAMPLES {
                         return ns;
                     }
-                    let Some(([pu, pv], nrm)) =
-                        project_with_normal(intr, (&rot, &trans), p_tag, tan_tag)
+                    let Some(([pu, pv], nrm)) = project_with_normal(intr, &pose, p_tag, tan_tag)
                     else {
                         continue;
                     };
@@ -349,9 +348,9 @@ fn measure_samples(
 #[cfg(test)]
 fn fixed_cost(intr: &CameraIntrinsics, pose: &Pose, samples: &[Sample]) -> f64 {
     let mut cost = 0.0;
-    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
+    let pose = pose.matrix();
     for s in samples {
-        let p_cam = rot * s.p + trans;
+        let p_cam = pose.apply(&s.p);
         if p_cam.z < 1e-4 {
             cost += BEHIND_PENALTY;
             continue;
@@ -370,8 +369,8 @@ fn fixed_cost(intr: &CameraIntrinsics, pose: &Pose, samples: &[Sample]) -> f64 {
 ///
 /// Each edge observation is a **1-D residual along the edge normal** `n`. That is
 /// *exactly* the 2-D pixel residual `r = measured − projected` weighted by the
-/// rank-1 projector `W = n·nᵀ`: for that `W`, [`BodyFrameNormalEquations::add`]
-/// accumulates `Σ jⱼᵀ` and `Σ j·(n·r)` with `j = n₀·rowᵤ + n₁·rowᵥ` — i.e. the
+/// rank-1 projector `W = n·nᵀ`, which [`BodyFrameNormalEquations::add_along`]
+/// accumulates as `Σ j jᵀ` and `Σ j·(n·r)` with `j = n₀·rowᵤ + n₁·rowᵥ` — i.e. the
 /// projection-onto-normal Jacobian and 1-D residual. So the shared, distortion-
 /// aware, body-frame-correct accumulator drives the edge fit with no bespoke
 /// Jacobian, and the estimator is consistent with `Pose::retract` by construction.
@@ -380,11 +379,11 @@ fn edge_normal_equations(
     pose: &Pose,
     samples: &[Sample],
 ) -> (nalgebra::Matrix6<f64>, Vector6<f64>, f64) {
-    let (rot, trans) = (pose.rotation_matrix(), pose.translation());
-    let mut ne = BodyFrameNormalEquations::new(&rot);
+    let pose = pose.matrix();
+    let mut ne = BodyFrameNormalEquations::new(&pose.r);
     let mut cost = 0.0;
     for s in samples {
-        let p_cam = rot * s.p + trans;
+        let p_cam = pose.apply(&s.p);
         let z = p_cam.z;
         if z < 1e-4 {
             cost += BEHIND_PENALTY; // consistent with `fixed_cost`
@@ -401,11 +400,9 @@ fn edge_normal_equations(
         let res = n0 * res_u + n1 * res_v;
         let (wh, c) = edge_huber(res);
         cost += c;
-        // Rank-1 projector onto the edge normal, scaled by the Huber weight:
-        // reduces the 2-D corner accumulator to the 1-D-along-normal robust edge
-        // fit (see the fn doc).
-        let w = Matrix2::new(n0 * n0, n0 * n1, n0 * n1, n1 * n1) * wh;
-        ne.add(&s.p, &du, &dv, res_u, res_v, &w);
+        // The 1-D residual along the edge normal under its Huber weight: the corner
+        // accumulator with the rank-1 projector `W = wh·n nᵀ` (see the fn doc).
+        ne.add_along(&s.p, &du, &dv, [n0, n1], res, wh);
     }
     let (jtj, jtr) = ne.finish();
     (jtj, jtr, cost)

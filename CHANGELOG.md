@@ -99,6 +99,17 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   (`[tx, ty, tz, qw, qx, qy, qz]`, `f64`); the Python bindings no longer lay the row out by
   hand in three places. `docs/explanation/coordinates.md` §5 now says outright that the packed
   pose is translation-first while the tangent and covariance are rotation-first.
+- **Model-edge pose refinement accumulates each edge sample as one rank-1 update.** An edge
+  residual is 1-D along the edge normal, so its Jacobian row is built once from
+  `n₀·∂u/∂P + n₁·∂v/∂P` instead of as two rows under a rank-1 2×2 weight
+  (`BodyFrameNormalEquations::add_along`): 9.6 ns per sample instead of 18 ns, equal to
+  rounding. `high_accuracy`'s batch pose stage is 7.0 % faster (`pose_real_bench`
+  `refine_soa_high_accuracy`, the 50 frames of `locus_v1_tag36h11_1920x1080`: 73.6 → 68.5 ms;
+  A-B-B-A medians, `--release` bench profile, one rayon thread, AMD EPYC-Milan, 8 vCPU); every
+  other `pose_real_bench` / `board_bench` row is within its run-to-run noise (±1 %). The
+  board snapshots' rotation-error fields move by at most 8.8e-13 relative because the test
+  metrics now read `Pose::quaternion()` instead of re-extracting it from the rotation matrix;
+  every translation, std, count and coverage field is unchanged.
 
 - **The dataset-backed snapshots are blessed, and the suites are green for the first time since
   2026-07-19.** `cargo nextest run --profile datasets --release --features bench-internals`
