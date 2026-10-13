@@ -699,6 +699,14 @@ fn run_pose_refinement(
             ];
 
             for (i, repro_error) in repro_errors.iter_mut().enumerate().take(v) {
+                // A rejected pose is the all-zero row (`tz > 0` marks a pose, as in
+                // `DetectionBatch`): its quaternion has no rotation to normalize, so its error is
+                // NaN, as it was when nalgebra normalized the zero quaternion silently.
+                let tz = batch.poses[i].data[2];
+                if tz <= 0.0 || tz.is_nan() {
+                    *repro_error = f32::NAN;
+                    continue;
+                }
                 let pose = crate::pose::Pose::from_pose6d(&batch.poses[i].data);
 
                 let mut sum_sq_err = 0.0;
