@@ -19,6 +19,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   non-zero norm. A translation-only row such as `[x, y, 1, 0, 0, 0, 0]` used to reach
   `helicoid`'s quaternion normalization and fail its `debug_assert!`; it now reads as no
   pose.
+- **`docs/engineering/benchmarking/baseline_schema_v2.json` is regenerated and gated.** It had
+  been stale since #334 added `Provenance.opencv_version` to the `BaselineV2` model without
+  re-exporting it, and nothing checked the file (only the profile schema had a parity gate).
+  `tests/test_strata.py` now asserts the checked-in file equals `tools.bench.schema`'s
+  rendering. pydantic 2.13.5 and 2.14.0 render both this schema and
+  `schemas/profile.schema.json` byte-identically.
 
 - **The EuRoC corner cells across the benchmarking docs are re-baselined for the inexact
   undistortion inverse.** Recomputing the fourteen archived EuRoC runs both ways shows the

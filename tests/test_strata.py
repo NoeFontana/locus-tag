@@ -11,7 +11,7 @@ import math
 
 import pytest
 
-from tools.bench.schema import _validate_stratum_id
+from tools.bench.schema import JSON_SCHEMA_PATH, _validate_stratum_id, render_json_schema
 from tools.bench.strata import (
     AxisValues,
     _bucket_aoi,
@@ -144,3 +144,9 @@ class TestStratumIdGrammar:
         )
         # Returns the input unchanged on success; raises ValueError otherwise.
         assert _validate_stratum_id(sid) == sid
+
+
+def test_baseline_json_schema_is_up_to_date():
+    # The checked-in schema drifted from `BaselineV2` once (`opencv_version`, #334) with no
+    # gate to notice. Regenerate with `uv run python -m tools.bench.schema`.
+    assert JSON_SCHEMA_PATH.read_text() == render_json_schema()
