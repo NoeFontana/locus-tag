@@ -11,6 +11,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   within `16u` of the unit sphere, so exact rotations stay unit and the chosen pose branch's
   quaternion matches `tf_tree_math`'s accuracy (helicoid `0086`). The seven board snapshots'
   float metrics move by at most 4.2e-9 relative; every detection and count is unchanged.
+- **`helicoid` 0.0.5.** An accuracy and speed release with no API break: the SO(3)
+  coefficients and `Log`, `Quat::to_matrix`'s diagonal, and the SE(3) `Exp` and Jacobians
+  change in their last bits. The seven board snapshots' float metrics move by at most 1.9e-9
+  relative (67 values); every detection and count is unchanged.
 
 ## Released versions
 
