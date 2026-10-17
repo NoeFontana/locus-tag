@@ -4,15 +4,21 @@ updates:
   # 1. Python / uv Configuration (Native)
   # -------------------------------------------------------------------
   - package-ecosystem: "uv"
-    directory: "/" 
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "monday"
+      time: "04:00"
+      timezone: "Etc/UTC"
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
     labels:
       - "dependencies"
       - "python"
     commit-message:
-      prefix: "chore(deps):"
+      prefix: "chore(deps)"
     # Group all non-major Python updates into a single PR
     groups:
       python-minor-patch:
@@ -26,15 +32,21 @@ updates:
   # 2. Rust / Cargo Configuration
   # -------------------------------------------------------------------
   - package-ecosystem: "cargo"
-    directory: "/" # Covers the Cargo workspace (locus-core, locus-py)
+    directory: "/" # Covers the Cargo workspace (locus-core, locus-py, xtask)
     schedule:
       interval: "weekly"
       day: "monday"
+      time: "04:00"
+      timezone: "Etc/UTC"
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
     labels:
       - "dependencies"
       - "rust"
     commit-message:
-      prefix: "chore(deps):"
+      prefix: "chore(deps)"
     # Group all non-major Cargo updates into a single PR
     groups:
       cargo-minor-patch:
@@ -52,11 +64,17 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+      time: "04:00"
+      timezone: "Etc/UTC"
+    cooldown:
+      default-days: 14
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
     labels:
       - "dependencies"
       - "ci"
     commit-message:
-      prefix: "chore(deps):"
+      prefix: "chore(ci)"
     # Group all action updates into a single PR
     groups:
       actions-updates:
