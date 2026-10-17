@@ -17,6 +17,9 @@ env:
   UV_SYSTEM_PYTHON: 0
   TRACY_NO_INVARIANT_CHECK: "1"
 
+permissions:
+  contents: read
+
 jobs:
   validate-project:
     name: Validate Project & Lint Python
