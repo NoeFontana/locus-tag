@@ -9,7 +9,9 @@ use crate::batch::{DetectionBatch, Point2f, Pose6D};
 use crate::image::ImageView;
 
 use helicoid::{Chart, Decoupled, Jac, LieGroup, Quat, SE3, SEn3Jac, SO3, Twist};
-use helicoid_linalg::{Mat3, Matrix, StridedMut, Vec3, Vector};
+use helicoid_linalg::{
+    nearest_rotation as polar_nearest_rotation, Mat3, Matrix, Point, StridedMut, Vec3, Vector,
+};
 use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, UnitQuaternion, Vector3, Vector6};
 
 /// Lens distortion coefficients stored alongside the intrinsic parameters.
@@ -372,6 +374,20 @@ impl Pose {
         ))
     }
 
+    /// Create a pose by projecting an arbitrary or approximate 3×3 matrix onto SO(3)
+    /// via Frobenius-nearest polar iteration ([`nearest_rotation`]).
+    #[must_use]
+    pub fn from_matrix_nearest(rotation: &Matrix3<f64>, translation: Vector3<f64>) -> Self {
+        let r = Mat3::from_cols(core::array::from_fn(|c| {
+            Vector([rotation[(0, c)], rotation[(1, c)], rotation[(2, c)]])
+        }));
+        let nearest = polar_nearest_rotation(&r);
+        Self(SE3::from_rt(
+            SO3::from_matrix(&nearest),
+            vec3_from_na(&translation),
+        ))
+    }
+
     /// From a unit quaternion and a translation.
     #[must_use]
     pub fn from_quaternion(rotation: &UnitQuaternion<f64>, translation: Vector3<f64>) -> Self {
@@ -468,12 +484,33 @@ impl Pose {
         Self(SE3::from_rt(self.0.rotation(), vec3_from_na(&t)))
     }
 
+    /// Transform a 3D point from tag body coordinates to camera coordinates:
+    /// `p_cam = R · p + t`.
+    #[inline]
+    #[must_use]
+    pub fn transform_point(&self, point: &Vector3<f64>) -> Vector3<f64> {
+        let p = self.0 * Point([point.x, point.y, point.z]);
+        Vector3::new(p.0[0], p.0[1], p.0[2])
+    }
+
+    /// Inverse action: transform a 3D point from camera coordinates back into
+    /// tag body coordinates: `p_tag = Rᵀ · (p_cam - t)`.
+    ///
+    /// Evaluated via `helicoid`'s `SE3::inv_act`, subtracting translation *before*
+    /// rotating, which avoids catastrophic cancellation when `‖t‖ ≫ ‖p‖`.
+    #[inline]
+    #[must_use]
+    pub fn inverse_transform_point(&self, point: &Vector3<f64>) -> Vector3<f64> {
+        let p = self.0.inv_act(Point([point.x, point.y, point.z]));
+        Vector3::new(p.0[0], p.0[1], p.0[2])
+    }
+
     /// Project a 3D point into the image using this pose and intrinsics, applying
     /// the intrinsics' distortion model (identity for [`DistortionCoeffs::None`],
     /// so undistorted results are unchanged).
     #[must_use]
     pub fn project(&self, point: &Vector3<f64>, intrinsics: &CameraIntrinsics) -> [f64; 2] {
-        let p_cam = self.rotation_matrix() * point + self.translation();
+        let p_cam = self.transform_point(point);
         let z = p_cam.z.max(1e-4);
         intrinsics.distort_normalized(p_cam.x / z, p_cam.y / z)
     }
@@ -900,6 +937,21 @@ where
 pub fn quat_from_so3(r: Matrix3<f64>) -> UnitQuaternion<f64> {
     let rot = Rotation3::from_matrix_unchecked(r);
     UnitQuaternion::from_rotation_matrix(&rot)
+}
+
+/// Frobenius-nearest rotation of a 3×3 matrix projected onto SO(3).
+///
+/// Uses Newton's polar iteration via `helicoid_linalg::nearest_rotation` to project
+/// an arbitrary finite 3×3 matrix onto SO(3), dominating `Rotation3::from_matrix_eps`
+/// and Sophus `fitToSO3`.
+#[inline]
+#[must_use]
+pub fn nearest_rotation(m: &Matrix3<f64>) -> Matrix3<f64> {
+    let mat = Mat3::from_cols(core::array::from_fn(|c| {
+        Vector([m[(0, c)], m[(1, c)], m[(2, c)]])
+    }));
+    let r = polar_nearest_rotation(&mat);
+    Matrix3::from_fn(|i, j| r.get(i, j))
 }
 
 /// Estimate a tag's 6-DoF pose from its four detected image corners.
@@ -3268,6 +3320,72 @@ mod tests {
         // y = (0.1 / 2.0) * 500 + 240 = 265
         assert!((p_img[0] - 345.0).abs() < 1e-6);
         assert!((p_img[1] - 265.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_pose_point_transforms_and_inverses() {
+        let r = Rotation3::new(Vector3::new(0.2, -0.3, 0.4))
+            .matrix()
+            .into_owned();
+        let t = Vector3::new(1.2, -0.5, 3.0);
+        let pose = Pose::new(r, t);
+
+        let pt = Vector3::new(0.05, -0.08, 0.02);
+
+        // Forward transform: R * p + t
+        let p_cam = pose.transform_point(&pt);
+        let expected = r * pt + t;
+        assert!(
+            (p_cam - expected).norm() < 1e-14,
+            "transform_point mismatch: {p_cam} vs {expected}"
+        );
+
+        // Inverse transform: Rᵀ * (p_cam - t)
+        let p_body = pose.inverse_transform_point(&p_cam);
+        assert!(
+            (p_body - pt).norm() < 1e-14,
+            "round trip failed: {p_body} vs {pt}"
+        );
+
+        // Stability when ‖t‖ ≫ ‖p‖ (where naive T⁻¹ * p cancels digits)
+        let far_t = Vector3::new(1e6, -2e6, 5e6);
+        let far_pose = Pose::new(r, far_t);
+        let far_cam = far_pose.transform_point(&pt);
+        let far_recovered = far_pose.inverse_transform_point(&far_cam);
+        assert!(
+            (far_recovered - pt).norm() < 1e-8,
+            "large-translation inverse transform stability failed: {far_recovered} vs {pt}"
+        );
+    }
+
+    #[test]
+    fn test_nearest_rotation_and_pose_from_nearest() {
+        // A slightly noisy/sheared matrix
+        let mut noisy = Rotation3::new(Vector3::new(0.1, 0.2, -0.3))
+            .matrix()
+            .into_owned();
+        noisy[(0, 1)] += 0.05;
+        noisy[(1, 2)] -= 0.03;
+        noisy[(2, 0)] += 0.02;
+
+        let r_proj = nearest_rotation(&noisy);
+
+        // r_proj must be orthogonal: R * Rᵀ = I
+        let diff = r_proj * r_proj.transpose() - Matrix3::identity();
+        assert!(diff.norm() < 1e-12, "R * Rᵀ not identity: {diff}");
+        assert!(
+            (r_proj.determinant() - 1.0).abs() < 1e-12,
+            "det R not 1: {}",
+            r_proj.determinant()
+        );
+
+        let t = Vector3::new(0.1, 0.2, 0.3);
+        let pose = Pose::from_matrix_nearest(&noisy, t);
+        let r_pose = pose.rotation_matrix();
+        assert!(
+            (r_pose - r_proj).norm() < 1e-12,
+            "pose rotation differs from nearest_rotation"
+        );
     }
 
     #[test]

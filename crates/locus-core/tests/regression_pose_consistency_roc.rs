@@ -1,13 +1,3 @@
-#![cfg(feature = "bench-internals")]
-#![allow(
-    clippy::cast_possible_truncation,
-    clippy::cast_precision_loss,
-    clippy::cast_sign_loss,
-    clippy::expect_used,
-    clippy::items_after_statements,
-    clippy::unwrap_used,
-    missing_docs
-)]
 //! Pose-consistency gate ROC sweep.
 //!
 //! Drives the χ² gate directly with controlled isotropic noise so we can
@@ -23,6 +13,17 @@
 //! The test deliberately *avoids* loading ICRA / Hub fixtures: the recall
 //! and precision deltas at the production threshold are already covered
 //! by the existing `regression_icra2020`, `regression_render_tag`, and
+
+#![cfg(feature = "bench-internals")]
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    clippy::expect_used,
+    clippy::items_after_statements,
+    clippy::unwrap_used,
+    missing_docs
+)]
 //! `regression_distortion_hub` snapshots; adding them here would just
 //! duplicate that work without exercising the gate's noise model.
 
