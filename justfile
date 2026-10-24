@@ -31,8 +31,16 @@ build:
 # Run all tests (Rust + Python + doc + insta).
 test: test-rust test-py test-doc test-insta
 
+# Fast workspace type check.
+check:
+    cargo check --workspace
+
+# Fast inner-loop test (core library only, instant feedback in <2s).
+test-fast:
+    cargo nextest run -p locus-core --lib
+
 test-rust:
-    cargo nextest run --profile ci --workspace --all-features
+    TRACY_NO_INVARIANT_CHECK=1 LOCUS_ALLOW_MISSING_DATASETS=1 cargo nextest run --profile ci --workspace --all-features
 
 test-py:
     uv run pytest
@@ -111,6 +119,10 @@ pre-pr: lint audit test schema-check
 # ---------------------------------------------------------------------------
 # Maintenance
 # ---------------------------------------------------------------------------
+
+# Remove target/ build artifacts while preserving .venv and cached datasets.
+clean-target:
+    cargo clean
 
 # Remove all build artifacts and the venv.
 clean:

@@ -71,6 +71,7 @@ bench-internals = ["locus-core/bench-internals"]
 [[bin]]
 name = "stub_gen"
 path = "src/bin/stub_gen.rs"
+test = false
 
 [lints]
 workspace = true
