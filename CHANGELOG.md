@@ -5,6 +5,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- **`cargo deny` and `cargo fmt` gates green again.** `askama` (build-only) drops its default
+  `config`/`urlencode` features, removing the unmaintained `basic-toml` (RUSTSEC-2026-0374); the
+  generated `dictionaries.rs` is byte-identical. The `paste` advisory ignore is gone, since
+  `nalgebra` 0.35 no longer pulls it into the production graph.
+
 ### Changed
 
 - **`helicoid` 0.0.4.** Its `SO3::from_matrix` returns Shepperd's quotients whenever they are

@@ -10,7 +10,7 @@ use crate::image::ImageView;
 
 use helicoid::{Chart, Decoupled, Jac, LieGroup, Quat, SE3, SEn3Jac, SO3, Twist};
 use helicoid_linalg::{
-    nearest_rotation as polar_nearest_rotation, Mat3, Matrix, Point, StridedMut, Vec3, Vector,
+    Mat3, Matrix, Point, StridedMut, Vec3, Vector, nearest_rotation as polar_nearest_rotation,
 };
 use nalgebra::{Matrix2, Matrix3, Matrix6, Rotation3, UnitQuaternion, Vector3, Vector6};
 

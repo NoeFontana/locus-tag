@@ -15,12 +15,7 @@ exclude-dev = true
 [advisories]
 version = 2
 yanked = "deny"
-ignore = [
-    # `paste` is archived/unmaintained, pulled transitively by `nalgebra ->
-    # simba`. No safe upgrade is available; revisit when nalgebra/simba
-    # migrate to `pastey` or an equivalent successor.
-    { id = "RUSTSEC-2024-0436", reason = "transitive via nalgebra/simba; no fix upstream" },
-]
+ignore = []
 
 [licenses]
 version = 2
