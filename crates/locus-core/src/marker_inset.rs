@@ -335,9 +335,16 @@ fn read_bits(cells: usize, sample: &impl Fn(f64, f64) -> f64) -> Option<BitsView
     // more border: a wider border than the layout, such as Kalibr's 2-bit one decoded as a
     // 1-bit tag. The fit's own guards pass that about one time in eight, then push the corners
     // 0.3–0.4 px outward.
-    let inner = 1..cells - 1;
-    let ring_dark = inner.clone().all(|i| {
-        grid[2][i + 1] && grid[cells - 1][i + 1] && grid[i + 1][2] && grid[i + 1][cells - 1]
+    // The ring is read a quarter cell inside the border's edge, not at its cells' centres. A
+    // 2-bit border over d ≥ 4 data bits reads 2(d + 2)/(d + 4) ≥ 1.5 cells wide, so that point
+    // is a quarter cell from the edge under either layout. A centre (1.5) lies 0.1 cell from
+    // Kalibr's edge (1.6), within blur and lens bow.
+    let (near, far) = (1.25, n - 1.25);
+    let ring_dark = (1..cells - 1).all(|i| {
+        let c = i as f64 + 0.5;
+        [(c, near), (c, far), (near, c), (far, c)]
+            .into_iter()
+            .all(|(u, v)| sample(u, v) < threshold)
     });
     if ring_dark {
         return None;
@@ -742,18 +749,21 @@ mod tests {
     #[test]
     fn reads_a_wider_border_as_a_layout_mismatch() {
         // A 2-cell (Kalibr) border read as an 8-cell, 1-cell-border layout: the ring inside the
-        // read border is border too.
-        let h = Homography::square_to_quad(&OUTLINE).unwrap();
-        let read = |data: &[u8]| {
-            let img = ImageView::new(data, SIZE, SIZE, SIZE).unwrap();
-            read_bits(8, &|u: f64, v: f64| {
-                let p = h.project([u / 4.0 - 1.0, v / 4.0 - 1.0]);
-                img.sample_bilinear(p[0], p[1])
-            })
-            .is_some()
-        };
-        assert!(!read(&render(10, 2, 1.2, true)));
-        assert!(read(&render(8, 1, 1.2, true)));
+        // read border is border too. Under the distortion test's bow, the ring cells' centres
+        // (0.1 cell from Kalibr's edge) read as payload; the quarter-cell read does not.
+        for k1 in [0.0, -0.06] {
+            let h = Homography::square_to_quad(&OUTLINE.map(|c| distort(c, k1))).unwrap();
+            let read = |data: &[u8]| {
+                let img = ImageView::new(data, SIZE, SIZE, SIZE).unwrap();
+                read_bits(8, &|u: f64, v: f64| {
+                    let p = h.project([u / 4.0 - 1.0, v / 4.0 - 1.0]);
+                    img.sample_bilinear(p[0], p[1])
+                })
+                .is_some()
+            };
+            assert!(!read(&render_distorted(10, 2, 1.2, true, k1)), "k1 {k1}");
+            assert!(read(&render_distorted(8, 1, 1.2, true, k1)), "k1 {k1}");
+        }
     }
 
     /// The layout check above relies on it.
