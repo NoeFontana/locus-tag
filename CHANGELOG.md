@@ -7,25 +7,23 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
-- **AprilGrid corners: the junction pass now reaches small tags, and no longer inherits a
-  misread layout's inset.** Measured against rendered truth (Kalibr's printed 2-bit-border
-  AprilGrid, `grid` profile) and on EuRoC `cam_april`:
-  - `decoder.corner_subpix` refines an X-junction below the L-corner cell floor (~3.3 px) when
-    its window is point-symmetric. 20 px Kalibr tags go from 0.30 to 0.11 px median error, and
-    16–20 px tags on the hub's one-cell-border grid from 0.43–0.53 to 0.06–0.09 px.
-  - The marker-inset calibration is discarded when it moves the marker's refined X-junctions
-    more than 0.15 px RMS. A Kalibr 2-bit border read as a 1-bit layout passed its guards about
-    one time in eight and pushed the corners 0.3–0.4 px outward (+0.087 px tag-scale bias over
-    the refined corners of 32 px tags; now +0.000).
-  - EuRoC leave-one-out corner median 0.278 → 0.244 px (`grid`) and 0.279 → 0.244 px
+- **AprilGrid corners: the junction pass now reaches small tags, and the marker inset no longer
+  misreads Kalibr's 2-bit border.** Measured against rendered truth (Kalibr's printed
+  2-bit-border AprilGrid, `grid` profile) and on EuRoC `cam_april`:
+  - Under the L-corner cell floor (~3.3 px), `decoder.corner_subpix` tries the 2 px window at a
+    corner whose seed looks like an X-junction and keeps the solution only if the window is
+    point-symmetric (asymmetry ≤ 0.1, read on the estimator's own patch). 20 px Kalibr tags go
+    from 0.30 to 0.11 px median error, unbiased within 0.005 px.
+  - `marker_inset` declines a marker whose ring inside the border reads uniformly dark: no
+    codeword of a supported family has a uniform outer ring, so that is a wider border than the
+    layout. A Kalibr border read as a 1-bit layout passed the other guards about one time in
+    eight and pushed the corners 0.3–0.4 px outward (+0.087 px tag-scale bias on 32 px tags;
+    now within 0.005 px).
+  - EuRoC leave-one-out corner median 0.278 → 0.246 px (`grid`) and 0.279 → 0.246 px
     (`standard`), recall unchanged. AprilGrid board (`standard`): rotation mean 0.0104° →
-    0.0085°, p99 0.167° → 0.097°; translation mean 0.21 → 0.18 mm, p95 0.76 → 0.86 mm.
-    `high_accuracy` translation p99 0.19 → 0.42 mm, from two frames whose corners improve
-    (bias −0.09 → −0.04 px and −0.09 → −0.02 px). Every other snapshot is unchanged.
-- **`cargo deny` and `cargo fmt` gates green again.** `askama` (build-only) drops its default
-  `config`/`urlencode` features, removing the unmaintained `basic-toml` (RUSTSEC-2026-0374); the
-  generated `dictionaries.rs` is byte-identical. The `paste` advisory ignore is gone, since
-  `nalgebra` 0.35 no longer pulls it into the production graph.
+    0.0077°, p99 0.167° → 0.101°; translation mean 0.21 → 0.17 mm, p95 0.76 → 1.02 mm, p99
+    5.7 → 4.2 mm. `high_accuracy`: translation mean 0.024 → 0.026 mm, p99 0.19 → 0.29 mm,
+    rotation unchanged. Every other snapshot, ChArUco included, is unchanged.
 
 ### Changed
 

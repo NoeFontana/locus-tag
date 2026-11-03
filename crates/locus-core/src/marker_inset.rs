@@ -87,30 +87,6 @@ const MAX_LAYOUT_SCALE_DEVIATION: f64 = 0.05;
 /// Largest corner inset (px) accepted: past it the fit is not measuring a photometric shift.
 const MAX_INSET_PX: f64 = 1.5;
 
-/// Largest RMS move (px) a calibration may give a marker's refined X-junctions. A
-/// point-symmetric junction carries no edge offset, so a calibration that fits the marker leaves
-/// it in place: on the AprilGrid hub renders it moves them 0.035 px RMS (p99 0.08–0.20 down to
-/// 2.5 px cells). A Kalibr 2-bit border read as a 1-bit layout passes the fit's own guards about
-/// one time in eight and then moves them 0.35–0.42 px (p5 0.11), all outward.
-const MAX_JUNCTION_MOVE_PX: f64 = 0.15;
-
-/// Whether `calibrated` leaves the refined X-junctions of `refined` (bit `j` of `x_bits` =
-/// corner `j`) in place, within `MAX_JUNCTION_MOVE_PX` RMS. True when there are none.
-pub(crate) fn consistent_at_junctions(
-    refined: &[[f64; 2]; 4],
-    calibrated: &[[f64; 2]; 4],
-    x_bits: u8,
-) -> bool {
-    let (mut sum, mut n) = (0.0, 0u32);
-    for (j, (a, b)) in refined.iter().zip(calibrated).enumerate() {
-        if x_bits >> j & 1 == 1 {
-            sum += (a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]);
-            n += 1;
-        }
-    }
-    n == 0 || sum <= MAX_JUNCTION_MOVE_PX * MAX_JUNCTION_MOVE_PX * f64::from(n)
-}
-
 /// One boundary measurement: its regression row and measured offset.
 #[derive(Clone, Copy, Default)]
 struct Measurement {
@@ -353,6 +329,18 @@ fn read_bits(cells: usize, sample: &impl Fn(f64, f64) -> f64) -> Option<BitsView
         for u in 0..cells {
             grid[v + 1][u + 1] = values[v][u] < threshold;
         }
+    }
+    // The ring inside the border is the payload's outer ring, and no codeword of a supported
+    // family has it uniform (`no_codeword_has_a_uniform_outer_ring`). Read all dark, it is
+    // more border: a wider border than the layout, such as Kalibr's 2-bit one decoded as a
+    // 1-bit tag. The fit's own guards pass that about one time in eight, then push the corners
+    // 0.3–0.4 px outward.
+    let inner = 1..cells - 1;
+    let ring_dark = inner.clone().all(|i| {
+        grid[2][i + 1] && grid[cells - 1][i + 1] && grid[i + 1][2] && grid[i + 1][cells - 1]
+    });
+    if ring_dark {
+        return None;
     }
     Some(BitsView { grid, dark, white })
 }
@@ -752,17 +740,36 @@ mod tests {
     }
 
     #[test]
-    fn a_calibration_must_leave_refined_x_junctions_in_place() {
-        use super::consistent_at_junctions as ok;
-        let shifted = |d: f64| OUTLINE.map(|[x, y]| [x + d, y]);
-        assert!(ok(&OUTLINE, &shifted(0.1), 0b1111));
-        assert!(!ok(&OUTLINE, &shifted(0.3), 0b1111));
-        // Only the X-junctions are held: L-corners are what the calibration corrects.
-        let mut one = OUTLINE;
-        one[2][0] += 0.5;
-        assert!(ok(&OUTLINE, &one, 0b1011));
-        assert!(!ok(&OUTLINE, &one, 0b0100));
-        assert!(ok(&OUTLINE, &shifted(0.5), 0));
+    fn reads_a_wider_border_as_a_layout_mismatch() {
+        // A 2-cell (Kalibr) border read as an 8-cell, 1-cell-border layout: the ring inside the
+        // read border is border too.
+        let h = Homography::square_to_quad(&OUTLINE).unwrap();
+        let read = |data: &[u8]| {
+            let img = ImageView::new(data, SIZE, SIZE, SIZE).unwrap();
+            read_bits(8, &|u: f64, v: f64| {
+                let p = h.project([u / 4.0 - 1.0, v / 4.0 - 1.0]);
+                img.sample_bilinear(p[0], p[1])
+            })
+            .is_some()
+        };
+        assert!(!read(&render(10, 2, 1.2, true)));
+        assert!(read(&render(8, 1, 1.2, true)));
+    }
+
+    /// The layout check above relies on it.
+    #[test]
+    fn no_codeword_has_a_uniform_outer_ring() {
+        for &family in crate::config::TagFamily::all() {
+            let dict = crate::dictionaries::get_dictionary(family);
+            let n = dict.dimension;
+            for code in dict.codes {
+                let bit = |r: usize, c: usize| (code >> (n * n - 1 - (r * n + c))) & 1;
+                let ring =
+                    (0..n).flat_map(|i| [bit(0, i), bit(n - 1, i), bit(i, 0), bit(i, n - 1)]);
+                let ones: u64 = ring.sum();
+                assert!(0 < ones && ones < 4 * n as u64, "{family:?}: {code:#x}");
+            }
+        }
     }
 
     #[test]
