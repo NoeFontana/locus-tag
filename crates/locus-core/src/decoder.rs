@@ -1504,10 +1504,14 @@ fn finalize_decoded_candidate(
     let mut refined_bits = 0u8;
     if subpix {
         let seed = quad_to_f64(corners_slot);
-        let (subpix_corners, bits) = crate::refinement::subpix_marker_corners(img, seed, cells);
+        let (subpix_corners, bits, x_bits) =
+            crate::refinement::subpix_marker_corners(img, seed, cells);
         // Remove the photometric inset the decoded marker's bit edges measure.
         let final_corners =
             crate::marker_inset::calibrate_marker_corners(img, subpix_corners, cells)
+                .filter(|inset| {
+                    crate::marker_inset::consistent_at_junctions(&subpix_corners, inset, x_bits)
+                })
                 .unwrap_or(subpix_corners);
         refined_bits = bits;
         *corners_slot = quad_to_f32(&final_corners);

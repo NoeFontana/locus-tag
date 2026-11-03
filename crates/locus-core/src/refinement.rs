@@ -143,24 +143,89 @@ const SUBPIX_SIGNIFICANT_RATIO: f64 = 2.0;
 /// for the central-difference gradients.
 const SUBPIX_PATCH_MAX: usize = 2 * (SUBPIX_MAX_HALF as usize + 1) + 1;
 
+/// Largest [`point_asymmetry`] of an X-junction window. Measured on AprilGrid renders against
+/// truth: refined corners within 0.15 px of it read 0.018 (p90 0.047), and those over 0.3 px
+/// off, where a 2 px window reaches past a one-cell border into the data bits, read 0.41 (p10
+/// 0.25). Kalibr's 2-bit-border junctions read p99 0.08.
+const X_MAX_ASYMMETRY: f64 = 0.1;
+
+/// How far the image around `corner` (`c`) is from point-symmetric, under [`corner_subpix`]'s
+/// window weights `exp(−r²/half²)`: `Σ w·(I(c + r) − I(c − r))² / (2·Σ w·(I − Ī)²)`, sampled
+/// every half pixel out to `2·half`. 0 for an ideal X-junction under a symmetric blur, about 1 for an
+/// L-corner. Gradient orthogonality is unbiased on a point-symmetric window, which is what the
+/// X-junction windows rely on.
+fn point_asymmetry(img: &ImageView, corner: [f64; 2], half: f64) -> f64 {
+    // Samples 0.5 px apart; `2·half` in half-pixel steps, at most 16.
+    #[allow(clippy::cast_possible_truncation)]
+    let reach = (4.0 * half).ceil() as i32;
+    let inv = 1.0 / (half * half);
+    let (mut anti, mut sum_w, mut sum_i, mut sum_ii) = (0.0, 0.0, 0.0, 0.0);
+    for dy in -reach..=reach {
+        for dx in -reach..=reach {
+            let (ox, oy) = (0.5 * f64::from(dx), 0.5 * f64::from(dy));
+            let weight = (-(ox * ox + oy * oy) * inv).exp();
+            let ahead = img.sample_bilinear(corner[0] + ox, corner[1] + oy);
+            let behind = img.sample_bilinear(corner[0] - ox, corner[1] - oy);
+            anti += weight * (ahead - behind) * (ahead - behind);
+            sum_w += weight;
+            sum_i += weight * ahead;
+            sum_ii += weight * ahead * ahead;
+        }
+    }
+    let mean = sum_i / sum_w;
+    let var = sum_ii / sum_w - mean * mean;
+    if var > 0.0 {
+        anti / sum_w / (2.0 * var)
+    } else {
+        f64::INFINITY
+    }
+}
+
+/// The junction a marker corner sits on, which bounds its [`corner_subpix`] window.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Junction {
+    /// The marker's black border alone meets the quiet zone: one dark quadrant.
+    L,
+    /// A dark square touches the corner diagonally (an AprilGrid connector): two opposite dark
+    /// quadrants, point-symmetric about the corner ([`junction_is_x`]).
+    X,
+}
+
 /// Candidate window half-widths of [`corner_subpix`] for a marker whose side spans `cells`
 /// cells over `side_px` pixels: `clamp(round(f·cell), 2, 4)` for `f` in 0.3, 0.5, 0.75 cell,
 /// deduplicated, ascending. Returns the array and how many entries are used.
 ///
-/// The bounds come from the corner model. The estimator assumes an ideal L-junction, so
+/// The bounds come from the corner model. The estimator assumes an ideal junction, so
 /// gradients near the blurred apex are not orthogonal to `p − c`; the window must reach past
-/// the blur (2 px floor, 4 px cap covering the PSFs measured on the benchmarks). The model
-/// holds only within the black border cell and the quiet zone, so the window stays under a
-/// cell. Inside those bounds the best size depends on how close other structure sits to the
-/// corner, which only the image shows, so [`subpix_marker_corners`] tries each candidate and
-/// keeps the most certain result.
-pub(crate) fn corner_subpix_half_windows(side_px: f64, cells: usize) -> ([u32; 3], usize) {
+/// the blur (2 px floor, 4 px cap covering the PSFs measured on the benchmarks). Inside those
+/// bounds the best size depends on how close other structure sits to the corner, which only
+/// the image shows, so [`subpix_marker_corners`] tries each candidate and keeps the most
+/// certain result.
+///
+/// - **L-corner:** the model holds only within the black border cell and the quiet zone, so a
+///   marker whose cell cannot hold the 2 px window (`SUBPIX_MIN_WINDOW_CELL_FRACTION`) gets no
+///   candidate and keeps its seed.
+/// - **X-junction:** no cell floor. Gradient orthogonality is unbiased on a point-symmetric
+///   window, so instead each solution's window must be one ([`point_asymmetry`], checked by
+///   [`marker_junction`]). On Kalibr's 2-bit border that holds down to 12 px tags, and takes
+///   20 px tags from 0.30 to 0.11 px median error, unbiased within 0.005 px. On a one-cell
+///   border it fails once the window reaches the data bits, and those corners keep their seed.
+///   [`subpix_marker_corners`] uses these windows only where the L-corner ones give none: the
+///   seed test cannot tell an X-junction from an L-corner on a dark surround (underexposed
+///   scenes), and above the floor the L-corner windows already serve both.
+pub(crate) fn corner_subpix_half_windows(
+    side_px: f64,
+    cells: usize,
+    junction: Junction,
+) -> ([u32; 3], usize) {
     let cell = side_px / cells.max(1) as f64;
     let mut out = [0u32; 3];
     let mut n = 0;
-    // The smallest window must fit well inside a cell, or the junction model cannot hold
-    // anywhere in it: no candidate, so the corner keeps its seed.
-    if f64::from(SUBPIX_MIN_HALF) > SUBPIX_MIN_WINDOW_CELL_FRACTION * cell {
+    let fits = match junction {
+        Junction::L => f64::from(SUBPIX_MIN_HALF) <= SUBPIX_MIN_WINDOW_CELL_FRACTION * cell,
+        Junction::X => cell > 0.0,
+    };
+    if !fits {
         return (out, 0);
     }
     for f in SUBPIX_CELL_FRACTIONS {
@@ -205,14 +270,20 @@ const SUBPIX_EPS: f64 = 0.005;
 /// ([`junction_is_x`]: AprilGrid connectors) the edge lines carry the photometric edge offset
 /// and the junction point does not, so the junction estimate stands alone. Fusion assumes a
 /// pinhole image, where the edges are straight; the decoder only calls this on one.
+///
+/// Each corner's windows follow its junction, classified at the seed
+/// ([`corner_subpix_half_windows`]). Returns the corners, which moved, and which of those are
+/// X-junctions (bit `j` = corner `j`): those carry no edge offset, which is what the decoder
+/// checks a marker-inset calibration against.
 pub(crate) fn subpix_marker_corners(
     img: &ImageView,
     seed: [[f64; 2]; 4],
     cells: usize,
-) -> ([[f64; 2]; 4], u8) {
+) -> ([[f64; 2]; 4], u8, u8) {
     let side = mean_side(&seed);
     let cell = side / cells.max(1) as f64;
-    let (halves, count) = corner_subpix_half_windows(side, cells);
+    let l_windows = corner_subpix_half_windows(side, cells, Junction::L);
+    let x_windows = corner_subpix_half_windows(side, cells, Junction::X);
     // The consistency probes sit half a cell from the corner.
     let probe = (0.5 * cell).max(1.0);
     // The edge band spans the blur and the refined corners' error, and stays within half a cell.
@@ -220,9 +291,19 @@ pub(crate) fn subpix_marker_corners(
     let mut out = seed;
     let mut refined_bits = 0u8;
     let mut picks = [None::<Subpix>; 4];
+    // A corner too small for the L-corner windows gets the X-junction ones if its seed looks
+    // like an X-junction; each of their solutions must then prove it by its own symmetry.
+    let windows: [(Junction, &[u32]); 4] = std::array::from_fn(|j| {
+        let (prev, next) = (seed[(j + 3) % 4], seed[(j + 1) % 4]);
+        if l_windows.1 == 0 && junction_is_x(img, seed[j], prev, next, seed[j], probe) {
+            (Junction::X, &x_windows.0[..x_windows.1])
+        } else {
+            (Junction::L, &l_windows.0[..l_windows.1])
+        }
+    });
     for j in 0..4 {
         let (prev, next) = (seed[(j + 3) % 4], seed[(j + 1) % 4]);
-        if let Some(pick) = marker_junction(img, seed[j], prev, next, &halves[..count], probe) {
+        if let Some(pick) = marker_junction(img, seed[j], prev, next, windows[j], probe) {
             out[j] = pick.corner;
             refined_bits |= 1 << j;
             picks[j] = Some(pick);
@@ -233,7 +314,7 @@ pub(crate) fn subpix_marker_corners(
     // and no window reaches the junction. Its two edges still run straight from the good
     // neighbours, so they place it. A repaired corner can make its neighbour repairable, so
     // the sweep repeats until no corner changes.
-    let mut repaired = count > 0;
+    let mut repaired = windows.iter().any(|(_, w)| !w.is_empty());
     while repaired {
         repaired = false;
         for j in 0..4 {
@@ -241,7 +322,7 @@ pub(crate) fn subpix_marker_corners(
             if picks[j].is_none()
                 && picks[p].is_some()
                 && picks[n].is_some()
-                && let Some(pick) = repair_corner(img, &out, j, side, half, &halves[..count], probe)
+                && let Some(pick) = repair_corner(img, &out, j, side, half, windows[j], probe)
             {
                 out[j] = pick.corner;
                 refined_bits |= 1 << j;
@@ -254,56 +335,65 @@ pub(crate) fn subpix_marker_corners(
     // or none: a marker whose corners mix the two estimators (they differ by the junction
     // model's apex bias) is no longer a consistent square, which the pose turns into rotation
     // error. So every corner must be a refined L-corner before any edge is fitted.
+    // Edges between the refined corners: their directions are already corrected.
+    let anchors = out;
+    let mut x_bits = 0u8;
+    for (j, pick) in picks.iter().enumerate() {
+        let (prev, next) = (anchors[(j + 3) % 4], anchors[(j + 1) % 4]);
+        if let Some(pick) = pick
+            && junction_is_x(img, pick.corner, prev, next, anchors[j], probe)
+        {
+            x_bits |= 1 << j;
+        }
+    }
     let [Some(p0), Some(p1), Some(p2), Some(p3)] = picks else {
-        return (out, refined_bits);
+        return (out, refined_bits, x_bits);
     };
     let locals = [p0, p1, p2, p3];
-    // Edges between the locally refined corners: their directions are already corrected.
-    let anchors = out;
-    if (0..4).any(|j| {
-        let (prev, next) = (anchors[(j + 3) % 4], anchors[(j + 1) % 4]);
-        junction_is_x(img, locals[j].corner, prev, next, anchors[j], probe)
-    }) {
-        return (out, refined_bits);
+    if x_bits != 0 {
+        return (out, refined_bits, x_bits);
     }
     let edges: [Option<EdgeLine>; 4] = edge_lines(img, &anchors, half);
     let mut fused = [[0.0f64; 2]; 4];
     for (j, local) in locals.iter().enumerate() {
         let (Some(before), Some(after)) = (edges[(j + 3) % 4], edges[j]) else {
-            return (out, refined_bits);
+            return (out, refined_bits, x_bits);
         };
         let Some((line_corner, line_cov)) = intersect_edges(&before, &after) else {
-            return (out, refined_bits);
+            return (out, refined_bits, x_bits);
         };
         let moved = (line_corner[0] - anchors[j][0]).hypot(line_corner[1] - anchors[j][1]);
         if moved > LINE_CORNER_MAX_MOVE_PX {
-            return (out, refined_bits);
+            return (out, refined_bits, x_bits);
         }
         let Some(corner) = fuse_corner(local.corner, local.cov, line_corner, line_cov) else {
-            return (out, refined_bits);
+            return (out, refined_bits, x_bits);
         };
         fused[j] = corner;
     }
     out = fused;
-    (out, refined_bits)
+    (out, refined_bits, x_bits)
 }
 
 /// The marker junction near `seed` (adjacent corners `prev`, `next`): [`corner_subpix`] at each
 /// window half-width in `halves` (ascending), keeping solutions that pass
-/// [`marker_corner_consistent`], and of those the largest window that is not significantly
-/// less certain than the best one.
+/// [`marker_corner_consistent`] and, at an X-junction, whose window is point-symmetric
+/// ([`point_asymmetry`] within `X_MAX_ASYMMETRY`); of those, the largest window that is not
+/// significantly less certain than the best one.
 fn marker_junction(
     img: &ImageView,
     seed: [f64; 2],
     prev: [f64; 2],
     next: [f64; 2],
-    halves: &[u32],
+    (junction, halves): (Junction, &[u32]),
     probe: f64,
 ) -> Option<Subpix> {
     let mut accepted = [None::<Subpix>; 3];
     for (slot, &half) in accepted.iter_mut().zip(halves) {
         *slot = corner_subpix(img, seed, half).filter(|refined| {
             marker_corner_consistent(img, refined.corner, prev, next, seed, probe)
+                && (junction == Junction::L
+                    || point_asymmetry(img, refined.corner, f64::from(half)) <= X_MAX_ASYMMETRY)
         });
     }
     let least = accepted
@@ -333,7 +423,7 @@ const REPAIR_TOLERANCE_PX: f64 = 0.05;
 /// then be confirmed as a marker junction by [`marker_junction`], so a repair is never weaker
 /// evidence than an ordinary refined corner.
 ///
-/// `side` is the marker's mean side, `half` the edge band half-width and `halves`, `probe` the
+/// `side` is the marker's mean side, `half` the edge band half-width and `windows`, `probe` the
 /// junction windows and consistency probe distance, all as [`subpix_marker_corners`] sets them.
 fn repair_corner(
     img: &ImageView,
@@ -341,7 +431,7 @@ fn repair_corner(
     j: usize,
     side: f64,
     half: f64,
-    halves: &[u32],
+    windows: (Junction, &[u32]),
     probe: f64,
 ) -> Option<Subpix> {
     let (prev, seed, next) = (quad[(j + 3) % 4], quad[j], quad[(j + 1) % 4]);
@@ -363,7 +453,7 @@ fn repair_corner(
     if (corner[0] - seed[0]).hypot(corner[1] - seed[1]) > REPAIR_MAX_SIDE_FRACTION * side {
         return None;
     }
-    marker_junction(img, corner, prev, next, halves, probe)
+    marker_junction(img, corner, prev, next, windows, probe)
 }
 
 /// Inverse-covariance fusion of two corner estimates `a`, `b` with covariances `[xx, xy, yy]`.
@@ -903,7 +993,8 @@ mod subpix_tests {
 
     #[test]
     fn candidate_windows_follow_the_cell_within_the_blur_bounds() {
-        use super::corner_subpix_half_windows as hw;
+        use super::Junction;
+        let hw = |side, cells| super::corner_subpix_half_windows(side, cells, Junction::L);
         let used = |(h, n): ([u32; 3], usize)| h[..n].to_vec();
         // 8-cell markers: cell = side / 8; candidates round(0.3/0.5/0.75 · cell) in [2, 4].
         assert_eq!(used(hw(16.0, 8)), Vec::<u32>::new()); // cell 2 px: no window fits
@@ -913,6 +1004,51 @@ mod subpix_tests {
         assert_eq!(used(hw(48.0, 8)), vec![2, 3, 4]); // cell 6 px: 1.8, 3, 4.5
         assert_eq!(used(hw(400.0, 8)), vec![4]);
         assert_eq!(used(hw(0.0, 8)), Vec::<u32>::new());
+    }
+
+    #[test]
+    fn x_junction_windows_have_no_cell_floor() {
+        use super::Junction;
+        let hw = |side, cells| super::corner_subpix_half_windows(side, cells, Junction::X);
+        let used = |(h, n): ([u32; 3], usize)| h[..n].to_vec();
+        assert_eq!(used(hw(12.0, 8)), vec![2]); // cell 1.5 px: an L-corner gets none
+        assert_eq!(used(hw(16.0, 8)), vec![2]);
+        assert_eq!(used(hw(32.0, 8)), vec![2, 3]); // as at an L-corner once the cell fits
+        assert_eq!(used(hw(0.0, 8)), Vec::<u32>::new());
+    }
+
+    /// A 16 px marker (2 px cells, under the L-corner floor) on an AprilGrid: connector squares
+    /// touch its four corners. Each corner is an X-junction, refined from a seed 0.6 px off.
+    #[test]
+    fn refines_small_aprilgrid_x_junctions() {
+        use super::subpix_marker_corners;
+        // Marker [24, 40)²: a one-cell (2 px) black ring around a bright payload with one dark
+        // bit; 6 px connector squares diagonally on each corner.
+        let mut data = squares(&[
+            [24, 40, 24, 40],
+            [18, 24, 18, 24],
+            [40, 46, 18, 24],
+            [40, 46, 40, 46],
+            [18, 24, 40, 46],
+        ]);
+        for y in 26..38 {
+            for x in 26..38 {
+                data[y * W + x] = if (30..32).contains(&x) && (28..30).contains(&y) {
+                    40
+                } else {
+                    220
+                };
+            }
+        }
+        let img = ImageView::new(&data, W, W, W).unwrap();
+        let truth = [[24.0, 24.0], [40.0, 24.0], [40.0, 40.0], [24.0, 40.0]];
+        let seed = truth.map(|[x, y]| [x + 0.6, y - 0.4]);
+        let (got, moved, x) = subpix_marker_corners(&img, seed, 8);
+        assert_eq!((moved, x), (0b1111, 0b1111));
+        for (g, t) in got.iter().zip(&truth) {
+            let d = (g[0] - t[0]).hypot(g[1] - t[1]);
+            assert!(d < 0.05, "{got:?} vs {truth:?}");
+        }
     }
 
     /// Bright canvas with the given dark axis-aligned squares `[x0, x1) × [y0, y1)`.
@@ -971,7 +1107,7 @@ mod subpix_tests {
         let truth = [[16.0, 16.0], [48.0, 16.0], [48.0, 48.0], [16.0, 48.0]];
         let mut seed = truth;
         seed[2] = [48.0, 44.0];
-        let (got, bits) = subpix_marker_corners(&img, seed, 8);
+        let (got, bits, _) = subpix_marker_corners(&img, seed, 8);
         assert_eq!(bits, 0b1111);
         for (g, t) in got.iter().zip(&truth) {
             let d = (g[0] - t[0]).hypot(g[1] - t[1]);

@@ -87,6 +87,30 @@ const MAX_LAYOUT_SCALE_DEVIATION: f64 = 0.05;
 /// Largest corner inset (px) accepted: past it the fit is not measuring a photometric shift.
 const MAX_INSET_PX: f64 = 1.5;
 
+/// Largest RMS move (px) a calibration may give a marker's refined X-junctions. A
+/// point-symmetric junction carries no edge offset, so a calibration that fits the marker leaves
+/// it in place: on the AprilGrid hub renders it moves them 0.035 px RMS (p99 0.08–0.20 down to
+/// 2.5 px cells). A Kalibr 2-bit border read as a 1-bit layout passes the fit's own guards about
+/// one time in eight and then moves them 0.35–0.42 px (p5 0.11), all outward.
+const MAX_JUNCTION_MOVE_PX: f64 = 0.15;
+
+/// Whether `calibrated` leaves the refined X-junctions of `refined` (bit `j` of `x_bits` =
+/// corner `j`) in place, within `MAX_JUNCTION_MOVE_PX` RMS. True when there are none.
+pub(crate) fn consistent_at_junctions(
+    refined: &[[f64; 2]; 4],
+    calibrated: &[[f64; 2]; 4],
+    x_bits: u8,
+) -> bool {
+    let (mut sum, mut n) = (0.0, 0u32);
+    for (j, (a, b)) in refined.iter().zip(calibrated).enumerate() {
+        if x_bits >> j & 1 == 1 {
+            sum += (a[0] - b[0]) * (a[0] - b[0]) + (a[1] - b[1]) * (a[1] - b[1]);
+            n += 1;
+        }
+    }
+    n == 0 || sum <= MAX_JUNCTION_MOVE_PX * MAX_JUNCTION_MOVE_PX * f64::from(n)
+}
+
 /// One boundary measurement: its regression row and measured offset.
 #[derive(Clone, Copy, Default)]
 struct Measurement {
@@ -725,6 +749,20 @@ mod tests {
         let data = render(8, 1, 1.2, true);
         let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
         assert!(calibrate_marker_corners(&img, OUTLINE, 40).is_none());
+    }
+
+    #[test]
+    fn a_calibration_must_leave_refined_x_junctions_in_place() {
+        use super::consistent_at_junctions as ok;
+        let shifted = |d: f64| OUTLINE.map(|[x, y]| [x + d, y]);
+        assert!(ok(&OUTLINE, &shifted(0.1), 0b1111));
+        assert!(!ok(&OUTLINE, &shifted(0.3), 0b1111));
+        // Only the X-junctions are held: L-corners are what the calibration corrects.
+        let mut one = OUTLINE;
+        one[2][0] += 0.5;
+        assert!(ok(&OUTLINE, &one, 0b1011));
+        assert!(!ok(&OUTLINE, &one, 0b0100));
+        assert!(ok(&OUTLINE, &shifted(0.5), 0));
     }
 
     #[test]
