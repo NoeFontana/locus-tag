@@ -1369,6 +1369,12 @@ impl<W: Warp> CandidateSampler<'_, W> {
         })
     }
 
+    /// Cells across the outline of a `decoder` marker: its payload inside the printed border.
+    #[inline]
+    fn cells(&self, decoder: &(impl TagDecoder + ?Sized)) -> usize {
+        decoder.dimension() + 2 * self.border
+    }
+
     /// Working-plane homography of a quad given in **raw pixel** coordinates.
     ///
     /// For a rectified camera this is exactly `homography_matrix(quad)`. For a warped one the
@@ -1522,7 +1528,7 @@ fn sample_points_warped<W: Warp>(
 /// a camera model, and a lens cannot make a corner stop being a corner. Keeping one copy is what
 /// stops the next one diverging again.
 ///
-/// `cells` is the decoded marker's grid (payload plus its one-cell black border), which sizes
+/// `cells` is the decoded marker's grid (payload plus its printed black border), which sizes
 /// the sub-pixel window; `corners_already_moved` reports whether the caller's own refinement
 /// (the ERF / `refinement_mode` pass) had already displaced the corners, so the homography is
 /// rebuilt exactly when the quad changed.
@@ -1550,7 +1556,7 @@ fn finalize_decoded_candidate(
     let mut refined_bits = 0u8;
     if subpix {
         let seed = quad_to_f64(corners_slot);
-        let border = usize::from(config.decoder_marker_border_bits);
+        let border = config.marker_border();
         let (subpix_corners, bits) =
             crate::refinement::subpix_marker_corners(img, seed, cells, border);
         // Remove the photometric inset the decoded marker's bit edges measure.
@@ -1782,7 +1788,7 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                 let input_corners: [Point2f; 4] = *corners_slot;
                 let input_homography: Matrix3x3 = *h_slot;
 
-                // Cells across the matched family's outline (payload plus the one-cell border):
+                // Cells across the matched family's outline (payload plus the printed border):
                 // the layout the sub-pixel stage and the photometric calibration read.
                 let mut cells = 0usize;
                 let (state, id, rot, payload, error_rate, refined_corners) = WORKSPACE_ARENA
@@ -1828,7 +1834,7 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                             img,
                             roi,
                             warp,
-                            border: usize::from(config.decoder_marker_border_bits),
+                            border: config.marker_border(),
                         };
 
                         let mut best_h = u32::MAX;
@@ -1920,7 +1926,7 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                             if let Some((id, hamming, rot, code, decoder_idx)) = best_match_in_scale
                             {
                                 let decoder = decoders[decoder_idx].as_ref();
-                                cells = decoder.dimension() + 2 * sampler.border;
+                                cells = sampler.cells(decoder);
 
                                 // Always perform ERF refinement for finalists if requested
                                 if config.refinement_mode
@@ -2095,7 +2101,7 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                                         decoder.as_ref(),
                                                     )
                                                 {
-                                                    cells = decoder.dimension() + 2 * sampler.border;
+                                                    cells = sampler.cells(decoder.as_ref());
                                                     return (
                                                         CandidateState::Valid,
                                                         id,
@@ -2154,7 +2160,7 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                                             decoder.as_ref(),
                                                         )
                                                     {
-                                                        cells = decoder.dimension() + 2 * sampler.border;
+                                                        cells = sampler.cells(decoder.as_ref());
                                                         return (
                                                             CandidateState::Valid,
                                                             id,

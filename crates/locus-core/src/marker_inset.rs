@@ -45,8 +45,9 @@ const BOW_PARAMS: [usize; 4] = [6, 7, 8, 9];
 /// robust weights being estimated from the same residuals.
 const BOW_F_CRITICAL: f64 = 3.5;
 
-/// Largest layout handled, in cells across including the border.
-const MAX_CELLS: usize = 10;
+/// Largest layout handled, in cells across including the border: the widest family (6 data
+/// bits) inside the widest supported border.
+const MAX_CELLS: usize = 6 + 2 * crate::config::MAX_MARKER_BORDER_BITS as usize;
 /// Positions along each boundary segment (fractions of its cell) where the edge is measured.
 /// The segment ends are left out: there the boundary meets the next one at a junction.
 const STATIONS: [f64; 2] = [1.0 / 3.0, 2.0 / 3.0];

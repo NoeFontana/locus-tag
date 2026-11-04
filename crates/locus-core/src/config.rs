@@ -287,8 +287,8 @@ pub struct DetectorConfig {
     /// 3. The corners are calibrated against the marker's own bit edges, which removes the
     ///    tone-curve inset every gradient estimator has on gamma-encoded images.
     ///
-    /// Applies to undistorted cameras, and skips markers whose cells are under ~3.3 px (their
-    /// seed corners are kept).
+    /// Applies to undistorted cameras, and skips markers whose black border is under ~3.3 px
+    /// wide, one cell by default (their seed corners are kept).
     pub decoder_corner_subpix: bool,
     /// Width of the printed black border, in bits (default 1; OpenCV's `markerBorderBits`).
     ///
@@ -491,6 +491,19 @@ impl Default for DetectorConfig {
 }
 
 impl DetectorConfig {
+    /// [`Self::decoder_marker_border_bits`] as the stages read it. Clamped because
+    /// `Detector::with_config` does not validate: 0 would leave the border evidence with no
+    /// cells and a width past [`MAX_MARKER_BORDER_BITS`] would overflow its buffers, and both
+    /// would wave every candidate through the false-positive gate.
+    #[inline]
+    #[must_use]
+    pub(crate) fn marker_border(&self) -> usize {
+        usize::from(
+            self.decoder_marker_border_bits
+                .clamp(1, MAX_MARKER_BORDER_BITS),
+        )
+    }
+
     /// Validate the configuration, returning an error if any parameter is out of range.
     ///
     /// # Errors

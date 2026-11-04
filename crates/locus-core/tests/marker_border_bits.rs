@@ -1,7 +1,13 @@
 //! `decoder.marker_border_bits`: a marker printed with a wider border than its family's
 //! one-bit layout (Kalibr's AprilGrid prints tag36h11 with two) decodes on its true lattice.
 #![cfg(feature = "bench-internals")]
-#![allow(clippy::unwrap_used, clippy::expect_used, missing_docs)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::cast_sign_loss,
+    clippy::float_cmp,
+    missing_docs
+)]
 
 use locus_core::bench_api::generate_synthetic_test_image;
 use locus_core::{Detector, DetectorConfig, ImageView, TagFamily};

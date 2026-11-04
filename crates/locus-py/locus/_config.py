@@ -259,7 +259,7 @@ class DecoderConfig(BaseModel):
     against the marker's own bit edges, which removes the tone-curve inset that every
     gradient corner estimator has on gamma-encoded images. Windows and weights come from
     the image; nothing is configured. Applies to undistorted cameras, and skips markers whose
-    cells are under ~3.3 px (their seed corners are kept)."""
+    black border is under ~3.3 px wide, one cell by default (their seed corners are kept)."""
     marker_border_bits: int = Field(default=1, ge=1, le=3)
     """Width of the printed black border, in bits (OpenCV's ``markerBorderBits``). The
     detected quad is the border's outline, so a wider printed border than the decoded layout

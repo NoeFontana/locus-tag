@@ -2263,7 +2263,13 @@ pub fn refine_poses_soa_with_config(
             if let (true, Some(dim), Some(image)) =
                 (config.pose_edge_refinement_enabled, edge_refine_dim, img)
                 && let Some(refined) = crate::model_edge::refine_pose_model_edges(
-                    intrinsics, image, dim, tag_size, &pose, &corners,
+                    intrinsics,
+                    image,
+                    dim,
+                    config.marker_border(),
+                    tag_size,
+                    &pose,
+                    &corners,
                 )
             {
                 let gate_info = isotropic_info_matrices(config.pose_consistency_gate_sigma_px);

@@ -103,7 +103,7 @@ blob shape:
 | `quad.min_fill_ratio`, `quad.max_elongation`, `quad.min_density` | `0.0` (off) | The filled-blob gates reject markers merged with neighbouring structure or with hollow threshold rings although they decode. |
 | `quad.extraction_mode` / `decoder.refinement_mode` | `ContourRdp` / `Erf` | Decode-first: candidates are decoded from their contour corners and only those that decode, or nearly do, are ERF-refined and re-verified. |
 | `decoder.max_border_error_rate` | omitted (per family) | Each family's dark border ring may carry its codeword's own error density (one ring cell of 28 for tag36h11, none for tag16h5). |
-| `decoder.corner_subpix` | `true` | Sub-pixel junction refinement of every decoded marker, calibrated against its own bit edges (undistorted cameras; markers with cells under ~3.3 px keep their seed corners). |
+| `decoder.corner_subpix` | `true` | Sub-pixel junction refinement of every decoded marker, calibrated against its own bit edges (undistorted cameras; markers whose black border is under ~3.3 px wide keep their seed corners). |
 | `decoder.marker_border_bits` | omitted (1) | Printed black-border width in bits (OpenCV's `markerBorderBits`). No shipped profile sets it: it describes the print, not the scene. Set 2 for Kalibr's AprilGrid. |
 | `threshold.enable_sharpening` | `true` | Laplacian pre-sharpening recovers small-tag edges. |
 | `quad.min_area`, `quad.min_edge_score`, `decoder.min_contrast` | `36`, `4.0`, `20.0` | `36` px² is one pixel per bit on the smallest supported family (6×6 cells). |

@@ -159,9 +159,9 @@ const SUBPIX_PATCH_MAX: usize = 2 * (SUBPIX_MAX_HALF as usize + 1) + 1;
 /// gradients near the blurred apex are not orthogonal to `p − c`; the window must reach past
 /// the blur (2 px floor, 4 px cap covering the PSFs measured on the benchmarks). The model
 /// holds only within the black border and the quiet zone, so the window stays under the
-/// border's width `border_px` (one cell for a 1-bit border). Inside those bounds the best size depends on how close other structure sits to the
-/// corner, which only the image shows, so [`subpix_marker_corners`] tries each candidate and
-/// keeps the most certain result.
+/// border's width (one cell for a 1-bit border). Inside those bounds the best size depends on
+/// how close other structure sits to the corner, which only the image shows, so
+/// [`subpix_marker_corners`] tries each candidate and keeps the most certain result.
 pub(crate) fn corner_subpix_half_windows(border_px: f64) -> ([u32; 3], usize) {
     let mut out = [0u32; 3];
     let mut n = 0;
@@ -986,12 +986,12 @@ mod subpix_tests {
     fn candidate_windows_follow_the_cell_within_the_blur_bounds() {
         use super::corner_subpix_half_windows as hw;
         let used = |(h, n): ([u32; 3], usize)| h[..n].to_vec();
-        // 8-cell markers: cell = side / 8; candidates round(0.3/0.5/0.75 · cell) in [2, 4].
-        assert_eq!(used(hw(2.0)), Vec::<u32>::new()); // cell 2 px: no window fits
-        assert_eq!(used(hw(3.0)), Vec::<u32>::new()); // cell 3 px: under 3.3 px
-        assert_eq!(used(hw(3.5)), vec![2, 3]); // cell 3.5 px: 1.05, 1.75, 2.6
-        assert_eq!(used(hw(4.0)), vec![2, 3]); // cell 4 px: 1.2, 2, 3
-        assert_eq!(used(hw(6.0)), vec![2, 3, 4]); // cell 6 px: 1.8, 3, 4.5
+        // Candidates round(0.3/0.5/0.75 · border) in [2, 4].
+        assert_eq!(used(hw(2.0)), Vec::<u32>::new()); // border 2 px: no window fits
+        assert_eq!(used(hw(3.0)), Vec::<u32>::new()); // border 3 px: under 3.3 px
+        assert_eq!(used(hw(3.5)), vec![2, 3]); // border 3.5 px: 1.05, 1.75, 2.6
+        assert_eq!(used(hw(4.0)), vec![2, 3]); // border 4 px: 1.2, 2, 3
+        assert_eq!(used(hw(6.0)), vec![2, 3, 4]); // border 6 px: 1.8, 3, 4.5
         assert_eq!(used(hw(50.0)), vec![4]);
         assert_eq!(used(hw(0.0)), Vec::<u32>::new());
     }
