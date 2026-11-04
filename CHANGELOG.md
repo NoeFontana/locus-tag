@@ -24,6 +24,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     0.0077°, p99 0.167° → 0.101°; translation mean 0.21 → 0.17 mm, p95 0.76 → 1.02 mm, p99
     5.7 → 4.2 mm. `high_accuracy`: translation mean 0.024 → 0.026 mm, p99 0.19 → 0.29 mm,
     rotation unchanged. Every other snapshot, ChArUco included, is unchanged.
+- **`cargo deny` and `cargo fmt` gates green again.** `askama` (build-only) drops its default
+  `config`/`urlencode` features, removing the unmaintained `basic-toml` (RUSTSEC-2026-0374); the
+  generated `dictionaries.rs` is byte-identical. The `paste` advisory ignore is gone, since
+  `nalgebra` 0.35 no longer pulls it into the production graph.
 
 ### Changed
 
