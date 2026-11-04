@@ -143,7 +143,7 @@ pub(crate) fn extract_quads_fast(
     clippy::too_many_arguments,
     reason = "hot-path quad-extraction pipeline stage; batch, image views, config, decimation and telemetry flags pass straight through, and grouping them into a struct would add indirection on the per-frame hot path"
 )]
-#[tracing::instrument(skip_all, name = "pipeline::quad_extraction")]
+#[cfg(feature = "bench-internals")]
 pub fn extract_quads_soa(
     batch: &mut DetectionBatch,
     img: &ImageView,
@@ -154,16 +154,61 @@ pub fn extract_quads_soa(
     min_outer_dim: u32,
     debug_telemetry: bool,
 ) -> (usize, Option<Vec<[Point; 4]>>) {
+    let mut component_of = [0u32; MAX_CANDIDATES];
+    let config = DetectorConfig {
+        quad_split_fused: false,
+        ..*config
+    };
+    let (n, unrefined, _) = extract_quads_soa_tracked(
+        batch,
+        img,
+        label_result,
+        &config,
+        decimation,
+        refinement_img,
+        min_outer_dim,
+        debug_telemetry,
+        &mut component_of,
+        &mut [],
+    );
+    (n, unrefined)
+}
+
+/// [`extract_quads_soa`] that also records, per candidate, the label of the component it was
+/// traced from and, under `quad_split_fused`, the large components that traced no quad, both
+/// for [`extract_split_quads`]. `unquadded` must hold one slot per component; returns the
+/// candidate count, the unrefined corners (telemetry) and the number of unquadded labels.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the per-frame extraction context of `extract_quads_soa`, plus its output columns"
+)]
+#[tracing::instrument(skip_all, name = "pipeline::quad_extraction")]
+pub(crate) fn extract_quads_soa_tracked(
+    batch: &mut DetectionBatch,
+    img: &ImageView,
+    label_result: &LabelResult,
+    config: &DetectorConfig,
+    decimation: usize,
+    refinement_img: &ImageView,
+    min_outer_dim: u32,
+    debug_telemetry: bool,
+    component_of: &mut [u32],
+    unquadded: &mut [u32],
+) -> (usize, Option<Vec<[Point; 4]>>, usize) {
     use rayon::prelude::*;
 
     let stats = &label_result.component_stats;
     let order = pixel_count_descending_order(stats);
 
-    let mut detections: Vec<ExtractionResult> = order
+    // A component too irregular to trace as a quad may still be markers fused at their corners;
+    // under `quad_split_fused` the large ones are listed for `extract_split_quads`.
+    let split = config.quad_split_fused && !config.may_use_edlines();
+    let two_markers = 2.0 * min_marker_fill(min_outer_dim, decimation);
+    let traced: Vec<Result<(ExtractionResult, u32), u32>> = order
         .par_iter()
         .filter_map(|&label_idx| {
             let stat = &stats[label_idx as usize];
-            WORKSPACE_ARENA.with(|cell| {
+            let quad = WORKSPACE_ARENA.with(|cell| {
                 let mut arena = cell.borrow_mut();
                 arena.reset();
                 extract_single_quad(
@@ -178,56 +223,156 @@ pub fn extract_quads_soa(
                     refinement_img,
                     min_outer_dim,
                 )
-            })
+            });
+            match quad {
+                Some(q) => Some(Ok((q, label_idx + 1))),
+                None if split && f64::from(stat.pixel_count) >= two_markers => {
+                    Some(Err(label_idx + 1))
+                },
+                None => None,
+            }
         })
         .collect();
-
-    // `order` was pixel-count desc, so survivors are too — truncating drops
-    // the smallest blobs, which is the desired behaviour at ≥ 4K where dense
-    // backgrounds can push valid quads above the SoA ceiling.
-    detections.truncate(MAX_CANDIDATES);
-
-    let n = detections.len();
-    let mut unrefined = if debug_telemetry {
-        Some(Vec::with_capacity(n))
-    } else {
-        None
-    };
-
-    for (i, (corners, unrefined_pts, covs, route_label, ppb_estimate)) in
-        detections.into_iter().enumerate()
-    {
-        for (j, corner) in corners.iter().enumerate() {
-            batch.corners[i][j] = Point2f {
-                x: corner.x as f32,
-                y: corner.y as f32,
-            };
+    let mut unrefined = debug_telemetry.then(|| Vec::with_capacity(traced.len()));
+    let (mut n, mut n_unquadded) = (0, 0);
+    for t in traced {
+        match t {
+            // `order` was pixel-count desc, so survivors are too — dropping those past the
+            // ceiling drops the smallest blobs, which is the desired behaviour at ≥ 4K where
+            // dense backgrounds can push valid quads above the SoA ceiling.
+            Ok((result, label)) if n < MAX_CANDIDATES => {
+                if let Some(ref mut u) = unrefined {
+                    u.push(result.1);
+                }
+                component_of[n] = label;
+                write_candidate(batch, n, &result, debug_telemetry);
+                n += 1;
+            },
+            Ok(_) => {},
+            Err(label) => {
+                unquadded[n_unquadded] = label;
+                n_unquadded += 1;
+            },
         }
-        // Per-corner 2×2 covariances (4 floats each, 16 per candidate). The corner-class bits
-        // belong to the decoder's sub-pixel stage; clear them so a slot never carries bits from
-        // an earlier frame (the distortion-aware decoder does not write them).
-        for (chunk, cov) in batch.corner_covariances[i].chunks_exact_mut(4).zip(&covs) {
-            chunk.copy_from_slice(cov);
-        }
-        batch.corner_refined[i] = 0;
-        if let Some(ref mut u) = unrefined {
-            u.push(unrefined_pts);
-        }
-        // Skip telemetry writes when disabled: the columns retain their
-        // `DetectionBatch::new_boxed()` defaults (ROUTED_TO_STATIC, 0.0),
-        // preserving Static-mode byte-identity regardless of policy.
-        if debug_telemetry {
-            batch.routed_to[i] = route_label;
-            batch.ppb_estimate[i] = ppb_estimate;
-        }
-        batch.status_mask[i] = CandidateState::Active;
     }
 
     for i in n..MAX_CANDIDATES {
         batch.status_mask[i] = CandidateState::Empty;
     }
 
-    (n, unrefined)
+    (n, unrefined, n_unquadded)
+}
+
+/// Stores one extracted quad in candidate slot `i` and marks it for decoding.
+fn write_candidate(
+    batch: &mut DetectionBatch,
+    i: usize,
+    (corners, _, covs, route_label, ppb_estimate): &ExtractionResult,
+    debug_telemetry: bool,
+) {
+    for (j, corner) in corners.iter().enumerate() {
+        batch.corners[i][j] = Point2f {
+            x: corner.x as f32,
+            y: corner.y as f32,
+        };
+    }
+    // Per-corner 2×2 covariances (4 floats each, 16 per candidate). The corner-class bits
+    // belong to the decoder's sub-pixel stage; clear them so a slot never carries bits from
+    // an earlier frame (the distortion-aware decoder does not write them).
+    for (chunk, cov) in batch.corner_covariances[i].chunks_exact_mut(4).zip(covs) {
+        chunk.copy_from_slice(cov);
+    }
+    batch.corner_refined[i] = 0;
+    // Skip telemetry writes when disabled: the columns retain their
+    // `DetectionBatch::new_boxed()` defaults (ROUTED_TO_STATIC, 0.0),
+    // preserving Static-mode byte-identity regardless of policy.
+    if debug_telemetry {
+        batch.routed_to[i] = *route_label;
+        batch.ppb_estimate[i] = *ppb_estimate;
+    }
+    batch.status_mask[i] = CandidateState::Active;
+}
+
+/// Second extraction pass over the components the first one could not use: those whose
+/// outline did not decode (`failed`) and those that traced no quad (`unquadded`).
+///
+/// Ink spread and blur close the diagonal contact where two dark squares meet corner to corner,
+/// so one component can hold several markers (Kalibr's AprilGrid joins every tag to its
+/// neighbours that way). Its outline is then no marker's, or only one marker's. Each listed
+/// component that could hold two markers is split at its necks
+/// ([`crate::split::split_component`]) and its pieces are appended as candidates from slot `n`,
+/// after every first-pass candidate, so they never displace one. Returns the new candidate count.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "the per-frame extraction context of `extract_quads_soa`, passed through unchanged"
+)]
+#[tracing::instrument(skip_all, name = "pipeline::split_fused")]
+pub(crate) fn extract_split_quads(
+    batch: &mut DetectionBatch,
+    n: usize,
+    failed: &[u32],
+    unquadded: &[u32],
+    img: &ImageView,
+    label_result: &LabelResult,
+    config: &DetectorConfig,
+    decimation: usize,
+    refinement_img: &ImageView,
+    min_outer_dim: u32,
+    debug_telemetry: bool,
+) -> usize {
+    use rayon::prelude::*;
+
+    // EdLines reads the frame's label image, which knows nothing of the pieces.
+    if !config.quad_split_fused || config.may_use_edlines() || n >= MAX_CANDIDATES {
+        return n;
+    }
+    let need_moments = config.quad_max_elongation > 0.0 || config.quad_min_density > 0.0;
+    let min_core = crate::split::min_marker_core(min_outer_dim, config.marker_border());
+    let two_markers = 2.0 * min_marker_fill(min_outer_dim, decimation);
+    let stats = &label_result.component_stats;
+    let pieces: Vec<ExtractionResult> = failed
+        .par_iter()
+        .chain(unquadded.par_iter())
+        .fold(Vec::new, |mut out, &label| {
+            let stat = &stats[label as usize - 1];
+            if f64::from(stat.pixel_count) < two_markers {
+                return out;
+            }
+            let Some(runs) = label_result.component_runs.of(label) else {
+                return out;
+            };
+            WORKSPACE_ARENA.with(|cell| {
+                let mut arena = cell.borrow_mut();
+                arena.reset();
+                let pieces =
+                    crate::split::split_component(&arena, runs, stat, min_core, need_moments);
+                for piece in &pieces {
+                    out.extend(extract_single_quad(
+                        &arena,
+                        img,
+                        label_result.labels,
+                        label,
+                        &piece.stat,
+                        Some(&piece.runs),
+                        config,
+                        decimation,
+                        refinement_img,
+                        min_outer_dim,
+                    ));
+                }
+            });
+            out
+        })
+        .reduce(Vec::new, |mut a, mut b| {
+            a.append(&mut b);
+            a
+        });
+    let mut end = n;
+    for result in pieces.iter().take(MAX_CANDIDATES - n) {
+        write_candidate(batch, end, result, debug_telemetry);
+        end += 1;
+    }
+    end
 }
 
 /// Internal helper to extract a single quad from a component.

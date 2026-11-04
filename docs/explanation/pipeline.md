@@ -70,6 +70,7 @@ flowchart LR
 | Quad extraction | `ContourRdp` | `ContourRdp` | `AdaptivePpb`: `EdLines` for well-resolved tags, `ContourRdp` + ERF below 2.5 px per bit |
 | Ordering | decode-first | decode-first | refine, then decode |
 | Border-ring check | per-family budget | per-family budget | off |
+| Seeded split of fused components (`quad.split_fused`) | off | on | off |
 | `decoder.corner_subpix` (junction/edge fusion, repair, inset calibration) | on | on | off |
 | Model-edge pose refinement | off | off | on |
 
@@ -174,6 +175,18 @@ Under decode-first ordering a match from seed corners is provisional. The candid
 A candidate whose best distance exceeds the budget but lies within the family's **recovery window** gets a second chance. The window is the largest Hamming distance that uniformly random bits reach with probability at most 0.1 (union bound over every rotated code): 6 for 36h11 and ArUcoMip36h12, 1 for 16h5, 0 for ArUco 4x4_100. Recovery also requires the seed to show a dark ring (at most 20 % bright cells), which skips most texture near-misses. It runs the decode-first refinement with the scale retries, then a coarse corner-nudge search (±0.2 px, two passes); any acceptance still needs the full ring budget.
 
 **Module:** `decoder.rs` | **Complexity:** $O(Q)$
+
+### 4g. Seeded split of fused components (`quad.split_fused`, `grid`)
+
+Ink spread and blur close the diagonal contact where two dark squares meet corner to corner. On Kalibr's AprilGrid every tag touches its neighbours' connector squares that way, so one component can hold a tag and its connectors, or several tags. Its outline is then no single marker's: it either traces no quad or traces one that does not decode.
+
+After the decode pass, each such component that can hold two markers (a failed candidate's, or one that traced no quad) is eroded by a 3 × 3 square. That opens necks one or two pixels wide while a marker keeps a core, provided its border is at least 3 px wide. Each core of at least a marker's size, `4·(3·cells/border − 3)` px, is dilated back (a morphological opening, labelled per core). The result is the marker without its connectors and neck stubs, which is exactly what its outer contour needs.
+
+The pieces go through Stage 3's gates and tracing, and then through the decode pass, as candidates appended after every first-pass candidate. They therefore never displace one, and the slots already settled are not re-decoded. The erosion, labelling and opening all run on the component's runs, so their cost follows its run count rather than its bounding box.
+
+The split is off in `standard` and `high_accuracy`: a textured frame has large undecoded components, the split costs time on them, and it finds nothing there.
+
+**Module:** `split.rs`, `quad.rs::extract_split_quads` | **Complexity:** $O(\text{runs})$ per listed component
 
 ## Stage 5: Corner Stage (`decoder.corner_subpix`)
 

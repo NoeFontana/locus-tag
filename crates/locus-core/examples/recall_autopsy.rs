@@ -24,8 +24,11 @@
 //! ```text
 //! cargo run --release --features bench-internals --example recall_autopsy -- \
 //!     --dataset tests/data/hub_cache/aprilgrid_golden_v1_1920x1080 --profile grid \
-//!     [--family 36h11] [--border-bits 1] [--out autopsy.jsonl]
+//!     [--family 36h11] [--border-bits 1] [--declare-border] [--out autopsy.jsonl]
 //! ```
+//!
+//! `--border-bits` is the printed border, which places the truth ring; `--declare-border` also
+//! sets it as the detector's `decoder.marker_border_bits`.
 #![allow(
     clippy::cast_possible_truncation,
     clippy::cast_precision_loss,
@@ -73,6 +76,7 @@ struct Args {
     profile: String,
     family: TagFamily,
     border_bits: usize,
+    declare_border: bool,
     out: Option<PathBuf>,
 }
 
@@ -151,6 +155,7 @@ fn parse_args() -> Args {
         1,
         None,
     );
+    let mut declare_border = false;
     while let Some(flag) = it.next() {
         let mut value = || it.next().unwrap_or_else(|| panic!("{flag} needs a value"));
         match flag.as_str() {
@@ -160,6 +165,7 @@ fn parse_args() -> Args {
             "--family" => fam = family(&value()),
             "--border-bits" => border_bits = value().parse().expect("--border-bits"),
             "--out" => out = Some(PathBuf::from(value())),
+            "--declare-border" => declare_border = true,
             other => panic!("unknown argument {other}"),
         }
     }
@@ -168,6 +174,7 @@ fn parse_args() -> Args {
         profile,
         family: fam,
         border_bits,
+        declare_border,
         out,
     }
 }
@@ -228,7 +235,10 @@ fn border_ring(corners: &[[f64; 2]; 4], cells: usize, border_bits: usize) -> Vec
 
 fn main() {
     let args = parse_args();
-    let config = DetectorConfig::from_profile(&args.profile);
+    let mut config = DetectorConfig::from_profile(&args.profile);
+    if args.declare_border {
+        config.decoder_marker_border_bits = args.border_bits as u8;
+    }
     assert!(
         config.decimation <= 1 && config.upscale_factor <= 1,
         "the binarized image must be on the input grid"

@@ -122,6 +122,7 @@ borders (ICRA 2020 `forward/checkerboard_corners_images` and similar):
 | `decoder.min_contrast` | `20.0` | `10.0` | Packed tags are low-contrast; 20.0 rejects valid tags at shared borders. |
 | `quad.min_edge_score` | `4.0` | `2.0` | Touching borders produce weaker edge contrast; the relaxed floor prevents false negatives on interior edges. |
 | `threshold.enable_sharpening` | `true` | `false` | Laplacian sharpening creates halos at shared borders, biasing the threshold and merging components. |
+| `quad.split_fused` | `false` | `true` | Markers that touch at their corners (AprilGrid connectors) fuse into one component under ink spread and blur. Components whose outline did not decode, or that traced no quad, are split at their necks and the pieces decoded. Off in `standard` because it costs time on textured frames, where it finds nothing. |
 
 Everything else (4-connectivity, ContourRdp + Erf decode-first, per-family
 ring check, `corner_subpix`) is as in `standard`.

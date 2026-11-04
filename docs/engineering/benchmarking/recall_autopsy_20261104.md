@@ -25,7 +25,7 @@ the middle of each truth tag's black border ring through the truth homography:
 cargo run --release --features bench-internals --example recall_autopsy -- \
     --dataset tests/data/hub_cache/aprilgrid_golden_v1_1920x1080 --profile grid
 cargo run --release --features bench-internals --example recall_autopsy -- \
-    --truth frames.jsonl --profile grid --border-bits 2 --out autopsy.jsonl
+    --truth frames.jsonl --profile grid --border-bits 2 --declare-border --out autopsy.jsonl
 ```
 
 `--truth` takes one JSON object per frame, `{"image": ..., "tags": [{"id", "corners"}]}`, with

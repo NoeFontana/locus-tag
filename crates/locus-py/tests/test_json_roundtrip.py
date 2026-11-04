@@ -72,4 +72,6 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     # ``marker_border_bits`` is absent on disk: every shipped profile reads the default
     # one-bit border, and the model always emits it.
     on_disk.get("decoder", {}).setdefault("marker_border_bits", 1)
+    # ``split_fused`` is set by ``grid`` only; the model always emits its ``False`` default.
+    on_disk.get("quad", {}).setdefault("split_fused", False)
     assert on_disk == loaded

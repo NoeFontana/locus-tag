@@ -61,6 +61,8 @@ pub(crate) mod segmentation;
 pub(crate) mod simd;
 /// SIMD-Accelerated Connected Components Labeling (CCL).
 pub(crate) mod simd_ccl_fusion;
+/// Seeded split of components fused through thin necks.
+pub(crate) mod split;
 /// Hard-decision Hamming decoding.
 pub(crate) mod strategy;
 /// Utilities for testing and synthetic data generation.

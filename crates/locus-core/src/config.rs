@@ -176,6 +176,10 @@ pub enum QuadExtractionPolicy {
 /// a JSON profile.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "independent per-stage switches, one per JSON profile key; they share no state machine"
+)]
 pub struct DetectorConfig {
     // Threshold parameters
     /// Tile size for adaptive thresholding (default: 8).
@@ -416,6 +420,15 @@ pub struct DetectorConfig {
     /// 0.0 = disabled (the default).
     pub quad_min_density: f64,
 
+    /// Split components whose outline did not decode, or that traced no quad, at the necks a
+    /// one-pixel erosion opens, and offer the pieces as candidates (default `false`).
+    ///
+    /// Ink spread and blur close the diagonal contact where two dark squares meet corner to
+    /// corner, so on a grid of markers joined at their corners (Kalibr's AprilGrid connectors)
+    /// one component can hold several markers. Off by default because it costs time on any
+    /// frame with large undecoded components, textured backgrounds included; `grid` turns it on.
+    pub quad_split_fused: bool,
+
     /// Quad extraction mode: legacy contour tracing (default) or EDLines.
     ///
     /// Read only when `quad_extraction_policy == Static`. Under
@@ -479,6 +492,7 @@ impl Default for DetectorConfig {
             structure_tensor_radius: 2,
             quad_max_elongation: 0.0,
             quad_min_density: 0.0,
+            quad_split_fused: false,
             quad_extraction_mode: QuadExtractionMode::ContourRdp,
             edlines_imbalance_gate: EdLinesImbalanceGatePolicy::Disabled,
             pose_consistency_fpr: 0.0,
@@ -757,6 +771,7 @@ mod profile_json {
         pub upscale_factor: usize,
         pub max_elongation: f64,
         pub min_density: f64,
+        pub split_fused: bool,
         pub extraction_mode: QuadExtractionMode,
         pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
         pub extraction_policy: QuadExtractionPolicy,
@@ -775,6 +790,7 @@ mod profile_json {
                 upscale_factor: c.upscale_factor,
                 max_elongation: c.quad_max_elongation,
                 min_density: c.quad_min_density,
+                split_fused: c.quad_split_fused,
                 extraction_mode: c.quad_extraction_mode,
                 edlines_imbalance_gate: c.edlines_imbalance_gate,
                 extraction_policy: c.quad_extraction_policy,
@@ -906,6 +922,7 @@ mod profile_json {
                 structure_tensor_radius: p.pose.structure_tensor_radius,
                 quad_max_elongation: p.quad.max_elongation,
                 quad_min_density: p.quad.min_density,
+                quad_split_fused: p.quad.split_fused,
                 quad_extraction_mode: p.quad.extraction_mode,
                 edlines_imbalance_gate: p.quad.edlines_imbalance_gate,
                 pose_consistency_fpr: p.pose.pose_consistency_fpr,
