@@ -294,7 +294,8 @@ fn calibrate_with(
 }
 
 /// Reads the bit pattern: the border ring's and the quiet zone's median levels set the
-/// threshold. `None` for a marker without enough contrast.
+/// threshold. `None` for a marker without enough contrast, or whose border is wider than the
+/// layout.
 fn read_bits(cells: usize, sample: &impl Fn(f64, f64) -> f64) -> Option<BitsView> {
     let n = cells as f64;
     let mut ring = [0.0f64; 4 * MAX_CELLS];
@@ -330,15 +331,12 @@ fn read_bits(cells: usize, sample: &impl Fn(f64, f64) -> f64) -> Option<BitsView
             grid[v + 1][u + 1] = values[v][u] < threshold;
         }
     }
-    // The ring inside the border is the payload's outer ring, and no codeword of a supported
-    // family has it uniform (`no_codeword_has_a_uniform_outer_ring`). Read all dark, it is
-    // more border: a wider border than the layout, such as Kalibr's 2-bit one decoded as a
-    // 1-bit tag. The fit's own guards pass that about one time in eight, then push the corners
-    // 0.3–0.4 px outward.
-    // The ring is read a quarter cell inside the border's edge, not at its cells' centres. A
-    // 2-bit border over d ≥ 4 data bits reads 2(d + 2)/(d + 4) ≥ 1.5 cells wide, so that point
-    // is a quarter cell from the edge under either layout. A centre (1.5) lies 0.1 cell from
-    // Kalibr's edge (1.6), within blur and lens bow.
+    // No codeword has a uniform outer ring (`no_codeword_has_a_uniform_outer_ring`), so an
+    // all-dark one is more border: e.g. Kalibr's 2-bit border decoded as a 1-bit tag, which the
+    // fit's guards pass about one time in eight and then push the corners 0.3–0.4 px outward.
+    // Read a quarter cell inside the border's edge: a 2-bit border reads 2(d + 2)/(d + 4) ≥ 1.5
+    // cells wide for d ≥ 4 data bits, so the cell centre (1.5) can sit within blur and lens bow
+    // of that edge (Kalibr's: 1.6).
     let (near, far) = (1.25, n - 1.25);
     let ring_dark = (1..cells - 1).all(|i| {
         let c = i as f64 + 0.5;

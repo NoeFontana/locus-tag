@@ -16,9 +16,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     from 0.30 to 0.11 px median error, unbiased within 0.005 px.
   - `marker_inset` declines a marker whose ring inside the border reads uniformly dark, read a
     quarter cell inside the border's edge: no codeword of a supported family has a uniform outer
-    ring, so that is a wider border than the layout. A Kalibr border read as a 1-bit layout passed the other guards about one time in
-    eight and pushed the corners 0.3–0.4 px outward (+0.087 px tag-scale bias on 32 px tags;
-    now within 0.005 px).
+    ring, so that is a wider border than the layout. A Kalibr border read as a 1-bit layout
+    passed the other guards about one time in eight and pushed the corners 0.3–0.4 px outward
+    (+0.087 px tag-scale bias on 32 px tags; now within 0.005 px).
   - EuRoC leave-one-out corner median 0.278 → 0.243 px (`grid`) and 0.279 → 0.243 px
     (`standard`), recall unchanged. AprilGrid board (`standard`): rotation mean 0.0104° →
     0.0077°, p99 0.167° → 0.101°; translation mean 0.21 → 0.17 mm, p95 0.76 → 1.02 mm, p99

@@ -385,6 +385,13 @@ impl BoardRegressionHarness {
             )
         });
 
+        // Diagnostic: `LOCUS_BOARD_ORACLE_MAX_SIDE=<px>` replaces the corners of every valid tag
+        // whose true side is under `<px>` by the rendered truth, isolating the board stage from
+        // corner error. It changes the metrics, so the snapshot is printed, not asserted.
+        let oracle_max_side = std::env::var("LOCUS_BOARD_ORACLE_MAX_SIDE")
+            .ok()
+            .and_then(|s| s.parse::<f64>().ok());
+
         for (i, entry) in provider.images.iter().enumerate() {
             if i % 20 == 0 {
                 println!("  Processing frame {}/{}...", i, provider.images.len());
@@ -439,13 +446,7 @@ impl BoardRegressionHarness {
                 if self.refinement == RefinementStrategy::ForstnerSaddle {
                     apply_forstner_to_batch(&mut batch_cloned, &img_view, 3);
                 }
-                // Diagnostic: `LOCUS_BOARD_ORACLE_MAX_SIDE=<px>` replaces the corners of every
-                // valid tag whose true side is under `<px>` by the rendered truth, isolating the board
-                // stage from corner error.
-                if let Some(max_side) = std::env::var("LOCUS_BOARD_ORACLE_MAX_SIDE")
-                    .ok()
-                    .and_then(|s| s.parse::<f64>().ok())
-                {
+                if let Some(max_side) = oracle_max_side {
                     apply_oracle_corners(&mut batch_cloned, entry, max_side);
                 }
 
@@ -552,6 +553,14 @@ impl BoardRegressionHarness {
         };
 
         let report = BoardRegressionReport { summary };
+        if oracle_max_side.is_some() {
+            println!(
+                "{} (oracle corners): {}",
+                self.snapshot_name,
+                serde_json::to_string_pretty(&report).expect("serialize report")
+            );
+            return;
+        }
         insta::assert_yaml_snapshot!(self.snapshot_name, report, {
             ".summary.mean_total_ms" => "[DURATION]"
         });

@@ -230,12 +230,7 @@ pub(crate) fn subpix_marker_corners(
     let side = mean_side(&seed);
     let cell = side / cells.max(1) as f64;
     let (halves, count) = corner_subpix_half_windows(side, cells);
-    let symmetric_only = count == 0;
-    let windows: &[u32] = if symmetric_only {
-        &SUBPIX_SYMMETRIC_WINDOWS
-    } else {
-        &halves[..count]
-    };
+    let halves = &halves[..count];
     // The consistency probes sit half a cell from the corner.
     let probe = (0.5 * cell).max(1.0);
     // The edge band spans the blur and the refined corners' error, and stays within half a cell.
@@ -245,9 +240,7 @@ pub(crate) fn subpix_marker_corners(
     let mut picks = [None::<Subpix>; 4];
     for j in 0..4 {
         let (prev, next) = (seed[(j + 3) % 4], seed[(j + 1) % 4]);
-        if let Some(pick) =
-            marker_junction(img, seed[j], prev, next, windows, symmetric_only, probe)
-        {
+        if let Some(pick) = marker_junction(img, seed[j], prev, next, halves, probe) {
             out[j] = pick.corner;
             refined_bits |= 1 << j;
             picks[j] = Some(pick);
@@ -257,7 +250,10 @@ pub(crate) fn subpix_marker_corners(
     // marker's corner at all: quad extraction cut across a blurred apex or a touching square,
     // and no window reaches the junction. Its two edges still run straight from the good
     // neighbours, so they place it. A repaired corner can make its neighbour repairable, so
-    // the sweep repeats until no corner changes.
+    // the sweep repeats until no corner changes. Under the cell floor the edge bands span the
+    // data bits, so the crossing is only a start: the X-junction and symmetry gates decide.
+    // Measured there on `aprilgrid_golden_v1`: 11 repairs, all within 0.17 px of the truth,
+    // where their seeds sat 1.0-1.2 px off.
     let mut repaired = true;
     while repaired {
         repaired = false;
@@ -266,8 +262,7 @@ pub(crate) fn subpix_marker_corners(
             if picks[j].is_none()
                 && picks[p].is_some()
                 && picks[n].is_some()
-                && let Some(pick) =
-                    repair_corner(img, &out, j, side, half, (windows, symmetric_only), probe)
+                && let Some(pick) = repair_corner(img, &out, j, side, half, halves, probe)
             {
                 out[j] = pick.corner;
                 refined_bits |= 1 << j;
@@ -283,7 +278,8 @@ pub(crate) fn subpix_marker_corners(
     let [Some(p0), Some(p1), Some(p2), Some(p3)] = picks else {
         return (out, refined_bits);
     };
-    if symmetric_only {
+    // Under the cell floor the edge bands would span the bits.
+    if count == 0 {
         return (out, refined_bits);
     }
     let locals = [p0, p1, p2, p3];
@@ -322,26 +318,32 @@ pub(crate) fn subpix_marker_corners(
 /// [`marker_corner_consistent`], and of those the largest window that is not significantly
 /// less certain than the best one.
 ///
-/// If `symmetric_only` (a marker under the cell floor), `seed` must look like an X-junction
-/// ([`junction_is_x`]) and each solution's window must be point-symmetric. The seed test keeps
-/// L-corners out, including a ChArUco marker's, whose solution would otherwise be captured by
-/// the neighbouring chessboard saddle, which is point-symmetric too.
+/// Empty `halves` means a marker under the cell floor: only `SUBPIX_SYMMETRIC_WINDOWS` is
+/// tried, `seed` must look like an X-junction ([`junction_is_x`]) and each solution's window
+/// must be point-symmetric. The seed test keeps L-corners out, including a ChArUco marker's,
+/// whose solution would otherwise be captured by the neighbouring chessboard saddle, which is
+/// point-symmetric too.
 fn marker_junction(
     img: &ImageView,
     seed: [f64; 2],
     prev: [f64; 2],
     next: [f64; 2],
     halves: &[u32],
-    symmetric_only: bool,
     probe: f64,
 ) -> Option<Subpix> {
-    if symmetric_only && !junction_is_x(img, seed, prev, next, seed, probe) {
-        return None;
-    }
+    let symmetric_only = halves.is_empty();
+    let halves = if symmetric_only {
+        if !junction_is_x(img, seed, prev, next, seed, probe) {
+            return None;
+        }
+        &SUBPIX_SYMMETRIC_WINDOWS[..]
+    } else {
+        halves
+    };
     let mut accepted = [None::<Subpix>; 3];
     for (slot, &half) in accepted.iter_mut().zip(halves) {
-        *slot = corner_subpix(img, seed, half).filter(|refined| {
-            (!symmetric_only || refined.asymmetry <= SUBPIX_MAX_ASYMMETRY)
+        *slot = corner_subpix(img, seed, half, symmetric_only).filter(|refined| {
+            refined.asymmetry.is_none_or(|a| a <= SUBPIX_MAX_ASYMMETRY)
                 && marker_corner_consistent(img, refined.corner, prev, next, seed, probe)
         });
     }
@@ -372,16 +374,15 @@ const REPAIR_TOLERANCE_PX: f64 = 0.05;
 /// then be confirmed as a marker junction by [`marker_junction`], so a repair is never weaker
 /// evidence than an ordinary refined corner.
 ///
-/// `side` is the marker's mean side, `half` the edge band half-width and `windows` (the junction
-/// windows and whether they are symmetric-only), `probe` the consistency probe distance, all as
-/// [`subpix_marker_corners`] sets them.
+/// `side` is the marker's mean side, `half` the edge band half-width and `halves`, `probe` the
+/// junction windows and consistency probe distance, all as [`subpix_marker_corners`] sets them.
 fn repair_corner(
     img: &ImageView,
     quad: &[[f64; 2]; 4],
     j: usize,
     side: f64,
     half: f64,
-    (halves, symmetric_only): (&[u32], bool),
+    halves: &[u32],
     probe: f64,
 ) -> Option<Subpix> {
     let (prev, seed, next) = (quad[(j + 3) % 4], quad[j], quad[(j + 1) % 4]);
@@ -403,7 +404,7 @@ fn repair_corner(
     if (corner[0] - seed[0]).hypot(corner[1] - seed[1]) > REPAIR_MAX_SIDE_FRACTION * side {
         return None;
     }
-    marker_junction(img, corner, prev, next, halves, symmetric_only, probe)
+    marker_junction(img, corner, prev, next, halves, probe)
 }
 
 /// Inverse-covariance fusion of two corner estimates `a`, `b` with covariances `[xx, xy, yy]`.
@@ -734,8 +735,14 @@ fn marker_corner_consistent(
 /// Returns `None` when the result leaves the `half`-px box around the seed, the window leaves
 /// the image, or the normal matrix is singular (a flat or single-edge patch). Locus pixel
 /// convention (+0.5 centres), like the rest of the crate. `half` must be in
-/// `1..=SUBPIX_MAX_HALF`.
-pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Option<Subpix> {
+/// `1..=SUBPIX_MAX_HALF`. [`Subpix::asymmetry`] costs one more pass over the window, so it is
+/// read only `with_asymmetry`.
+pub(crate) fn corner_subpix(
+    img: &ImageView,
+    seed: [f64; 2],
+    half: u32,
+    with_asymmetry: bool,
+) -> Option<Subpix> {
     debug_assert!((1..=SUBPIX_MAX_HALF).contains(&half));
     let hw = half as usize;
     let span = 2 * hw + 1; // window side
@@ -834,16 +841,13 @@ pub(crate) fn corner_subpix(img: &ImageView, seed: [f64; 2], half: u32) -> Optio
         }
     }
     let limit = f64::from(half);
-    if (corner[0] - seed[0]).abs() <= limit && (corner[1] - seed[1]).abs() <= limit {
-        Some(Subpix {
-            corner,
-            uncertainty,
-            cov,
-            asymmetry: window_asymmetry(&patch[..side * side], side, &weights[..span]),
-        })
-    } else {
-        None
-    }
+    ((corner[0] - seed[0]).abs() <= limit && (corner[1] - seed[1]).abs() <= limit).then(|| Subpix {
+        corner,
+        uncertainty,
+        cov,
+        asymmetry: with_asymmetry
+            .then(|| window_asymmetry(&patch[..side * side], side, &weights[..span])),
+    })
 }
 
 /// [`Subpix::asymmetry`] of a `side × side` patch (one gradient ring around the window, as
@@ -901,9 +905,13 @@ pub(crate) struct Subpix {
     pub(crate) cov: [f64; 3],
     /// How far the window is from point-symmetric about the corner, under the window's own
     /// weights: `Σw·(I(c + r) − I(c − r))² / (2·Σw·(I − Ī)²)`. 0 for an ideal X-junction under a
-    /// symmetric blur, 4/3 for an L-corner, 2 for a straight edge. Read on the last sampled
-    /// patch, which is within `SUBPIX_EPS` of `corner` once converged.
-    pub(crate) asymmetry: f64,
+    /// symmetric blur, 4/3 for an L-corner, 2 for a straight edge. `None` unless requested (one
+    /// more pass over the window). Read on the last sampled patch, centred on the previous
+    /// iterate: within the final step of `corner`, which a stalled solve can leave above
+    /// `SUBPIX_EPS`. Judging exactly at `corner` was measured: it only moves the borderline
+    /// of the tuned threshold (19 corners of 0.13 px median error lost to 0.86 px seeds on
+    /// `aprilgrid_golden_v1`).
+    pub(crate) asymmetry: Option<f64>,
 }
 
 #[cfg(test)]
@@ -958,7 +966,7 @@ mod subpix_tests {
             let apex = [31.27 + 0.11 * k as f64, 30.64 - 0.07 * k as f64];
             let data = wedge(apex, theta);
             let img = ImageView::new(&data, W, W, W).unwrap();
-            let got = corner_subpix(&img, [apex[0] + 1.3, apex[1] - 0.9], 4)
+            let got = corner_subpix(&img, [apex[0] + 1.3, apex[1] - 0.9], 4, false)
                 .unwrap()
                 .corner;
             let d = (got[0] - opencv[k][0]).hypot(got[1] - opencv[k][1]);
@@ -990,16 +998,16 @@ mod subpix_tests {
     fn asymmetry_reads_x_junctions_as_symmetric_and_l_corners_as_not() {
         let x = squares(&[[20, 32, 20, 32], [32, 44, 32, 44]]);
         let img = ImageView::new(&x, W, W, W).unwrap();
-        let got = corner_subpix(&img, [32.4, 31.7], 2).unwrap();
-        assert!(got.asymmetry < 0.02, "X: {}", got.asymmetry);
+        let got = corner_subpix(&img, [32.4, 31.7], 2, true).unwrap();
+        let asymmetry = got.asymmetry.unwrap();
+        assert!(asymmetry < 0.02, "X: {asymmetry}");
         let l = squares(&[[20, 32, 20, 32]]);
         let img = ImageView::new(&l, W, W, W).unwrap();
-        let got = corner_subpix(&img, [32.4, 31.7], 2).unwrap();
-        assert!(
-            (got.asymmetry - 4.0 / 3.0).abs() < 0.2,
-            "L: {}",
-            got.asymmetry
-        );
+        let asymmetry = corner_subpix(&img, [32.4, 31.7], 2, true)
+            .unwrap()
+            .asymmetry
+            .unwrap();
+        assert!((asymmetry - 4.0 / 3.0).abs() < 0.2, "L: {asymmetry}");
     }
 
     /// A 16 px marker (2 px cells, under the floor) without connector squares: its L-corners
@@ -1235,20 +1243,20 @@ mod subpix_tests {
     fn declines_without_a_corner() {
         let flat = vec![128u8; W * W];
         let img = ImageView::new(&flat, W, W, W).unwrap();
-        assert!(corner_subpix(&img, [32.2, 31.7], 4).is_none());
+        assert!(corner_subpix(&img, [32.2, 31.7], 4, false).is_none());
 
         // A single straight edge constrains one direction only: the normal matrix is singular.
         let edge: Vec<u8> = (0..W * W)
             .map(|i| if i % W < 32 { 40 } else { 220 })
             .collect();
         let img = ImageView::new(&edge, W, W, W).unwrap();
-        assert!(corner_subpix(&img, [32.0, 30.5], 4).is_none());
+        assert!(corner_subpix(&img, [32.0, 30.5], 4, false).is_none());
     }
 
     #[test]
     fn declines_when_the_window_leaves_the_image() {
         let data = wedge([3.0, 3.0], 0.0);
         let img = ImageView::new(&data, W, W, W).unwrap();
-        assert!(corner_subpix(&img, [3.4, 2.6], 4).is_none());
+        assert!(corner_subpix(&img, [3.4, 2.6], 4, false).is_none());
     }
 }
