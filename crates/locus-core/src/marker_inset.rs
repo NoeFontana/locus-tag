@@ -294,7 +294,8 @@ fn calibrate_with(
 }
 
 /// Reads the bit pattern: the border ring's and the quiet zone's median levels set the
-/// threshold. `None` for a marker without enough contrast.
+/// threshold. `None` for a marker without enough contrast, or whose border is wider than the
+/// layout.
 fn read_bits(cells: usize, sample: &impl Fn(f64, f64) -> f64) -> Option<BitsView> {
     let n = cells as f64;
     let mut ring = [0.0f64; 4 * MAX_CELLS];
@@ -329,6 +330,22 @@ fn read_bits(cells: usize, sample: &impl Fn(f64, f64) -> f64) -> Option<BitsView
         for u in 0..cells {
             grid[v + 1][u + 1] = values[v][u] < threshold;
         }
+    }
+    // No codeword has a uniform outer ring (`no_codeword_has_a_uniform_outer_ring`), so an
+    // all-dark one is more border: e.g. Kalibr's 2-bit border decoded as a 1-bit tag, which the
+    // fit's guards pass about one time in eight and then push the corners 0.3–0.4 px outward.
+    // Read a quarter cell inside the border's edge: a 2-bit border reads 2(d + 2)/(d + 4) ≥ 1.5
+    // cells wide for d ≥ 4 data bits, so the cell centre (1.5) can sit within blur and lens bow
+    // of that edge (Kalibr's: 1.6).
+    let (near, far) = (1.25, n - 1.25);
+    let ring_dark = (1..cells - 1).all(|i| {
+        let c = i as f64 + 0.5;
+        [(c, near), (c, far), (near, c), (far, c)]
+            .into_iter()
+            .all(|(u, v)| sample(u, v) < threshold)
+    });
+    if ring_dark {
+        return None;
     }
     Some(BitsView { grid, dark, white })
 }
@@ -725,6 +742,42 @@ mod tests {
         let data = render(8, 1, 1.2, true);
         let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
         assert!(calibrate_marker_corners(&img, OUTLINE, 40).is_none());
+    }
+
+    #[test]
+    fn reads_a_wider_border_as_a_layout_mismatch() {
+        // A 2-cell (Kalibr) border read as an 8-cell, 1-cell-border layout: the ring inside the
+        // read border is border too. Under the distortion test's bow, the ring cells' centres
+        // (0.1 cell from Kalibr's edge) read as payload; the quarter-cell read does not.
+        for k1 in [0.0, -0.06] {
+            let h = Homography::square_to_quad(&OUTLINE.map(|c| distort(c, k1))).unwrap();
+            let read = |data: &[u8]| {
+                let img = ImageView::new(data, SIZE, SIZE, SIZE).unwrap();
+                read_bits(8, &|u: f64, v: f64| {
+                    let p = h.project([u / 4.0 - 1.0, v / 4.0 - 1.0]);
+                    img.sample_bilinear(p[0], p[1])
+                })
+                .is_some()
+            };
+            assert!(!read(&render_distorted(10, 2, 1.2, true, k1)), "k1 {k1}");
+            assert!(read(&render_distorted(8, 1, 1.2, true, k1)), "k1 {k1}");
+        }
+    }
+
+    /// The layout check above relies on it.
+    #[test]
+    fn no_codeword_has_a_uniform_outer_ring() {
+        for &family in crate::config::TagFamily::all() {
+            let dict = crate::dictionaries::get_dictionary(family);
+            let n = dict.dimension;
+            for code in dict.codes {
+                let bit = |r: usize, c: usize| (code >> (n * n - 1 - (r * n + c))) & 1;
+                let ring =
+                    (0..n).flat_map(|i| [bit(0, i), bit(n - 1, i), bit(i, 0), bit(i, n - 1)]);
+                let ones: u64 = ring.sum();
+                assert!(0 < ones && ones < 4 * n as u64, "{family:?}: {code:#x}");
+            }
+        }
     }
 
     #[test]
