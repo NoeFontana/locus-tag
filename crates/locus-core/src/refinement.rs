@@ -139,7 +139,8 @@ const SUBPIX_SYMMETRIC_WINDOWS: [u32; 1] = [SUBPIX_MIN_HALF];
 /// X-junction reads 0, an L-corner 4/3 and a straight edge 2. Measured on AprilGrid renders
 /// against the truth (see `subpix_marker_corners`).
 const SUBPIX_MAX_ASYMMETRY: f64 = 0.1;
-/// The smallest cell (px) [`corner_subpix_half_windows`] gives a window: `2 / 0.6 ≈ 3.3`.
+/// The narrowest border (px) [`corner_subpix_half_windows`] gives a window: `2 / 0.6 ≈ 3.3`.
+/// One cell under the default 1-bit border.
 pub(crate) const SUBPIX_MIN_CELL_PX: f64 = SUBPIX_MIN_HALF as f64 / SUBPIX_MIN_WINDOW_CELL_FRACTION;
 /// Uncertainty ratio past which a smaller window is preferred over a larger one. Both
 /// uncertainties are residual-variance estimates from a few dozen effective samples, whose
@@ -150,30 +151,29 @@ const SUBPIX_SIGNIFICANT_RATIO: f64 = 2.0;
 /// for the central-difference gradients.
 const SUBPIX_PATCH_MAX: usize = 2 * (SUBPIX_MAX_HALF as usize + 1) + 1;
 
-/// Candidate window half-widths of [`corner_subpix`] for a marker whose side spans `cells`
-/// cells over `side_px` pixels: `clamp(round(f·cell), 2, 4)` for `f` in 0.3, 0.5, 0.75 cell,
-/// deduplicated, ascending. Returns the array and how many entries are used.
+/// Candidate window half-widths of [`corner_subpix`] for a marker whose black border is
+/// `border_px` wide: `clamp(round(f·border_px), 2, 4)` for `f` in 0.3, 0.5, 0.75, deduplicated,
+/// ascending. Returns the array and how many entries are used.
 ///
 /// The bounds come from the corner model. The estimator assumes an ideal L-junction, so
 /// gradients near the blurred apex are not orthogonal to `p − c`; the window must reach past
 /// the blur (2 px floor, 4 px cap covering the PSFs measured on the benchmarks). The model
-/// holds only within the black border cell and the quiet zone, so the window stays under a
-/// cell. Inside those bounds the best size depends on how close other structure sits to the
-/// corner, which only the image shows, so [`subpix_marker_corners`] tries each candidate and
-/// keeps the most certain result.
-pub(crate) fn corner_subpix_half_windows(side_px: f64, cells: usize) -> ([u32; 3], usize) {
-    let cell = side_px / cells.max(1) as f64;
+/// holds only within the black border and the quiet zone, so the window stays under the
+/// border's width (one cell for a 1-bit border). Inside those bounds the best size depends on
+/// how close other structure sits to the corner, which only the image shows, so
+/// [`subpix_marker_corners`] tries each candidate and keeps the most certain result.
+pub(crate) fn corner_subpix_half_windows(border_px: f64) -> ([u32; 3], usize) {
     let mut out = [0u32; 3];
     let mut n = 0;
-    // The smallest window must fit well inside a cell, or the junction model cannot hold
+    // The smallest window must fit well inside the border, or the junction model cannot hold
     // anywhere in it: no candidate, so the corner keeps its seed.
-    if f64::from(SUBPIX_MIN_HALF) > SUBPIX_MIN_WINDOW_CELL_FRACTION * cell {
+    if f64::from(SUBPIX_MIN_HALF) > SUBPIX_MIN_WINDOW_CELL_FRACTION * border_px {
         return (out, 0);
     }
     for f in SUBPIX_CELL_FRACTIONS {
         // In [2, 4] after the clamp, so the cast is exact.
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let half = (f * cell)
+        let half = (f * border_px)
             .round()
             .clamp(f64::from(SUBPIX_MIN_HALF), f64::from(SUBPIX_MAX_HALF))
             as u32;
@@ -226,15 +226,19 @@ pub(crate) fn subpix_marker_corners(
     img: &ImageView,
     seed: [[f64; 2]; 4],
     cells: usize,
+    border: usize,
 ) -> ([[f64; 2]; 4], u8) {
     let side = mean_side(&seed);
-    let cell = side / cells.max(1) as f64;
-    let (halves, count) = corner_subpix_half_windows(side, cells);
+    // The corner's models live in the black border, so its width bounds windows, probes and
+    // edge bands: one cell by default, two on Kalibr's AprilGrid.
+    let border_px = side * border as f64 / cells.max(1) as f64;
+    let (halves, count) = corner_subpix_half_windows(border_px);
     let halves = &halves[..count];
-    // The consistency probes sit half a cell from the corner.
-    let probe = (0.5 * cell).max(1.0);
-    // The edge band spans the blur and the refined corners' error, and stays within half a cell.
-    let half = (0.5 * cell).clamp(2.0, EDGE_MAX_HALF_PX);
+    // The consistency probes sit half the border from the corner.
+    let probe = (0.5 * border_px).max(1.0);
+    // The edge band spans the blur and the refined corners' error, and stays within half the
+    // border.
+    let half = (0.5 * border_px).clamp(2.0, EDGE_MAX_HALF_PX);
     let mut out = seed;
     let mut refined_bits = 0u8;
     let mut picks = [None::<Subpix>; 4];
@@ -982,14 +986,14 @@ mod subpix_tests {
     fn candidate_windows_follow_the_cell_within_the_blur_bounds() {
         use super::corner_subpix_half_windows as hw;
         let used = |(h, n): ([u32; 3], usize)| h[..n].to_vec();
-        // 8-cell markers: cell = side / 8; candidates round(0.3/0.5/0.75 · cell) in [2, 4].
-        assert_eq!(used(hw(16.0, 8)), Vec::<u32>::new()); // cell 2 px: no window fits
-        assert_eq!(used(hw(24.0, 8)), Vec::<u32>::new()); // cell 3 px: under 3.3 px
-        assert_eq!(used(hw(28.0, 8)), vec![2, 3]); // cell 3.5 px: 1.05, 1.75, 2.6
-        assert_eq!(used(hw(32.0, 8)), vec![2, 3]); // cell 4 px: 1.2, 2, 3
-        assert_eq!(used(hw(48.0, 8)), vec![2, 3, 4]); // cell 6 px: 1.8, 3, 4.5
-        assert_eq!(used(hw(400.0, 8)), vec![4]);
-        assert_eq!(used(hw(0.0, 8)), Vec::<u32>::new());
+        // Candidates round(0.3/0.5/0.75 · border) in [2, 4].
+        assert_eq!(used(hw(2.0)), Vec::<u32>::new()); // border 2 px: no window fits
+        assert_eq!(used(hw(3.0)), Vec::<u32>::new()); // border 3 px: under 3.3 px
+        assert_eq!(used(hw(3.5)), vec![2, 3]); // border 3.5 px: 1.05, 1.75, 2.6
+        assert_eq!(used(hw(4.0)), vec![2, 3]); // border 4 px: 1.2, 2, 3
+        assert_eq!(used(hw(6.0)), vec![2, 3, 4]); // border 6 px: 1.8, 3, 4.5
+        assert_eq!(used(hw(50.0)), vec![4]);
+        assert_eq!(used(hw(0.0)), Vec::<u32>::new());
     }
 
     /// The window asymmetry separates the junctions: about 0 at an X-junction, about 4/3 at an
@@ -1023,7 +1027,7 @@ mod subpix_tests {
         }
         let img = ImageView::new(&data, W, W, W).unwrap();
         let seed = [[24.6, 23.6], [40.6, 23.6], [40.6, 39.6], [24.6, 39.6]];
-        assert_eq!(subpix_marker_corners(&img, seed, 8), (seed, 0));
+        assert_eq!(subpix_marker_corners(&img, seed, 8, 1), (seed, 0));
     }
 
     /// A 16 px marker (2 px cells, under the floor) on an AprilGrid: connector squares touch its
@@ -1052,7 +1056,7 @@ mod subpix_tests {
         let img = ImageView::new(&data, W, W, W).unwrap();
         let truth = [[24.0, 24.0], [40.0, 24.0], [40.0, 40.0], [24.0, 40.0]];
         let seed = truth.map(|[x, y]| [x + 0.6, y - 0.4]);
-        let (got, moved) = subpix_marker_corners(&img, seed, 8);
+        let (got, moved) = subpix_marker_corners(&img, seed, 8, 1);
         assert_eq!(moved, 0b1111);
         for (g, t) in got.iter().zip(&truth) {
             let d = (g[0] - t[0]).hypot(g[1] - t[1]);
@@ -1116,7 +1120,7 @@ mod subpix_tests {
         let truth = [[16.0, 16.0], [48.0, 16.0], [48.0, 48.0], [16.0, 48.0]];
         let mut seed = truth;
         seed[2] = [48.0, 44.0];
-        let (got, bits) = subpix_marker_corners(&img, seed, 8);
+        let (got, bits) = subpix_marker_corners(&img, seed, 8, 1);
         assert_eq!(bits, 0b1111);
         for (g, t) in got.iter().zip(&truth) {
             let d = (g[0] - t[0]).hypot(g[1] - t[1]);

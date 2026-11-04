@@ -108,6 +108,7 @@ def test_omitted_keys_parse_identically_in_rust_and_python(document: str) -> Non
     # The keys whose omitted value used to differ, or that profiles commonly omit.
     assert rust_side.decoder.corner_subpix is python_side.decoder.corner_subpix
     assert rust_side.decoder.max_border_error_rate == python_side.decoder.max_border_error_rate
+    assert rust_side.decoder.marker_border_bits == python_side.decoder.marker_border_bits
     assert rust_side.segmentation.connectivity == python_side.segmentation.connectivity
     for gate in ("min_fill_ratio", "max_elongation", "min_density"):
         assert getattr(rust_side.quad, gate) == getattr(python_side.quad, gate)

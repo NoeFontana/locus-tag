@@ -422,18 +422,20 @@ fn projected_cell_px(corners: &[[f64; 2]; 4], n_cells: usize) -> f64 {
 
 /// Refine `init` by aligning the decoded tag's model edges to the image.
 /// `dimension` is the data-grid dimension (6 for 36h11); the full grid incl. the
-/// 1-cell border is `dimension + 2`. Returns the refined pose, or `None` if the
-/// no-worse gate rejects it (caller keeps the corner pose).
+/// `border`-cell printed border is `dimension + 2·border`. Returns the refined pose, or `None`
+/// if the no-worse gate rejects it (caller keeps the corner pose).
 #[must_use]
 pub(crate) fn refine_pose_model_edges(
     intr: &CameraIntrinsics,
     img: &ImageView,
     dimension: usize,
+    border: usize,
     tag_size: f64,
     init: &Pose,
     corners: &[[f64; 2]; 4],
 ) -> Option<Pose> {
-    let n = dimension + 2; // full grid incl. border ring
+    // The outline spans the printed border, so the bit edges sit on its `n`-cell lattice.
+    let n = dimension + 2 * border;
     let h = tag_size * 0.5;
     let cell = 2.0 / (n as f64); // canonical cell width
     let scan_half = (0.45 * projected_cell_px(corners, n)).clamp(1.0, SCAN_HALF_MAX);
@@ -577,7 +579,7 @@ mod tests {
         let intr = CameraIntrinsics::new(400.0, 400.0, 100.0, 100.0);
         let pose = frontal_pose(2.0);
         let corners = [[60.0, 60.0], [140.0, 60.0], [140.0, 140.0], [60.0, 140.0]];
-        assert!(refine_pose_model_edges(&intr, &img, 6, 0.4, &pose, &corners).is_none());
+        assert!(refine_pose_model_edges(&intr, &img, 6, 1, 0.4, &pose, &corners).is_none());
     }
 
     // The analytic normal-equations gradient (−Jᵀr, since the cost carries a ½)

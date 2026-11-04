@@ -904,13 +904,14 @@ fn build_intra_frame_pool(nthreads: usize) -> Option<rayon::ThreadPool> {
     }
 }
 
-/// Compute the minimum outer tag dimension (grid + 2 border bits) across the
-/// decoder list. Returns a floor of `6` when the list is empty so that a
-/// mis-configured detector never divides by zero downstream.
-fn compute_min_outer_dim(decoders: &[Box<dyn TagDecoder + Send + Sync>]) -> u32 {
+/// Compute the minimum outer tag dimension (grid plus the printed `border` on each side)
+/// across the decoder list: the PPB estimate and the quad area floor count cells across the
+/// outline. Returns a floor of `6` when the list is empty so that a mis-configured detector
+/// never divides by zero downstream.
+fn compute_min_outer_dim(decoders: &[Box<dyn TagDecoder + Send + Sync>], border: usize) -> u32 {
     decoders
         .iter()
-        .map(|d| d.dimension() as u32 + 2)
+        .map(|d| (d.dimension() + 2 * border) as u32)
         .min()
         .unwrap_or(6)
 }
@@ -950,7 +951,7 @@ impl LocusEngine {
             // Box<FrameContext> to heap-allocate the ~200 KB DetectionBatch.
             let _ = pool.push(Box::new(FrameContext::new()));
         }
-        let min_outer_dim = compute_min_outer_dim(&decoders);
+        let min_outer_dim = compute_min_outer_dim(&decoders, config.marker_border());
         let intra_frame_pool = build_intra_frame_pool(config.nthreads);
         Self {
             config,
@@ -1098,7 +1099,7 @@ impl LocusEngine {
                     .push(crate::decoder::family_to_decoder(family));
             }
         }
-        self.min_outer_dim = compute_min_outer_dim(&self.decoders);
+        self.min_outer_dim = compute_min_outer_dim(&self.decoders, self.config.marker_border());
     }
 
     /// Get the current detector configuration.

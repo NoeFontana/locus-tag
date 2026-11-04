@@ -55,6 +55,13 @@
           "title": "Corner Subpix",
           "type": "boolean"
         },
+        "marker_border_bits": {
+          "default": 1,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Marker Border Bits",
+          "type": "integer"
+        },
         "max_border_error_rate": {
           "anyOf": [
             {

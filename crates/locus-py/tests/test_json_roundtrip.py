@@ -69,4 +69,7 @@ def test_shipped_json_matches_loaded_model(profile: ProfileName) -> None:
     # ``max_border_error_rate`` is absent on disk for profiles that use each family's
     # default ring budget; the model always emits its ``None`` default.
     on_disk.get("decoder", {}).setdefault("max_border_error_rate", None)
+    # ``marker_border_bits`` is absent on disk: every shipped profile reads the default
+    # one-bit border, and the model always emits it.
+    on_disk.get("decoder", {}).setdefault("marker_border_bits", 1)
     assert on_disk == loaded

@@ -45,8 +45,9 @@ const BOW_PARAMS: [usize; 4] = [6, 7, 8, 9];
 /// robust weights being estimated from the same residuals.
 const BOW_F_CRITICAL: f64 = 3.5;
 
-/// Largest layout handled, in cells across including the border.
-const MAX_CELLS: usize = 10;
+/// Largest layout handled, in cells across including the border: the widest family (6 data
+/// bits) inside the widest supported border.
+const MAX_CELLS: usize = 6 + 2 * crate::config::MAX_MARKER_BORDER_BITS as usize;
 /// Positions along each boundary segment (fractions of its cell) where the edge is measured.
 /// The segment ends are left out: there the boundary meets the next one at a junction.
 const STATIONS: [f64; 2] = [1.0 / 3.0, 2.0 / 3.0];
@@ -142,12 +143,14 @@ impl Measurement {
 /// cannot be calibrated (small cells, low contrast, a layout that does not match, or an
 /// inconsistent fit).
 ///
-/// `corners` are the marker's outline corners in its canonical cyclic order and `cells` the
-/// number of cells across the marker including its border.
+/// `corners` are the marker's outline corners in its canonical cyclic order, `cells` the
+/// number of cells across the marker including its border, and `border` that border's width
+/// in cells.
 pub(crate) fn calibrate_marker_corners(
     img: &ImageView,
     corners: [[f64; 2]; 4],
     cells: usize,
+    border: usize,
 ) -> Option<[[f64; 2]; 4]> {
     if !(3..=MAX_CELLS).contains(&cells) {
         return None;
@@ -199,9 +202,16 @@ pub(crate) fn calibrate_marker_corners(
             &at,
             corners,
             cells,
+            border,
         )
     } else {
-        calibrate_with(&|x, y| img.sample_bilinear(x, y), &at, corners, cells)
+        calibrate_with(
+            &|x, y| img.sample_bilinear(x, y),
+            &at,
+            corners,
+            cells,
+            border,
+        )
     }
 }
 
@@ -212,6 +222,7 @@ fn calibrate_with(
     at: &impl Fn(f64, f64) -> [f64; 2],
     corners: [[f64; 2]; 4],
     cells: usize,
+    border: usize,
 ) -> Option<[[f64; 2]; 4]> {
     let n = cells as f64;
     let sample = |u: f64, v: f64| {
@@ -219,7 +230,7 @@ fn calibrate_with(
         sample_px(p[0], p[1])
     };
 
-    let bits = read_bits(cells, &sample)?;
+    let bits = read_bits(cells, border, &sample)?;
     let contrast = bits.white - bits.dark;
 
     let mut meas = [Measurement::default(); MAX_MEASUREMENTS];
@@ -296,7 +307,7 @@ fn calibrate_with(
 /// Reads the bit pattern: the border ring's and the quiet zone's median levels set the
 /// threshold. `None` for a marker without enough contrast, or whose border is wider than the
 /// layout.
-fn read_bits(cells: usize, sample: &impl Fn(f64, f64) -> f64) -> Option<BitsView> {
+fn read_bits(cells: usize, border: usize, sample: &impl Fn(f64, f64) -> f64) -> Option<BitsView> {
     let n = cells as f64;
     let mut ring = [0.0f64; 4 * MAX_CELLS];
     let mut quiet = [0.0f64; 4 * MAX_CELLS];
@@ -337,8 +348,9 @@ fn read_bits(cells: usize, sample: &impl Fn(f64, f64) -> f64) -> Option<BitsView
     // Read a quarter cell inside the border's edge: a 2-bit border reads 2(d + 2)/(d + 4) ≥ 1.5
     // cells wide for d ≥ 4 data bits, so the cell centre (1.5) can sit within blur and lens bow
     // of that edge (Kalibr's: 1.6).
-    let (near, far) = (1.25, n - 1.25);
-    let ring_dark = (1..cells - 1).all(|i| {
+    let b = border as f64;
+    let (near, far) = (b + 0.25, n - b - 0.25);
+    let ring_dark = (border..cells - border).all(|i| {
         let c = i as f64 + 0.5;
         [(c, near), (c, far), (near, c), (far, c)]
             .into_iter()
@@ -697,7 +709,7 @@ mod tests {
         let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
         // A corner estimator on these intensities reports the corners inside the outline.
         let seen = inset(0.5);
-        let calibrated = calibrate_marker_corners(&img, seen, 8).expect("calibrated");
+        let calibrated = calibrate_marker_corners(&img, seen, 8, 1).expect("calibrated");
         assert!(max_error(&seen, &OUTLINE) > 0.5);
         let err = max_error(&calibrated, &OUTLINE);
         assert!(err < 0.12, "calibrated corners off by {err:.3} px");
@@ -707,7 +719,7 @@ mod tests {
     fn leaves_exact_corners_of_a_linear_image_in_place() {
         let data = render(8, 1, 1.2, false);
         let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
-        let calibrated = calibrate_marker_corners(&img, OUTLINE, 8).expect("calibrated");
+        let calibrated = calibrate_marker_corners(&img, OUTLINE, 8, 1).expect("calibrated");
         let err = max_error(&calibrated, &OUTLINE);
         assert!(err < 0.08, "moved exact corners by {err:.3} px");
     }
@@ -721,7 +733,7 @@ mod tests {
         let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
         let truth = OUTLINE.map(|c| distort(c, k1));
         let seen = move_sides_outward(truth, [-0.5; 4]).unwrap();
-        let calibrated = calibrate_marker_corners(&img, seen, 8).expect("calibrated");
+        let calibrated = calibrate_marker_corners(&img, seen, 8, 1).expect("calibrated");
         let err = max_error(&calibrated, &truth);
         assert!(
             err < 0.15,
@@ -734,14 +746,14 @@ mod tests {
         // A 2-cell (Kalibr) border read as a 1-cell layout.
         let data = render(10, 2, 1.2, true);
         let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
-        assert!(calibrate_marker_corners(&img, OUTLINE, 8).is_none());
+        assert!(calibrate_marker_corners(&img, OUTLINE, 8, 1).is_none());
     }
 
     #[test]
     fn declines_cells_smaller_than_the_floor() {
         let data = render(8, 1, 1.2, true);
         let img = ImageView::new(&data, SIZE, SIZE, SIZE).unwrap();
-        assert!(calibrate_marker_corners(&img, OUTLINE, 40).is_none());
+        assert!(calibrate_marker_corners(&img, OUTLINE, 40, 1).is_none());
     }
 
     #[test]
@@ -753,7 +765,7 @@ mod tests {
             let h = Homography::square_to_quad(&OUTLINE.map(|c| distort(c, k1))).unwrap();
             let read = |data: &[u8]| {
                 let img = ImageView::new(data, SIZE, SIZE, SIZE).unwrap();
-                read_bits(8, &|u: f64, v: f64| {
+                read_bits(8, 1, &|u: f64, v: f64| {
                     let p = h.project([u / 4.0 - 1.0, v / 4.0 - 1.0]);
                     img.sample_bilinear(p[0], p[1])
                 })

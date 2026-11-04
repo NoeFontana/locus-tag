@@ -17,6 +17,9 @@ pub enum ConfigError {
     /// Border-ring error budget must lie in [0, 1].
     #[error("decoder_max_border_error_rate must be in [0, 1], got {0}")]
     InvalidBorderErrorRate(f32),
+    /// Marker border width must lie in `1..=MAX_MARKER_BORDER_BITS`.
+    #[error("decoder_marker_border_bits must be in 1..={max}, got {0}", max = crate::config::MAX_MARKER_BORDER_BITS)]
+    InvalidMarkerBorderBits(u8),
     /// Decimation factor must be >= 1.
     #[error("decimation factor must be >= 1, got {0}")]
     InvalidDecimation(usize),

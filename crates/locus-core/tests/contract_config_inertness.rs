@@ -670,6 +670,14 @@ fn cases() -> Vec<FieldCase> {
             inert_reason: None,
         },
         FieldCase {
+            field: "decoder_marker_border_bits",
+            // The scene's markers have 1-bit borders: a declared 2-bit border samples their
+            // payload off its lattice.
+            base: noop,
+            mutate: |c| c.decoder_marker_border_bits = 2,
+            inert_reason: None,
+        },
+        FieldCase {
             field: "refinement_mode",
             base: noop,
             mutate: |c| c.refinement_mode = CornerRefinementMode::None,
@@ -794,6 +802,7 @@ fn every_config_field() -> Vec<&'static str> {
         decoder_min_contrast: _,
         decoder_max_border_error_rate: _,
         decoder_corner_subpix: _,
+        decoder_marker_border_bits: _,
         refinement_mode: _,
         max_hamming_error: _,
         huber_delta_px: _,
@@ -831,6 +840,7 @@ fn every_config_field() -> Vec<&'static str> {
         "decoder_min_contrast",
         "decoder_max_border_error_rate",
         "decoder_corner_subpix",
+        "decoder_marker_border_bits",
         "refinement_mode",
         "max_hamming_error",
         "huber_delta_px",
