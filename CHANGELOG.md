@@ -92,8 +92,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   - Measured and not shipped:
     - running the split on every component: textured frames fill the candidate cap with
       pieces and push real tags out (ICRA grid recall 0.67 → 0.26);
-    - geodesic regrowth over the bounding box: up to 424 ms on a frame-sized texture
-      component, against the opening on runs;
+    - geodesic regrowth over the bounding box: up to 2.6 pt more recall on the renders, but
+      up to 424 ms on a frame-sized texture component, where the opening on runs stays
+      bounded by the run count;
     - a 5 × 5 erosion: it opens small markers' own borders;
     - requiring two cores: a tag fused only to its connectors has one;
     - skipping a lone piece that keeps ≥ 90 % of its component: −5 % cost, but it loses up
