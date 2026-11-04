@@ -49,6 +49,9 @@ struct RichTruthEntry {
     record_type: String,
     position: [f64; 3],
     rotation_quaternion: [f64; 4], // [w, x, y, z]
+    /// Image corners of a `TAG` record (absent on `BOARD` records).
+    #[serde(default)]
+    corners: Option<Vec<[f64; 2]>>,
     #[serde(default)]
     k_matrix: Vec<Vec<f64>>,
     #[serde(default)]
@@ -76,6 +79,8 @@ pub struct BoardImageEntry {
     pub filename: String,
     pub board_pose: BoardPoseEntry,
     pub visible_tag_ids: Vec<u32>,
+    /// Ground-truth image corners per visible tag, in the detector's corner order.
+    pub tag_corners: Vec<(u32, [[f64; 2]; 4])>,
 }
 
 #[derive(Clone)]
@@ -83,6 +88,10 @@ pub struct BoardPoseEntry {
     pub rotation_quaternion: [f64; 4], // [w, x, y, z]
     pub translation: [f64; 3],
 }
+
+/// Per-image truth gathered from `rich_truth.json`: the board pose, the visible tag ids and
+/// their image corners.
+type ImageTruth = (BoardPoseEntry, Vec<u32>, Vec<(u32, [[f64; 2]; 4])>);
 
 pub struct BoardConfigEntry {
     pub board_type: String,
@@ -130,7 +139,7 @@ impl BoardHubProvider {
 
         let mut board_config_entry = None;
         let mut intrinsics = None;
-        let mut image_map: std::collections::BTreeMap<String, (BoardPoseEntry, Vec<u32>)> =
+        let mut image_map: std::collections::BTreeMap<String, ImageTruth> =
             std::collections::BTreeMap::new();
 
         for entry in raw_entries {
@@ -166,9 +175,10 @@ impl BoardHubProvider {
                     translation: entry.position,
                 };
 
-                let img_data = image_map
-                    .entry(filename)
-                    .or_insert((pose.clone(), Vec::new()));
+                let img_data =
+                    image_map
+                        .entry(filename)
+                        .or_insert((pose.clone(), Vec::new(), Vec::new()));
                 img_data.0 = pose;
             } else if entry.record_type == "TAG" {
                 let filename = if entry.image_id.to_lowercase().ends_with(".png") {
@@ -182,10 +192,16 @@ impl BoardHubProvider {
                     translation: [0.0, 0.0, 0.0],
                 };
 
-                let img_data = image_map
-                    .entry(filename)
-                    .or_insert((placeholder_pose, Vec::new()));
+                let img_data =
+                    image_map
+                        .entry(filename)
+                        .or_insert((placeholder_pose, Vec::new(), Vec::new()));
                 img_data.1.push(entry.tag_id());
+                if let Some(c) = entry.corners.as_deref()
+                    && c.len() == 4
+                {
+                    img_data.2.push((entry.tag_id(), [c[0], c[1], c[2], c[3]]));
+                }
             }
         }
 
@@ -228,10 +244,11 @@ impl BoardHubProvider {
         let images: Vec<BoardImageEntry> = image_map
             .into_iter()
             .map(
-                |(filename, (board_pose, visible_tag_ids))| BoardImageEntry {
+                |(filename, (board_pose, visible_tag_ids, tag_corners))| BoardImageEntry {
                     filename,
                     board_pose,
                     visible_tag_ids,
+                    tag_corners,
                 },
             )
             .collect();
@@ -356,6 +373,17 @@ impl BoardRegressionHarness {
         let mut frames_singular_covariance = 0;
         let mut total_coverage = 0.0;
         let mut total_time = 0.0;
+        // Diagnostic: `LOCUS_BOARD_FRAMES_DIR=<dir>` writes `<dir>/<snapshot>.jsonl`, one line per
+        // frame with its pose errors and each detected corner's error against the rendered
+        // truth and its `corner_refined` bit. The snapshot is unaffected.
+        let mut frames_out = std::env::var_os("LOCUS_BOARD_FRAMES_DIR").map(|dir| {
+            let dir = PathBuf::from(dir);
+            std::fs::create_dir_all(&dir).expect("create LOCUS_BOARD_FRAMES_DIR");
+            std::io::BufWriter::new(
+                std::fs::File::create(dir.join(format!("{}.jsonl", self.snapshot_name)))
+                    .expect("create frame dump"),
+            )
+        });
 
         for (i, entry) in provider.images.iter().enumerate() {
             if i % 20 == 0 {
@@ -411,6 +439,15 @@ impl BoardRegressionHarness {
                 if self.refinement == RefinementStrategy::ForstnerSaddle {
                     apply_forstner_to_batch(&mut batch_cloned, &img_view, 3);
                 }
+                // Diagnostic: `LOCUS_BOARD_ORACLE_MAX_SIDE=<px>` replaces the corners of every
+                // valid tag whose true side is under `<px>` by the rendered truth, isolating the board
+                // stage from corner error.
+                if let Some(max_side) = std::env::var("LOCUS_BOARD_ORACLE_MAX_SIDE")
+                    .ok()
+                    .and_then(|s| s.parse::<f64>().ok())
+                {
+                    apply_oracle_corners(&mut batch_cloned, entry, max_side);
+                }
 
                 let board_start = std::time::Instant::now();
                 let v = batch_cloned.partition(batch_cloned.capacity());
@@ -421,6 +458,13 @@ impl BoardRegressionHarness {
                 );
                 let board_ms = board_start.elapsed().as_secs_f64() * 1000.0;
                 total_time += detect_ms + board_ms;
+
+                if let Some(out) = frames_out.as_mut() {
+                    let errors = board_pose
+                        .as_ref()
+                        .map(|est| frame_pose_errors(&est.pose, &entry.board_pose));
+                    write_frame_dump(out, entry, &batch_cloned, v, errors);
+                }
 
                 if let Some(est) = board_pose {
                     frames_with_board += 1;
@@ -512,6 +556,93 @@ impl BoardRegressionHarness {
             ".summary.mean_total_ms" => "[DURATION]"
         });
     }
+}
+
+/// Replaces the corners of each valid detection whose true side is under `max_side` px by
+/// its truth.
+#[cfg(feature = "bench-internals")]
+fn apply_oracle_corners(
+    batch: &mut locus_core::bench_api::DetectionBatch,
+    entry: &BoardImageEntry,
+    max_side: f64,
+) {
+    for i in 0..batch.capacity() {
+        if batch.status_mask[i] != locus_core::bench_api::CandidateState::Valid {
+            continue;
+        }
+        let Some((_, truth)) = entry.tag_corners.iter().find(|(t, _)| *t == batch.ids[i]) else {
+            continue;
+        };
+        // The truth's side, so every code variant replaces the same tags.
+        let side = (0..4)
+            .map(|j| {
+                let (a, b) = (truth[j], truth[(j + 1) % 4]);
+                (a[0] - b[0]).hypot(a[1] - b[1])
+            })
+            .sum::<f64>()
+            / 4.0;
+        if side < max_side {
+            for (corner, t) in batch.corners[i].iter_mut().zip(truth) {
+                corner.x = t[0] as f32;
+                corner.y = t[1] as f32;
+            }
+        }
+    }
+}
+
+/// Board translation (m) and rotation (deg) errors of `pose` against the truth.
+fn frame_pose_errors(pose: &locus_core::pose::Pose, truth: &BoardPoseEntry) -> (f64, f64) {
+    let [w, x, y, z] = truth.rotation_quaternion;
+    let gt_q = UnitQuaternion::from_quaternion(nalgebra::Quaternion::new(w, x, y, z));
+    let gt_t = Vector3::from(truth.translation);
+    (
+        (pose.translation() - gt_t).norm(),
+        pose.quaternion().angle_to(&gt_q).to_degrees(),
+    )
+}
+
+/// One JSONL line of the `LOCUS_BOARD_FRAMES_DIR` diagnostic: the frame's pose errors and, per
+/// valid detection with a truth record, its side (px) and each corner's `[dx, dy, refined]`.
+#[cfg(feature = "bench-internals")]
+fn write_frame_dump(
+    out: &mut impl std::io::Write,
+    entry: &BoardImageEntry,
+    batch: &locus_core::bench_api::DetectionBatch,
+    valid: usize,
+    errors: Option<(f64, f64)>,
+) {
+    let mut tags = Vec::new();
+    for i in 0..valid {
+        let id = batch.ids[i];
+        let Some((_, truth)) = entry.tag_corners.iter().find(|(t, _)| *t == id) else {
+            continue;
+        };
+        let c = batch.corners[i];
+        let side = (0..4)
+            .map(|j| {
+                let (a, b) = (c[j], c[(j + 1) % 4]);
+                f64::from(a.x - b.x).hypot(f64::from(a.y - b.y))
+            })
+            .sum::<f64>()
+            / 4.0;
+        let corners: Vec<[f64; 3]> = (0..4)
+            .map(|j| {
+                [
+                    f64::from(c[j].x) - truth[j][0],
+                    f64::from(c[j].y) - truth[j][1],
+                    f64::from((batch.corner_refined[i] >> j) & 1),
+                ]
+            })
+            .collect();
+        tags.push(serde_json::json!({ "id": id, "side": side, "corners": corners }));
+    }
+    let line = serde_json::json!({
+        "frame": entry.filename,
+        "t_err": errors.map(|e| e.0),
+        "r_err": errors.map(|e| e.1),
+        "tags": tags,
+    });
+    writeln!(out, "{line}").expect("write frame dump");
 }
 
 /// Direct Förstner saddle solve. Builds the 2×2 normal equations
