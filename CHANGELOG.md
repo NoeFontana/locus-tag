@@ -29,6 +29,15 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   generated `dictionaries.rs` is byte-identical. The `paste` advisory ignore is gone, since
   `nalgebra` 0.35 no longer pulls it into the production graph.
 
+### Added
+
+- **Recall autopsy** (`examples/recall_autopsy.rs`, `bench-internals`). For each ground-truth tag,
+  the first stage that lost it: border not foreground, component too small, fused with another
+  tag or other structure, no quad, decode failed, wrong id. Truth from a hub dataset or a JSONL
+  file. On a render of Kalibr's printed AprilGrid it splits every lost tag between decoding
+  (13–95 % per case, mostly 3–9 bits off) and ink-spread fusion (2–67 %); see
+  `docs/engineering/benchmarking/recall_autopsy_20261104.md`.
+
 ### Changed
 
 - **`helicoid` 0.0.4.** Its `SO3::from_matrix` returns Shepperd's quotients whenever they are
