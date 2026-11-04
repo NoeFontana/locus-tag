@@ -5,6 +5,10 @@
 //! `standard` profile) or load a profile with `DetectorConfig::from_profile` /
 //! `DetectorConfig::from_profile_json`.
 
+/// Widest supported [`DetectorConfig::decoder_marker_border_bits`]. Bounds the decoder's
+/// stack-allocated ring buffers; OpenCV's default is 1 and Kalibr's AprilGrid prints 2.
+pub const MAX_MARKER_BORDER_BITS: u8 = 3;
+
 /// Segmentation connectivity mode.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -286,6 +290,15 @@ pub struct DetectorConfig {
     /// Applies to undistorted cameras, and skips markers whose cells are under ~3.3 px (their
     /// seed corners are kept).
     pub decoder_corner_subpix: bool,
+    /// Width of the printed black border, in bits (default 1; OpenCV's `markerBorderBits`).
+    ///
+    /// The detected quad is the border's outline, so a marker printed with a wider border than
+    /// it is decoded with has its bits sampled off-centre: Kalibr's AprilGrid prints 36h11 with
+    /// 2 border bits, a 10-cell tag that a 1-bit layout reads as 8 cells. Set it to the printed
+    /// width: the payload is then sampled on its true lattice, every border ring is verified,
+    /// and the corner and inset stages size their windows from the border. In
+    /// `1..=MAX_MARKER_BORDER_BITS`.
+    pub decoder_marker_border_bits: u8,
     /// Strategy for refining corner positions (default: [`CornerRefinementMode::Erf`]).
     ///
     /// Read only under [`QuadExtractionPolicy::Static`]; `AdaptivePpb` requires `None` here
@@ -457,6 +470,7 @@ impl Default for DetectorConfig {
             decoder_min_contrast: 20.0,
             decoder_max_border_error_rate: None,
             decoder_corner_subpix: true,
+            decoder_marker_border_bits: 1,
             refinement_mode: CornerRefinementMode::Erf,
             max_hamming_error: None,
             huber_delta_px: 1.5,
@@ -499,6 +513,11 @@ impl DetectorConfig {
             && !(0.0..=1.0).contains(&rate)
         {
             return Err(ConfigError::InvalidBorderErrorRate(rate));
+        }
+        if !(1..=MAX_MARKER_BORDER_BITS).contains(&self.decoder_marker_border_bits) {
+            return Err(ConfigError::InvalidMarkerBorderBits(
+                self.decoder_marker_border_bits,
+            ));
         }
         if !(self.threshold_noise_k.is_finite() && self.threshold_noise_k > 0.0) {
             return Err(ConfigError::InvalidNoiseK(self.threshold_noise_k));
@@ -764,6 +783,7 @@ mod profile_json {
         pub max_hamming_error: Option<u32>,
         pub max_border_error_rate: Option<f32>,
         pub corner_subpix: bool,
+        pub marker_border_bits: u8,
     }
 
     impl DecoderJson {
@@ -774,6 +794,7 @@ mod profile_json {
                 max_hamming_error: c.max_hamming_error,
                 max_border_error_rate: c.decoder_max_border_error_rate,
                 corner_subpix: c.decoder_corner_subpix,
+                marker_border_bits: c.decoder_marker_border_bits,
             }
         }
     }
@@ -863,6 +884,7 @@ mod profile_json {
                 decoder_min_contrast: p.decoder.min_contrast,
                 decoder_max_border_error_rate: p.decoder.max_border_error_rate,
                 decoder_corner_subpix: p.decoder.corner_subpix,
+                decoder_marker_border_bits: p.decoder.marker_border_bits,
                 refinement_mode: p.decoder.refinement_mode,
                 max_hamming_error: p.decoder.max_hamming_error,
                 huber_delta_px: p.pose.huber_delta_px,

@@ -260,6 +260,12 @@ class DecoderConfig(BaseModel):
     gradient corner estimator has on gamma-encoded images. Windows and weights come from
     the image; nothing is configured. Applies to undistorted cameras, and skips markers whose
     cells are under ~3.3 px (their seed corners are kept)."""
+    marker_border_bits: int = Field(default=1, ge=1, le=3)
+    """Width of the printed black border, in bits (OpenCV's ``markerBorderBits``). The
+    detected quad is the border's outline, so a wider printed border than the decoded layout
+    samples the bits off-centre: Kalibr's AprilGrid prints tag36h11 with 2 border bits. Set it
+    to the printed width: the payload is then read on its true lattice, every border ring is
+    verified, and the corner and inset stages size their windows from the border."""
 
 
 class PoseConfig(BaseModel):

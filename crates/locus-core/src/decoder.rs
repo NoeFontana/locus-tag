@@ -497,8 +497,12 @@ fn recovery_window(bit_count: usize, num_codes: usize) -> u32 {
 pub(crate) const MAX_DECODERS: usize = 8;
 const _: () = assert!(crate::config::TagFamily::all().len() <= MAX_DECODERS);
 
-/// Border-ring cells of the largest supported family: `4·(d + 1)` for a `d×d` payload.
-const MAX_RING_CELLS: usize = 4 * (8 + 1);
+/// Border cells of the largest supported layout: `(d + 2b)² − d²` for a `d×d` payload inside
+/// a `b`-bit border, at `d = 8` and `b = MAX_MARKER_BORDER_BITS`.
+const MAX_RING_CELLS: usize = {
+    let side = 8 + 2 * crate::config::MAX_MARKER_BORDER_BITS as usize;
+    side * side - 8 * 8
+};
 
 /// A ring cell counts as bright (an error) only once it reaches this fraction of the way from
 /// the payload's dark class mean to its bright class mean.
@@ -512,11 +516,12 @@ const MAX_RING_CELLS: usize = 4 * (8 + 1);
 /// detector, AMD EPYC-Milan (see `docs/engineering/benchmarking/sota_scoreboard_20261002.md`).
 const RING_BRIGHT_FRACTION: f64 = 0.9;
 
-/// Marker evidence beyond the codeword: the one-cell black border around the payload.
+/// Marker evidence beyond the codeword: the `border`-cell black border around the payload.
 ///
-/// The canonical square `[-1, 1]²` spans the `d×d` data cells plus one border cell on each
-/// side, so border-cell centres sit at `±(d + 1)/(d + 2)`. `sample` maps canonical points to
-/// image intensities (pinhole or distortion-aware). Payload cells are classified dark/bright
+/// The canonical square `[-1, 1]²` spans the `d×d` data cells plus `border` cells on each side,
+/// so every cell outside the central `d×d` is border. `sample` maps canonical points to image
+/// intensities (pinhole or distortion-aware); the payload is read on its lattice, the inner
+/// [`lattice_scale`] of the square. Payload cells are classified dark/bright
 /// exactly as decoding does (adaptive per-cell thresholds), and a ring cell counts as an
 /// error when it reaches [`RING_BRIGHT_FRACTION`] of the way from the dark to the bright class
 /// mean. Returns `(errors, ring_cells)`, or `None` when the evidence cannot be evaluated (a
@@ -525,24 +530,27 @@ const RING_BRIGHT_FRACTION: f64 = 0.9;
 /// A codeword match alone is weak evidence for small dictionaries: with `N` codes of `n` bits
 /// and Hamming budget `h`, a random candidate decodes with probability
 /// `4·N·Σ_{k≤h} C(n, k) / 2ⁿ` (≈ 1.8e-3 for tag16h5 at h = 0), so frames with hundreds of
-/// textured candidates produce false positives. A uniformly dark ring of `4·(d + 1)` cells is
-/// independent evidence that texture rarely supplies.
+/// textured candidates produce false positives. A uniformly dark border of `(d + 2b)² − d²`
+/// cells is independent evidence that texture rarely supplies.
 fn ring_evidence(
     decoder: &(impl TagDecoder + ?Sized),
+    border: usize,
     mut sample: impl FnMut(&[(f64, f64)], &mut [f64]) -> bool,
 ) -> Option<(u32, u32)> {
     let d = decoder.dimension();
-    let n_ring = 4 * (d + 1);
+    let side = d + 2 * border;
+    let n_ring = side * side - d * d;
     if n_ring > MAX_RING_CELLS {
         return None;
     }
-    let pitch = 2.0 / (d + 2) as f64;
+    let pitch = 2.0 / side as f64;
     let centre = |k: usize| -1.0 + pitch * (k as f64 + 0.5);
+    let in_border = |k: usize| k < border || k >= side - border;
     let mut ring_pts = [(0.0f64, 0.0f64); MAX_RING_CELLS];
     let mut m = 0;
-    for k in 0..d + 2 {
-        for l in 0..d + 2 {
-            if k == 0 || l == 0 || k == d + 1 || l == d + 1 {
+    for k in 0..side {
+        for l in 0..side {
+            if in_border(k) || in_border(l) {
                 ring_pts[m] = (centre(l), centre(k));
                 m += 1;
             }
@@ -556,8 +564,18 @@ fn ring_evidence(
 
     let points = decoder.sample_points();
     let n = points.len().min(MAX_BIT_COUNT);
+    let mut lattice = [(0.0f64, 0.0f64); MAX_BIT_COUNT];
+    let points = if border > 1 {
+        let scale = lattice_scale(d, border);
+        for (q, &(u, v)) in lattice.iter_mut().zip(&points[..n]) {
+            *q = (u * scale, v * scale);
+        }
+        &lattice[..n]
+    } else {
+        &points[..n]
+    };
     let mut data = [0.0f64; MAX_BIT_COUNT];
-    if !sample(&points[..n], &mut data[..n]) {
+    if !sample(points, &mut data[..n]) {
         return None;
     }
     let thresholds = compute_adaptive_thresholds(&data[..n], &points[..n]);
@@ -580,14 +598,21 @@ fn ring_evidence(
     Some((errors, n_ring as u32))
 }
 
+/// Fraction of the outline the canonical 1-bit layout of a `d×d` payload occupies when the
+/// printed border is `border` bits: `(d + 2)/(d + 2b)`, 1 for the default border.
+fn lattice_scale(d: usize, border: usize) -> f64 {
+    (d + 2) as f64 / (d + 2 * border) as f64
+}
+
 /// [`ring_evidence`] through a pinhole homography with the ROI-cached sampler.
 fn rectified_ring_evidence(
     img: &crate::image::ImageView,
     roi: &RoiCache,
     h: &Homography,
     decoder: &(impl TagDecoder + ?Sized),
+    border: usize,
 ) -> Option<(u32, u32)> {
-    ring_evidence(decoder, |pts, out| {
+    ring_evidence(decoder, border, |pts, out| {
         sample_grid_values_optimized(img, h, roi, pts, out, pts.len())
     })
 }
@@ -1322,9 +1347,28 @@ struct CandidateSampler<'a, W: Warp> {
     roi: RoiCache<'a>,
     /// The frame's working-plane-to-pixel map.
     warp: &'a W,
+    /// Printed border width in bits (`decoder.marker_border_bits`).
+    border: usize,
 }
 
 impl<W: Warp> CandidateSampler<'_, W> {
+    /// `h` (the outline's homography) restricted to the decoder's 1-bit layout: composed with
+    /// `diag(s, s, 1)`, `s` the [`lattice_scale`]. Exact under perspective, unlike scaling the
+    /// corners about their centroid. `None` for the default border, where it is `h` itself.
+    #[inline]
+    fn lattice(&self, h: &Matrix3x3, decoder: &(impl TagDecoder + ?Sized)) -> Option<Matrix3x3> {
+        (self.border > 1).then(|| {
+            #[allow(clippy::cast_possible_truncation)]
+            let s = lattice_scale(decoder.dimension(), self.border) as f32;
+            let mut m = *h;
+            // Column-major: the first two columns multiply the canonical u and v.
+            for x in &mut m.data[..6] {
+                *x *= s;
+            }
+            m
+        })
+    }
+
     /// Working-plane homography of a quad given in **raw pixel** coordinates.
     ///
     /// For a rectified camera this is exactly `homography_matrix(quad)`. For a warped one the
@@ -1356,6 +1400,8 @@ impl<W: Warp> CandidateSampler<'_, W> {
     /// Bits sampled from the marker's grid through a working-plane homography.
     #[inline]
     fn sample_grid(&self, h: &Matrix3x3, decoder: &(impl TagDecoder + ?Sized)) -> Option<u64> {
+        let lattice = self.lattice(h, decoder);
+        let h = lattice.as_ref().unwrap_or(h);
         if W::IS_IDENTITY {
             return sample_grid_soa_precomputed(self.img, &self.roi, h, decoder);
         }
@@ -1386,9 +1432,9 @@ impl<W: Warp> CandidateSampler<'_, W> {
     ) -> Option<(u32, u32)> {
         let h = Homography::from_matrix3x3(h);
         if W::IS_IDENTITY {
-            return rectified_ring_evidence(self.img, &self.roi, &h, decoder);
+            return rectified_ring_evidence(self.img, &self.roi, &h, decoder, self.border);
         }
-        ring_evidence(decoder, |pts, out| {
+        ring_evidence(decoder, self.border, |pts, out| {
             sample_points_warped(self.img, &h, pts, self.warp, out)
         })
     }
@@ -1504,10 +1550,12 @@ fn finalize_decoded_candidate(
     let mut refined_bits = 0u8;
     if subpix {
         let seed = quad_to_f64(corners_slot);
-        let (subpix_corners, bits) = crate::refinement::subpix_marker_corners(img, seed, cells);
+        let border = usize::from(config.decoder_marker_border_bits);
+        let (subpix_corners, bits) =
+            crate::refinement::subpix_marker_corners(img, seed, cells, border);
         // Remove the photometric inset the decoded marker's bit edges measure.
         let final_corners =
-            crate::marker_inset::calibrate_marker_corners(img, subpix_corners, cells)
+            crate::marker_inset::calibrate_marker_corners(img, subpix_corners, cells, border)
                 .unwrap_or(subpix_corners);
         refined_bits = bits;
         *corners_slot = quad_to_f32(&final_corners);
@@ -1776,7 +1824,12 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                         } else {
                             RoiCache::disabled()
                         };
-                        let sampler = CandidateSampler { img, roi, warp };
+                        let sampler = CandidateSampler {
+                            img,
+                            roi,
+                            warp,
+                            border: usize::from(config.decoder_marker_border_bits),
+                        };
 
                         let mut best_h = u32::MAX;
                         let mut best_code = None;
@@ -1867,7 +1920,7 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                             if let Some((id, hamming, rot, code, decoder_idx)) = best_match_in_scale
                             {
                                 let decoder = decoders[decoder_idx].as_ref();
-                                cells = decoder.dimension() + 2;
+                                cells = decoder.dimension() + 2 * sampler.border;
 
                                 // Always perform ERF refinement for finalists if requested
                                 if config.refinement_mode
@@ -2042,7 +2095,7 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                                         decoder.as_ref(),
                                                     )
                                                 {
-                                                    cells = decoder.dimension() + 2;
+                                                    cells = decoder.dimension() + 2 * sampler.border;
                                                     return (
                                                         CandidateState::Valid,
                                                         id,
@@ -2101,7 +2154,7 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                                             decoder.as_ref(),
                                                         )
                                                     {
-                                                        cells = decoder.dimension() + 2;
+                                                        cells = decoder.dimension() + 2 * sampler.border;
                                                         return (
                                                             CandidateState::Valid,
                                                             id,
@@ -2726,7 +2779,13 @@ mod tests {
         ])
         .unwrap();
         let m = h.to_matrix3x3();
-        rectified_ring_evidence(&img, &roi, &Homography::from_matrix3x3(&m), &AprilTag36h11)
+        rectified_ring_evidence(
+            &img,
+            &roi,
+            &Homography::from_matrix3x3(&m),
+            &AprilTag36h11,
+            1,
+        )
     }
 
     #[test]
@@ -2754,6 +2813,7 @@ mod tests {
             img: &img,
             roi,
             warp: &NoWarp,
+            border: 1,
         };
         // 3 errors of 28: floor(0.1 · 28) = 2 rejects, floor(0.11 · 28) = 3 accepts.
         assert!(!sampler.ring_ok(0.1, &m, &AprilTag36h11));
@@ -2798,10 +2858,27 @@ mod tests {
                 model: &model,
                 table: &table,
             };
-            let got = ring_evidence(&AprilTag36h11, |pts, out| {
+            let got = ring_evidence(&AprilTag36h11, 1, |pts, out| {
                 sample_points_warped(&img, &h, pts, &warp, out)
             });
             assert_eq!(got, expect);
+        }
+    }
+
+    /// Border evidence covers every border cell of the declared layout: `(d + 2b)² − d²`.
+    #[test]
+    fn ring_evidence_covers_every_border_ring() {
+        for (border, cells) in [(1, 28), (2, 64), (3, 108)] {
+            // Canonical border: dark; payload: bright on the right half, so both classes exist.
+            let inner = 6.0 / (6 + 2 * border) as f64;
+            let got = ring_evidence(&AprilTag36h11, border, |pts, out| {
+                for (o, &(u, v)) in out.iter_mut().zip(pts) {
+                    let payload = u.abs() < inner && v.abs() < inner;
+                    *o = if payload && u > 0.0 { 220.0 } else { 20.0 };
+                }
+                true
+            });
+            assert_eq!(got, Some((0, cells)), "border {border}");
         }
     }
 

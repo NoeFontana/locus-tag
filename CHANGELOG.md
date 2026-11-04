@@ -37,6 +37,26 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   file. On a render of Kalibr's printed AprilGrid it splits every lost tag between decoding
   (13–95 % per case, mostly 3–9 bits off) and ink-spread fusion (2–67 %); see
   `docs/engineering/benchmarking/recall_autopsy_20261104.md`.
+- **`decoder.marker_border_bits`** (default 1; OpenCV's `markerBorderBits`, Python
+  `DecoderConfig.marker_border_bits`, 1–3): the printed black-border width. The detected quad
+  is the border's outline, so a marker printed with a wider border had its bits sampled
+  off-centre. Kalibr's AprilGrid prints tag36h11 with 2 border bits, and the 10-cell tag decoded
+  only at the 0.9 scale retry, about 0.3 bit from its cells' edges. Declared, the payload is
+  sampled through the outline homography composed with `diag(s, s, 1)`, `s = (d + 2)/(d + 2b)`
+  (exact under perspective). The scale retries apply to that lattice, the border evidence
+  covers all `(d + 2b)² − d²` border cells, and the corner pass and marker inset size their
+  windows and layout from the border.
+  - On a physically based render of Kalibr's printed AprilGrid (TUM-VI photometry, `grid`,
+    `marker_border_bits = 2`), against the rendered truth:
+    - recall 0.536 → 0.780 at the baseline (Kalibr's extractor 0.788);
+    - 0.685 → 0.912 without ink, 0.161 → 0.522 at 0.8 px blur, 0.006 → 0.300 on 12 px tags;
+    - error over the Cramér–Rao bound 15.5 → 13.7 (baseline) and 13.0 → 9.2 (0.8 px blur);
+    - tag-scale bias within the ±0.01 px target in every case with blur ≤ 0.8 px and ink
+      ≤ 0.2 mm, except 70° incidence (−0.020 ± 0.027 px over ~170 corners).
+  - EuRoC `cam_april` (`grid`): recall 88.0 → 88.3 %, one extra false positive (a correct id
+    5.2 px off the reference outline). Leave-one-out corner median 0.2423 → 0.2443 px.
+    1-thread latency +12 % (5.72 → 6.42 ms, serial A-B-B-A).
+  - No shipped profile sets it, and with the default every dataset snapshot is byte-identical.
 
 ### Changed
 
