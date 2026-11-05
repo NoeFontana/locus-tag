@@ -55,9 +55,9 @@ const COST_TOLERANCE: f64 = 1e-4;
 const INITIAL_DAMPING: f64 = 1e-3;
 /// Rejections of a fit: largest move from the start (px; or half the window's shorter reach,
 /// if larger: a seed under the cell floor sits up to ~1.1 px off, and the window still holds
-/// the junction), largest turn of either line (rad),
-/// the blur scale's range (px), and the largest weighted residual RMS over the half contrast
-/// `|B|` (a model that does not describe the window, such as an L-corner).
+/// the junction), largest turn of either line (rad), the blur scale's range (px), and the
+/// largest weighted residual RMS over the half contrast `|B|` (a model that does not describe
+/// the window, such as an L-corner).
 const MAX_MOVE_PX: f64 = 1.0;
 const MAX_TURN_RAD: f64 = 0.35;
 const MIN_SCALE_PX: f64 = 0.2;
@@ -70,6 +70,8 @@ struct Window {
     value: [f64; MAX_SAMPLES],
     weight: [f64; MAX_SAMPLES],
     len: usize,
+    /// Shorter reach (px) after any shrink to the buffers: what the window actually holds.
+    min_reach: f64,
 }
 
 impl Window {
@@ -109,14 +111,16 @@ impl Window {
         // Non-negative and inside the image: checked just above.
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let (x0, x1, y0, y1) = (x0 as usize, x1 as usize, y0 as usize, y1 as usize);
+        let min_reach = reach[0].min(reach[1]) * shrink;
         // Rim width in units of the normalised radius, along the shorter axis.
-        let rim = reach[0].min(reach[1]) * shrink / RIM_PX;
+        let rim = min_reach / RIM_PX;
         let mut win = Self {
             dx: [0.0; MAX_SAMPLES],
             dy: [0.0; MAX_SAMPLES],
             value: [0.0; MAX_SAMPLES],
             weight: [0.0; MAX_SAMPLES],
             len: 0,
+            min_reach,
         };
         for y in y0..=y1 {
             let row = &img.data[y * img.stride + x0..=y * img.stride + x1];
@@ -366,8 +370,9 @@ fn normal(t: f64) -> [f64; 2] {
 /// fitted over the window reaching `reach[i]` px along each (`Window::gather`).
 ///
 /// `None` when the window leaves the image, the fit does not converge, or the result is not
-/// this marker's X-junction: it moved more than `MAX_MOVE_PX` (or half the shorter reach), a line turned more than
-/// `MAX_TURN_RAD`, the blur scale left `[MIN_SCALE_PX, max(reach)]`, the wedge between the
+/// this marker's X-junction: it moved more than `MAX_MOVE_PX` (or half the window's shorter
+/// reach, after any shrink to the buffers), a line turned more than `MAX_TURN_RAD`, the blur
+/// scale left `[MIN_SCALE_PX, max(reach)]`, the wedge between the
 /// edges is not the dark one, or the residual RMS exceeds `MAX_RELATIVE_RMS` of `|B|`.
 pub(crate) fn fit_x_junction(
     img: &ImageView,
@@ -443,7 +448,9 @@ pub(crate) fn fit_x_junction(
     let sum_w: f64 = win.weight[..win.len].iter().sum();
     let rms = (cost / (sum_w - PARAMS as f64).max(1.0)).sqrt();
     let accepted = converged
-        && params[CX].hypot(params[CY]) <= MAX_MOVE_PX.max(0.5 * reach[0].min(reach[1]))
+        // The window's own reach, not the requested one: a shrunk window cannot vouch for a
+        // junction it does not hold.
+        && params[CX].hypot(params[CY]) <= MAX_MOVE_PX.max(0.5 * win.min_reach)
         && wrap_angle(params[T1] - angles[0]).abs() <= MAX_TURN_RAD
         && wrap_angle(params[T2] - angles[1]).abs() <= MAX_TURN_RAD
         && (MIN_SCALE_PX..=reach[0].max(reach[1])).contains(&params[SCALE])

@@ -298,9 +298,9 @@ pub(crate) fn subpix_marker_corners(
     // markers half fitted and half at seeds 0.8 px inward, and the standard board's p95
     // translation rose 28 %. The window spans the border along each edge, where the pattern is
     // exactly an X, plus the blur's reach.
-    // Classified once, before any fit: a marker with one L-corner is never fitted, and the
-    // fusion gate below reads the same answer. A corner the gradient-orthogonality pass left
-    // at its seed is tried from the seed (under the cell floor that pass reads the bits).
+    // Classified before any fit, so a marker with one L-corner is never fitted. A corner the
+    // gradient-orthogonality pass left at its seed is tried from the seed (under the cell floor
+    // that pass reads the bits); the probe reaches past it by the seed's own error.
     let is_x: [bool; 4] = core::array::from_fn(|j| {
         let (prev, next) = (out[(j + 3) % 4], out[(j + 1) % 4]);
         junction_is_x(img, out[j], prev, next, out[j], probe + XJ_SEED_MARGIN_PX)
@@ -339,7 +339,13 @@ pub(crate) fn subpix_marker_corners(
     let locals = [p0, p1, p2, p3];
     // Edges between the locally refined corners: their directions are already corrected.
     let anchors = out;
-    if is_x.iter().any(|&x| x) {
+    // X-junctions are not fused (their edge lines carry the photometric offset). This test
+    // keeps the plain half-border probe: the fit's seed margin would also reach clutter
+    // beyond an L-corner and withhold fusion from it.
+    if (0..4).any(|j| {
+        let (prev, next) = (anchors[(j + 3) % 4], anchors[(j + 1) % 4]);
+        junction_is_x(img, anchors[j], prev, next, anchors[j], probe)
+    }) {
         return (out, refined_bits, false);
     }
     let edges: [Option<EdgeLine>; 4] = edge_lines(img, &anchors, half);

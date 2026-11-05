@@ -462,6 +462,17 @@ fn corner_class(corner_classes: &[u8], k: usize) -> usize {
 /// Class of corners placed by the X-junction fit: past the estimated insets' indices.
 const X_JUNCTION_FIT: usize = 2;
 
+/// [`corner_class`] input for corner `j` of a marker from its `corner_refined` byte: bit
+/// `4 + j` (X-junction fit) takes precedence over bit `j` (junction pass), which the decoder
+/// also sets for a fitted marker.
+fn estimator_class(refined: u8, j: usize) -> u8 {
+    if (refined >> (4 + j)) & 1 != 0 {
+        X_JUNCTION_FIT as u8
+    } else {
+        (refined >> j) & 1
+    }
+}
+
 /// Image projections of the four corners of the marker whose corners are `start..start + 4`,
 /// in their cyclic order.
 fn project_marker(
@@ -1728,12 +1739,7 @@ impl BoardEstimator {
             for (j, obj_pt) in obj.iter().enumerate() {
                 self.scratch_img[base + j] = batch.corners[i][j];
                 self.scratch_obj[base + j] = *obj_pt;
-                let refined = batch.corner_refined[i];
-                self.scratch_class[base + j] = if (refined >> (4 + j)) & 1 != 0 {
-                    X_JUNCTION_FIT as u8
-                } else {
-                    (refined >> j) & 1
-                };
+                self.scratch_class[base + j] = estimator_class(batch.corner_refined[i], j);
                 // Invert the per-corner covariance into an information matrix.
                 // Fall back to identity if the covariance is singular.
                 self.scratch_info[base + j] = Matrix2::new(
@@ -1767,11 +1773,26 @@ impl BoardEstimator {
 )]
 mod tests {
     use super::*;
+    use crate::batch::{CandidateState, DetectionBatch, DetectionBatchView, Point2f};
+    use nalgebra::{Matrix3, UnitQuaternion};
 
     /// Classes read from `corner_refined`'s per-corner bits: the X-junction fit gets its own,
     /// inset-free class rather than sharing the gradient-orthogonality pass's inset.
     #[test]
     fn x_junction_fit_corners_get_an_inset_free_class() {
+        // The decoder sets both nibbles for a fitted marker; the high one wins.
+        assert_eq!(
+            (0..4)
+                .map(|j| estimator_class(0xF0 | 0b0101, j))
+                .collect::<Vec<_>>(),
+            [X_JUNCTION_FIT as u8; 4]
+        );
+        assert_eq!(
+            (0..4)
+                .map(|j| estimator_class(0b0101, j))
+                .collect::<Vec<_>>(),
+            [1, 0, 1, 0]
+        );
         let classes = [0u8, 1, X_JUNCTION_FIT as u8];
         assert_eq!(
             (0..3)
@@ -1788,8 +1809,6 @@ mod tests {
         let got = [inset.at(0), inset.at(1), inset.at(2)].map(f64::to_bits);
         assert_eq!(got, [0.3f64, 0.5, 0.0].map(f64::to_bits));
     }
-    use crate::batch::{CandidateState, DetectionBatch, DetectionBatchView, Point2f};
-    use nalgebra::{Matrix3, UnitQuaternion};
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 

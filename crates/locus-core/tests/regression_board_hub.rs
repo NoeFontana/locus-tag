@@ -375,7 +375,7 @@ impl BoardRegressionHarness {
         let mut total_time = 0.0;
         // Diagnostic: `LOCUS_BOARD_FRAMES_DIR=<dir>` writes `<dir>/<snapshot>.jsonl`, one line per
         // frame with its pose errors and each detected corner's error against the rendered
-        // truth and its `corner_refined` bit. The snapshot is unaffected.
+        // truth and its estimator class (0 refinement mode, 1 junction pass, 2 X-junction fit). The snapshot is unaffected.
         let mut frames_out = std::env::var_os("LOCUS_BOARD_FRAMES_DIR").map(|dir| {
             let dir = PathBuf::from(dir);
             std::fs::create_dir_all(&dir).expect("create LOCUS_BOARD_FRAMES_DIR");
@@ -639,7 +639,13 @@ fn write_frame_dump(
                 [
                     f64::from(c[j].x) - truth[j][0],
                     f64::from(c[j].y) - truth[j][1],
-                    f64::from((batch.corner_refined[i] >> j) & 1),
+                    // Estimator class as the board reads it: 2 = X-junction fit,
+                    // 1 = junction pass, 0 = refinement mode.
+                    f64::from(if (batch.corner_refined[i] >> (4 + j)) & 1 != 0 {
+                        2
+                    } else {
+                        (batch.corner_refined[i] >> j) & 1
+                    }),
                 ]
             })
             .collect();
