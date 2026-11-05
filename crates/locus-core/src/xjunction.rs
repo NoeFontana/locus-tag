@@ -19,7 +19,8 @@
 //! minimum stays at the junction however wrong the edge profile is. The product form ignores the
 //! correlation the blur introduces between the two lines when they are not orthogonal; it is
 //! point symmetric too, and measured equal to the exact bivariate-normal model on rendered
-//! AprilGrids at up to 70° incidence.
+//! AprilGrids at up to 70° incidence. A window the frame clips is not point symmetric, so there
+//! a wrong edge profile can bias the fit; it is still consistent, and beats the seed.
 
 use crate::image::ImageView;
 use crate::simd::math::{F64x4, erf_and_gauss_x4, wrap_angle};
@@ -113,10 +114,12 @@ impl Window {
         // to be consistent, only for its robustness to a wrong edge profile, and the corners
         // it serves (within a few pixels of the frame, at the fisheye rim) otherwise keep
         // seeds 0.4-2.8 px off.
-        let (x0, y0) = (x0.max(0.0), y0.max(0.0));
+        // `clamp`, unlike `max`/`min`, keeps a NaN bound (a degenerate seed or reach), which the
+        // ordering test then refuses instead of scanning the whole image.
+        let (x0, y0) = (x0.clamp(0.0, f64::INFINITY), y0.clamp(0.0, f64::INFINITY));
         let (x1, y1) = (
-            x1.min(img.width as f64 - 1.0),
-            y1.min(img.height as f64 - 1.0),
+            x1.clamp(f64::NEG_INFINITY, img.width as f64 - 1.0),
+            y1.clamp(f64::NEG_INFINITY, img.height as f64 - 1.0),
         );
         if !(x0 <= x1 && y0 <= y1) {
             return None;
@@ -382,9 +385,10 @@ fn normal(t: f64) -> [f64; 2] {
 /// along `toward[0]` and `toward[1]` (the marker's two edges from the corner, any length),
 /// fitted over the window reaching `reach[i]` px along each (`Window::gather`).
 ///
-/// `None` when the window leaves the image, the fit does not converge, or the result is not
-/// this marker's X-junction: it moved more than `MAX_MOVE_PX` (or half the window's shorter
-/// reach, after any shrink to the buffers), a line turned more than `MAX_TURN_RAD`, the blur
+/// `None` when the window lies outside the image or holds too few pixels, the fit does not
+/// converge, or the result is not this marker's X-junction: it moved more than `MAX_MOVE_PX`
+/// (or half the window's shorter reach, after any shrink to the buffers) or out of the image, a
+/// line turned more than `MAX_TURN_RAD`, the blur
 /// scale left `[MIN_SCALE_PX, max(reach)]`, the wedge between the
 /// edges is not the dark one, or the residual RMS exceeds `MAX_RELATIVE_RMS` of `|B|`.
 pub(crate) fn fit_x_junction(
@@ -469,7 +473,12 @@ pub(crate) fn fit_x_junction(
         && (MIN_SCALE_PX..=reach[0].max(reach[1])).contains(&params[SCALE])
         && params[CONTRAST] * dark_sign > 0.0
         && rms <= MAX_RELATIVE_RMS * params[CONTRAST].abs();
-    accepted.then(|| [start[0] + params[CX], start[1] + params[CY]])
+    let fit = [start[0] + params[CX], start[1] + params[CY]];
+    // A clipped window may let the fit run off the frame, where no pixel holds the junction
+    // and the downstream probes read clamped edge pixels.
+    let inside =
+        (0.0..img.width as f64).contains(&fit[0]) && (0.0..img.height as f64).contains(&fit[1]);
+    (accepted && inside).then_some(fit)
 }
 
 #[cfg(test)]
@@ -550,13 +559,10 @@ mod tests {
         let data = render(c, t1, t2, side);
         let img = ImageView::new(&data, side, side, side).unwrap();
         let (d1, d2) = ([t1.cos(), t1.sin()], [t2.cos(), t2.sin()]);
-        let fit = fit_x_junction(
-            &img,
-            [c[0] + 0.3, c[1] - 0.2],
-            [d1, [-d2[0], -d2[1]]],
-            [4.5; 2],
-        )
-        .expect("fit");
+        let (start, reach) = ([c[0] + 0.3, c[1] - 0.2], 4.5);
+        // The premise: the window's bounding box crosses the left frame edge.
+        assert!(start[0] - reach * d1[0].hypot(d2[0]) < 0.0);
+        let fit = fit_x_junction(&img, start, [d1, [-d2[0], -d2[1]]], [reach; 2]).expect("fit");
         let err = (fit[0] - c[0]).hypot(fit[1] - c[1]);
         assert!(err < 0.05, "error {err}");
     }
