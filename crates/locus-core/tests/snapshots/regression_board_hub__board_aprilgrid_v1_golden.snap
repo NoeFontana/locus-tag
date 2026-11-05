@@ -1,20 +1,21 @@
 ---
 source: crates/locus-core/tests/regression_board_hub.rs
+assertion_line: 565
 expression: report
 ---
 summary:
   dataset_size: 150
   frames_with_board: 149
-  mean_board_translation_error_m: 0.0000987809657677013
+  mean_board_translation_error_m: 0.0000913259411723795
   p50_board_translation_error_m: 0.0000048236842169993765
-  p95_board_translation_error_m: 0.0005816711583880132
-  p99_board_translation_error_m: 0.003282740114127195
-  mean_board_rotation_error_deg: 0.0040650097630697
+  p95_board_translation_error_m: 0.00038254475691715636
+  p99_board_translation_error_m: 0.00326923075599744
+  mean_board_rotation_error_deg: 0.003929739239065206
   p50_board_rotation_error_deg: 0.0006941014802539057
   p95_board_rotation_error_deg: 0.020920645570371817
-  p99_board_rotation_error_deg: 0.07571477189202906
-  mean_board_translation_std_m: 0.0017962812631947653
-  mean_board_rotation_std_deg: 0.1475138045825907
+  p99_board_rotation_error_deg: 0.06368511574280132
+  mean_board_translation_std_m: 0.0017962545012232334
+  mean_board_rotation_std_deg: 0.14750880406359843
   mean_tag_coverage: 0.9916666666666668
   mean_total_ms: "[DURATION]"
   frames_no_estimate: 1

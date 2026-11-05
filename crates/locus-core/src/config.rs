@@ -421,7 +421,7 @@ pub struct DetectorConfig {
     pub quad_min_density: f64,
 
     /// Split components whose outline did not decode, or that traced no quad, at the necks a
-    /// one-pixel erosion opens, and offer the pieces as candidates (default `false`).
+    /// 2 × 2 erosion opens, and offer the pieces as candidates (default `false`).
     ///
     /// Ink spread and blur close the diagonal contact where two dark squares meet corner to
     /// corner, so on a grid of markers joined at their corners (Kalibr's AprilGrid connectors)
