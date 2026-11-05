@@ -60,6 +60,35 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **AprilGrid X-junctions are located by a model fit (`decoder.corner_subpix`).** A marker whose
+  four corners are X-junctions (connector squares touching them) is re-placed by a weighted
+  Levenberg–Marquardt fit of `A + B·erf(n₁·(p − c)/s)·erf(n₂·(p − c)/s)` to the raw pixels of an
+  elliptical window spanning the black border along each edge (`xjunction.rs`). Gradient
+  orthogonality read the corner from a resampled patch, whose error depends on where the corner
+  falls within its pixel; the fit reads pixel values as they are, and its point symmetry keeps
+  it unbiased under any point-symmetric blur and tone curve. All four corners or none, and the
+  marker inset leaves fitted corners alone. Measured:
+  - Rendered Kalibr AprilGrid (TUM-VI lens and photometry, 2-bit border, `grid`): median error
+    over the Cramér–Rao bound 13.7 → 3.1 at baseline; 2.6-3.4 across ink, 32 px tags, 0.8-1.2
+    px blur, 50-70° incidence and 40-70° field angle; 4.4 at 0° incidence, 4.5 on 12 px tags
+    and 7.4 at 0.3 px blur (from 7.5-18.8 before). Kalibr's own extractor reads 13-14. Recall
+    unchanged; bias within ±0.01 px except at 70° incidence, where 32 corners give a −0.05 ±
+    0.02 px tag-scale bias (−0.02 ± 0.03 before).
+  - EuRoC `cam_april` leave-one-out median 0.242 → 0.228 px (`grid`) and 0.243 → 0.229 px
+    (`standard`), p90 0.53 → 0.49 px; recall and false positives unchanged.
+  - AprilGrid board (`high_accuracy`): translation mean 0.026 → 0.010 mm, p95 0.104 → 0.041
+    mm, p99 0.29 → 0.10 mm; rotation p99 0.0186° → 0.0148°. `standard`: translation mean 0.166
+    → 0.154 mm, p95 1.02 → 0.76 mm, p99 4.23 → 4.38 mm; rotation p99 0.101° → 0.084°. Per-corner
+    error on 29-60 px tags 0.035 → 0.010 px, on larger tags 0.034 → 0.007 px. `forstner`
+    moves within 4 %. Tags under 29 px
+    whose seeds sit ~0.8 px off stay at their seeds: replacing corners one at a time instead
+    left such tags half fitted and raised `standard`'s p95 translation 28 %.
+  - Cost: an AVX2+FMA kernel (runtime-detected; portable fallback) keeps dense small-tag
+    AprilGrid frames at +12 % detect time and EuRoC within noise (+1.8 %), single thread.
+  - Measured and dropped: a curvature term per line for lens bow (median error +60 %),
+    box-integrating the model over each pixel (no change), robust residual weights (worse),
+    four free levels (no change).
+
 - **`helicoid` 0.0.4.** Its `SO3::from_matrix` returns Shepperd's quotients whenever they are
   within `16u` of the unit sphere, so exact rotations stay unit and the chosen pose branch's
   quaternion matches `tf_tree_math`'s accuracy (helicoid `0086`). The seven board snapshots'

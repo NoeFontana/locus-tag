@@ -70,6 +70,8 @@ pub(crate) mod test_utils;
 pub(crate) mod threshold;
 /// Thread-local workspace arena for per-candidate allocations.
 pub(crate) mod workspace;
+/// Model fit of AprilGrid X-junctions.
+pub(crate) mod xjunction;
 
 // Re-exports for the public API
 pub use crate::batch::TelemetryPayload;
