@@ -43,6 +43,10 @@ const MAX_SAMPLES: usize = (MAX_SIDE * MAX_SIDE).next_multiple_of(LANES);
 /// time; 1.5 px is no better and 1.0 px is worse (0.040), since the edge profiles reach that
 /// far.
 const FLAT_PX: f64 = 2.0;
+/// Fewest window pixels per fitted parameter. A 12 px Kalibr tag's window holds 21-30 pixels;
+/// at 4 per parameter its corners kept their seeds (rendered 12 px tags: 6.8x the bound, 1.5 %
+/// of tags 0.1 px inward); at 3 they are fitted (4.6x, 0.8 %), and 2 adds nothing.
+const MIN_SAMPLES_PER_PARAM: usize = 3;
 /// Width (px) of the window's soft rim: weights fall from 1 to 0 over it, so a pixel entering or
 /// leaving the window does not make the cost jump.
 const RIM_PX: f64 = 1.0;
@@ -79,7 +83,7 @@ impl Window {
     /// edge directions `axes = [u, v]` and `reach = [a, b]` px: the image of a disk on the
     /// marker's plane, so a foreshortened border gets a window as narrow as the border. Pixels
     /// farther than `FLAT_PX` from both lines are left out. `None` when the edges are nearly
-    /// parallel or the window leaves the image.
+    /// parallel or the window lies outside the image.
     fn gather(
         img: &ImageView,
         centre: [f64; 2],
@@ -105,10 +109,19 @@ impl Window {
             (centre[1] - half_y * shrink).floor(),
             (centre[1] + half_y * shrink).ceil(),
         );
-        if !(x0 >= 0.0 && y0 >= 0.0) || x1 >= img.width as f64 || y1 >= img.height as f64 {
+        // A window the image clips keeps the pixels it has. The fit needs no symmetric window
+        // to be consistent, only for its robustness to a wrong edge profile, and the corners
+        // it serves (within a few pixels of the frame, at the fisheye rim) otherwise keep
+        // seeds 0.4-2.8 px off.
+        let (x0, y0) = (x0.max(0.0), y0.max(0.0));
+        let (x1, y1) = (
+            x1.min(img.width as f64 - 1.0),
+            y1.min(img.height as f64 - 1.0),
+        );
+        if !(x0 <= x1 && y0 <= y1) {
             return None;
         }
-        // Non-negative and inside the image: checked just above.
+        // Non-negative, inside the image and ordered: clamped and checked just above.
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let (x0, x1, y0, y1) = (x0 as usize, x1 as usize, y0 as usize, y1 as usize);
         let min_reach = reach[0].min(reach[1]) * shrink;
@@ -386,7 +399,7 @@ pub(crate) fn fit_x_junction(
     };
     let axes = [unit(toward[0])?, unit(toward[1])?];
     let win = Window::gather(img, start, axes, reach)?;
-    if win.len < 4 * PARAMS {
+    if win.len < MIN_SAMPLES_PER_PARAM * PARAMS {
         return None;
     }
     let angles = axes.map(|d| d[1].atan2(d[0]));
@@ -526,6 +539,26 @@ mod tests {
         .expect("fit");
         let err = (fit[0] - c[0]).hypot(fit[1] - c[1]);
         assert!(err < 0.02, "error {err}");
+    }
+
+    /// A junction 2 px from the frame: the window is clipped, and the fit still places it.
+    #[test]
+    fn fits_a_junction_the_frame_clips() {
+        let side = 32;
+        let c = [2.37, 16.21];
+        let (t1, t2) = (0.2, 0.2 + 1.7);
+        let data = render(c, t1, t2, side);
+        let img = ImageView::new(&data, side, side, side).unwrap();
+        let (d1, d2) = ([t1.cos(), t1.sin()], [t2.cos(), t2.sin()]);
+        let fit = fit_x_junction(
+            &img,
+            [c[0] + 0.3, c[1] - 0.2],
+            [d1, [-d2[0], -d2[1]]],
+            [4.5; 2],
+        )
+        .expect("fit");
+        let err = (fit[0] - c[0]).hypot(fit[1] - c[1]);
+        assert!(err < 0.05, "error {err}");
     }
 
     #[test]
