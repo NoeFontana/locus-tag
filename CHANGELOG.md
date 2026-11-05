@@ -7,6 +7,30 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **The X-junction fit now reaches AprilGrid tags under the cell floor, and the board gives its
+  corners their own inset class.** On the hub AprilGrid, 24 px tags (one-cell border, 3 px)
+  had corners sitting at their quad seeds, 0.8 px inward on average. Seen from there, the
+  X-junction test's outward probe fell short of the connector square, and the fit, though it
+  converged within 0.025 px of the truth, had to move more than its 1 px limit. The test now
+  reaches 0.5 px past the half-border, and the move limit is half the window's shorter reach
+  when that is larger. The board pose puts fitted corners (`corner_refined` bits 4-7, new) in
+  a third estimator class with no inset, instead of pooling them with the gradient-orthogonality
+  corners. Measured on `aprilgrid_v1_golden`:
+  - `standard`: translation mean 0.154 → 0.109 mm, p95 0.76 → 0.42 mm, p99 4.38 → 3.24 mm;
+    rotation mean 0.0060° → 0.0048°, p95 0.046° → 0.023°, p99 0.084° → 0.080°. Median
+    corner error on tags under 29 px 0.18 → 0.057 px.
+  - `high_accuracy`: translation p95 0.041 → 0.033 mm; rotation p99 0.0148° → 0.0075°.
+  - `forstner`: within 2 % except translation p99 +7 % and rotation p95 −9 %.
+  - EuRoC `cam_april` (`standard`): leave-one-out median 0.229 → 0.226 px, p90 0.488 → 0.483
+    px, recall and false positives unchanged. Rendered Kalibr AprilGrid unchanged.
+  - Measured and dropped:
+    - fitting X-junctions one corner at a time, now that seeds are reachable: per-corner error
+      on small tags improves (p90 0.63 → 0.50 px), but `standard` board p95 translation rises
+      0.42 → 0.60 mm, with or without the separate class;
+    - an X-test probe a full border wide: it reaches the data bits on large tags;
+    - a probe margin of 0.25 px: not enough;
+    - a move limit of 0.35 of the reach: worse.
+
 - **AprilGrid corners: the junction pass now reaches small tags, and the marker inset no longer
   misreads Kalibr's 2-bit border.** Measured against rendered truth (Kalibr's printed
   2-bit-border AprilGrid, `grid` profile) and on EuRoC `cam_april`:

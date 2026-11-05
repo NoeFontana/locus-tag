@@ -436,19 +436,31 @@ struct CornerInset<'a> {
 }
 
 impl CornerInset<'_> {
-    /// Edge offset of correspondence `k` (0 when its class has none).
+    /// Edge offset of correspondence `k` (0 when its class has none, and always for an
+    /// X-junction fit).
     fn at(&self, k: usize) -> f64 {
-        self.delta[corner_class(self.classes, k)].unwrap_or(0.0)
+        self.delta
+            .get(corner_class(self.classes, k))
+            .copied()
+            .flatten()
+            .unwrap_or(0.0)
     }
 }
 
-/// Corner-estimator class of correspondence `k`: 1 if the decoder's gradient-orthogonality pass
-/// placed it, 0 otherwise (or when no classes are given). The two estimators carry different
-/// photometric offsets (an ERF edge fit vs a junction fit; equal on L-corners, not on
-/// AprilGrid's X-junctions), so each gets its own inset.
+/// Corner-estimator class of correspondence `k`: 0 for the ERF edge fit (or when no classes
+/// are given), 1 for the decoder's gradient-orthogonality pass, [`X_JUNCTION_FIT`] for the
+/// X-junction model fit. The first two carry different photometric offsets (equal on
+/// L-corners, not on AprilGrid's X-junctions), so each gets its own inset. The X-junction fit
+/// has none, being a point of symmetry whatever the edge profile, so its class gets no inset:
+/// pooled with class 1, one inset would be fitted to two populations.
 fn corner_class(corner_classes: &[u8], k: usize) -> usize {
-    usize::from(corner_classes.get(k).is_some_and(|&c| c != 0))
+    corner_classes
+        .get(k)
+        .map_or(0, |&c| usize::from(c).min(X_JUNCTION_FIT))
 }
+
+/// Class of corners placed by the X-junction fit: past the estimated insets' indices.
+const X_JUNCTION_FIT: usize = 2;
 
 /// Image projections of the four corners of the marker whose corners are `start..start + 4`,
 /// in their cyclic order.
@@ -1716,7 +1728,12 @@ impl BoardEstimator {
             for (j, obj_pt) in obj.iter().enumerate() {
                 self.scratch_img[base + j] = batch.corners[i][j];
                 self.scratch_obj[base + j] = *obj_pt;
-                self.scratch_class[base + j] = (batch.corner_refined[i] >> j) & 1;
+                let refined = batch.corner_refined[i];
+                self.scratch_class[base + j] = if (refined >> (4 + j)) & 1 != 0 {
+                    X_JUNCTION_FIT as u8
+                } else {
+                    (refined >> j) & 1
+                };
                 // Invert the per-corner covariance into an information matrix.
                 // Fall back to identity if the covariance is singular.
                 self.scratch_info[base + j] = Matrix2::new(
@@ -1750,6 +1767,27 @@ impl BoardEstimator {
 )]
 mod tests {
     use super::*;
+
+    /// Classes read from `corner_refined`'s per-corner bits: the X-junction fit gets its own,
+    /// inset-free class rather than sharing the gradient-orthogonality pass's inset.
+    #[test]
+    fn x_junction_fit_corners_get_an_inset_free_class() {
+        let classes = [0u8, 1, X_JUNCTION_FIT as u8];
+        assert_eq!(
+            (0..3)
+                .map(|k| corner_class(&classes, k))
+                .collect::<Vec<_>>(),
+            [0, 1, 2]
+        );
+        assert_eq!(corner_class(&[], 0), 0);
+        let inset = CornerInset {
+            classes: &classes,
+            delta: [Some(0.3), Some(0.5)],
+        };
+        // The insets are returned as stored, so exact comparison is the intent.
+        let got = [inset.at(0), inset.at(1), inset.at(2)].map(f64::to_bits);
+        assert_eq!(got, [0.3f64, 0.5, 0.0].map(f64::to_bits));
+    }
     use crate::batch::{CandidateState, DetectionBatch, DetectionBatchView, Point2f};
     use nalgebra::{Matrix3, UnitQuaternion};
 

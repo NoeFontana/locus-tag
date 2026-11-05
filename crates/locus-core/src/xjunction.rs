@@ -53,7 +53,9 @@ const MAX_ITER: usize = 30;
 const COST_TOLERANCE: f64 = 1e-4;
 /// Initial Levenberg–Marquardt damping, relative to the normal matrix's diagonal.
 const INITIAL_DAMPING: f64 = 1e-3;
-/// Rejections of a fit: largest move from the start (px), largest turn of either line (rad),
+/// Rejections of a fit: largest move from the start (px; or half the window's shorter reach,
+/// if larger: a seed under the cell floor sits up to ~1.1 px off, and the window still holds
+/// the junction), largest turn of either line (rad),
 /// the blur scale's range (px), and the largest weighted residual RMS over the half contrast
 /// `|B|` (a model that does not describe the window, such as an L-corner).
 const MAX_MOVE_PX: f64 = 1.0;
@@ -364,7 +366,7 @@ fn normal(t: f64) -> [f64; 2] {
 /// fitted over the window reaching `reach[i]` px along each (`Window::gather`).
 ///
 /// `None` when the window leaves the image, the fit does not converge, or the result is not
-/// this marker's X-junction: it moved more than `MAX_MOVE_PX`, a line turned more than
+/// this marker's X-junction: it moved more than `MAX_MOVE_PX` (or half the shorter reach), a line turned more than
 /// `MAX_TURN_RAD`, the blur scale left `[MIN_SCALE_PX, max(reach)]`, the wedge between the
 /// edges is not the dark one, or the residual RMS exceeds `MAX_RELATIVE_RMS` of `|B|`.
 pub(crate) fn fit_x_junction(
@@ -441,7 +443,7 @@ pub(crate) fn fit_x_junction(
     let sum_w: f64 = win.weight[..win.len].iter().sum();
     let rms = (cost / (sum_w - PARAMS as f64).max(1.0)).sqrt();
     let accepted = converged
-        && params[CX].hypot(params[CY]) <= MAX_MOVE_PX
+        && params[CX].hypot(params[CY]) <= MAX_MOVE_PX.max(0.5 * reach[0].min(reach[1]))
         && wrap_angle(params[T1] - angles[0]).abs() <= MAX_TURN_RAD
         && wrap_angle(params[T2] - angles[1]).abs() <= MAX_TURN_RAD
         && (MIN_SCALE_PX..=reach[0].max(reach[1])).contains(&params[SCALE])

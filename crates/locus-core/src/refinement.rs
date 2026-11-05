@@ -189,6 +189,13 @@ pub(crate) fn corner_subpix_half_windows(border_px: f64) -> ([u32; 3], usize) {
 /// border, 15-25 px tags): median error 0.026 px at −0.5 px, 0.023 at 0, 0.021 at 0.5, 0.020
 /// at 1.0, 0.022 at 1.5 and 0.034 at 2.5.
 const XJ_RADIUS_MARGIN_PX: f64 = 0.75;
+/// Extra reach (px) of the X-junction test's probes past the half-border: under the cell floor
+/// a corner can sit at its quad seed, up to about 1 px inside the junction, and the outward
+/// probe must still reach the connector. Measured on the hub AprilGrid (24 px tags): +0.5 px
+/// lets the fit place 24 px markers whose corners sat 0.8 px inward (`standard` board p95
+/// translation 0.76 → 0.42 mm); +0.25 px is not enough, and a full border width reaches the
+/// bits on large tags.
+const XJ_SEED_MARGIN_PX: f64 = 0.5;
 /// Iteration cap and step tolerance (px) of [`corner_subpix`] (the `cv::cornerSubPix` values
 /// aruco_nano uses).
 const SUBPIX_MAX_ITER: u32 = 12;
@@ -296,7 +303,7 @@ pub(crate) fn subpix_marker_corners(
     // at its seed is tried from the seed (under the cell floor that pass reads the bits).
     let is_x: [bool; 4] = core::array::from_fn(|j| {
         let (prev, next) = (out[(j + 3) % 4], out[(j + 1) % 4]);
-        junction_is_x(img, out[j], prev, next, out[j], probe)
+        junction_is_x(img, out[j], prev, next, out[j], probe + XJ_SEED_MARGIN_PX)
     });
     if is_x.iter().all(|&x| x) {
         let cell_fraction = border as f64 / cells.max(1) as f64;
