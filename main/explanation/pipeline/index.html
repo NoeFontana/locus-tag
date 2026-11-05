@@ -963,6 +963,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#4g-seeded-split-of-fused-components-quadsplit_fused-grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4g. Seeded split of fused components (quad.split_fused, grid)
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3171,6 +3182,17 @@
   
 </li>
         
+          <li class="md-nav__item">
+  <a href="#4g-seeded-split-of-fused-components-quadsplit_fused-grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4g. Seeded split of fused components (quad.split_fused, grid)
+      
+    </span>
+  </a>
+  
+</li>
+        
       </ul>
     </nav>
   
@@ -3398,6 +3420,12 @@
 <td style="text-align: left;">off</td>
 </tr>
 <tr>
+<td style="text-align: left;">Seeded split of fused components (<code>quad.split_fused</code>)</td>
+<td style="text-align: left;">off</td>
+<td style="text-align: left;">on</td>
+<td style="text-align: left;">off</td>
+</tr>
+<tr>
 <td style="text-align: left;"><code>decoder.corner_subpix</code> (junction/edge fusion, repair, inset calibration)</td>
 <td style="text-align: left;">on</td>
 <td style="text-align: left;">on</td>
@@ -3494,6 +3522,12 @@
 <h3 id="4f-near-miss-recovery">4f. Near-miss recovery</h3>
 <p>A candidate whose best distance exceeds the budget but lies within the family's <strong>recovery window</strong> gets a second chance. The window is the largest Hamming distance that uniformly random bits reach with probability at most 0.1 (union bound over every rotated code): 6 for 36h11 and ArUcoMip36h12, 1 for 16h5, 0 for ArUco 4x4_100. Recovery also requires the seed to show a dark ring (at most 20 % bright cells), which skips most texture near-misses. It runs the decode-first refinement with the scale retries, then a coarse corner-nudge search (±0.2 px, two passes); any acceptance still needs the full ring budget.</p>
 <p><strong>Module:</strong> <code>decoder.rs</code> | <strong>Complexity:</strong> <span class="arithmatex">\(O(Q)\)</span></p>
+<h3 id="4g-seeded-split-of-fused-components-quadsplit_fused-grid">4g. Seeded split of fused components (<code>quad.split_fused</code>, <code>grid</code>)</h3>
+<p>Ink spread and blur close the diagonal contact where two dark squares meet corner to corner. On Kalibr's AprilGrid every tag touches its neighbours' connector squares that way, so one component can hold a tag and its connectors, or several tags. Its outline is then no single marker's: it either traces no quad or traces one that does not decode.</p>
+<p>After the decode pass, each such component that can hold two markers (a failed candidate's, or one that traced no quad) is eroded by a 3 × 3 square. That opens necks one or two pixels wide while a marker keeps a core, provided its border is at least 3 px wide. Each core of at least a marker's size, <code>4·(3·cells/border − 3)</code> px, is dilated back (a morphological opening, labelled per core). The result is the marker without its connectors and neck stubs, which is exactly what its outer contour needs.</p>
+<p>The pieces go through Stage 3's gates and tracing, and then through the decode pass, as candidates appended after every first-pass candidate. They therefore never displace one, and the slots already settled are not re-decoded. The erosion, labelling and opening all run on the component's runs, so their cost follows its run count rather than its bounding box.</p>
+<p>The split is off in <code>standard</code> and <code>high_accuracy</code>: a textured frame has large undecoded components, the split costs time on them, and it finds nothing there.</p>
+<p><strong>Module:</strong> <code>split.rs</code>, <code>quad.rs::extract_split_quads</code> | <strong>Complexity:</strong> <span class="arithmatex">\(O(\text{runs})\)</span> per listed component</p>
 <h2 id="stage-5-corner-stage-decodercorner_subpix">Stage 5: Corner Stage (<code>decoder.corner_subpix</code>)</h2>
 <p>On every decoded marker (<code>standard</code>, <code>grid</code>), the accepted corners are re-estimated. See <a href="../algorithms/#25-gradient-orthogonality-corners-and-whole-edge-fusion">Algorithms §2.5–2.6</a> for the models.</p>
 <ol>

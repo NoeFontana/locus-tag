@@ -2823,7 +2823,7 @@ the middle of each truth tag's black border ring through the truth homography:</
 <div class="highlight"><pre><span></span><code>cargo run --release --features bench-internals --example recall_autopsy -- \
     --dataset tests/data/hub_cache/aprilgrid_golden_v1_1920x1080 --profile grid
 cargo run --release --features bench-internals --example recall_autopsy -- \
-    --truth frames.jsonl --profile grid --border-bits 2 --out autopsy.jsonl
+    --truth frames.jsonl --profile grid --border-bits 2 --declare-border --out autopsy.jsonl
 </code></pre></div>
 <p><code>--truth</code> takes one JSON object per frame, <code>{"image": ..., "tags": [{"id", "corners"}]}</code>, with
 corners in the detector's convention and order. <code>--border-bits</code> places the ring sample in the
