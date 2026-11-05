@@ -554,7 +554,7 @@ fn estimate_corner_inset(
             let Some(quad) = project_marker(&pose, corr, intrinsics, start) else {
                 continue;
             };
-            groups += 1;
+            let mut contributes = false;
             for (j, &[u, v]) in quad.iter().enumerate() {
                 if corner_class(corner_classes, start + j) != class {
                     continue;
@@ -564,8 +564,12 @@ fn estimate_corner_inset(
                     let observed = corr.image_points[start + j];
                     let d2 = dx * dx + dy * dy;
                     f(((f64::from(observed.x) - u) * dx + (f64::from(observed.y) - v) * dy) / d2);
+                    contributes = true;
                 }
             }
+            // Only markers with a corner in this class count toward the minimum: a class held
+            // by one marker's corners would otherwise pass on the whole board's marker count.
+            groups += u32::from(contributes);
         }
         groups
     };

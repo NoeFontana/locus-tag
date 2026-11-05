@@ -7,6 +7,17 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **The board's per-estimator inset needs four markers of its own class.** `BoardEstimator`
+  required four inlier markers before estimating an estimator class's photometric inset, but
+  counted markers with no corner in that class. Since #483 moved X-junction-fit corners into
+  their own class, a class could be held by one marker's corners and still pass. It now counts
+  only contributing markers, as documented. AprilGrid board (`standard`): translation mean
+  0.109 → 0.104 mm, rotation p95 0.0233° → 0.0209°; `high_accuracy` rotation mean
+  0.00126° → 0.00130°; ChArUco boards within 0.1 % on their means. Measured and dropped:
+  a marker-clustered standard error for the inset's significance test, on the grounds that a
+  marker's corners share errors. It also drops ChArUco insets that are real: ChArUco
+  `high_accuracy` translation mean +28 %, rotation p99 +52 %.
+
 - **The X-junction fit now reaches AprilGrid tags under the cell floor, and the board gives its
   corners their own inset class.** On the hub AprilGrid, 24 px tags (one-cell border, 3 px)
   had corners sitting at their quad seeds, 0.8 px inward on average. Seen from there, the
