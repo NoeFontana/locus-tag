@@ -210,6 +210,31 @@ fn resolve_radial_table<'a, C: crate::camera::CameraModel>(
     })
 }
 
+/// Maps candidates `range` from the upscaled extraction grid to original-image pixels, with the
+/// inverse of `ImageView::upscale_to`. No-op for `upscale = 1`.
+fn map_to_full(
+    batch: &mut crate::batch::DetectionBatch,
+    range: std::ops::Range<usize>,
+    upscale: usize,
+) {
+    if upscale <= 1 {
+        return;
+    }
+    let map = |v: f32| crate::image::upscaled_to_full(f64::from(v), upscale) as f32;
+    let inv_upscale = 1.0 / upscale as f64;
+    let cov_scale = (inv_upscale * inv_upscale) as f32;
+    for i in range {
+        for c in &mut batch.corners[i] {
+            c.x = map(c.x);
+            c.y = map(c.y);
+        }
+        // Covariances are in px^2 of the upscaled grid.
+        for v in &mut batch.corner_covariances[i] {
+            *v *= cov_scale;
+        }
+    }
+}
+
 /// Core detection pipeline — shared by [`Detector`] and [`LocusEngine`].
 ///
 /// Runs the full pipeline (thresholding → segmentation → quad extraction →
@@ -338,8 +363,13 @@ fn run_detection_pipeline<'ctx>(
     #[cfg(feature = "non_rectified")]
     let mut radial_table = None;
 
+    // Source component of each first-pass candidate (0 = not tracked), for the split pass.
+    let component_of = state
+        .arena
+        .alloc_slice_fill_copy(crate::batch::MAX_CANDIDATES, 0u32);
+
     // 1. Thresholding & 2. Segmentation & 3. Quad Extraction
-    let (n, unrefined) = {
+    let (n, unrefined, label_result, unquadded, tile_stats) = {
         let mut engine = crate::threshold::ThresholdEngine::from_config(config);
         if config.threshold_mode == crate::config::ThresholdMode::LocalMean {
             // Estimate on the raw sensor image (where the white-noise model holds) and carry
@@ -390,6 +420,16 @@ fn run_detection_pipeline<'ctx>(
                 || (config.may_use_edlines() && !declares_lens_model),
         );
 
+        // Large components that traced no quad, for the split pass (`quad_split_fused` only).
+        let unquadded = state.arena.alloc_slice_fill_copy(
+            if config.quad_split_fused {
+                label_result.component_stats.len()
+            } else {
+                0
+            },
+            0u32,
+        );
+
         // 3. Quad Extraction (SoA). Distorted cameras run RDP in straight
         // space via `_with_camera`; the `_` arm is the pinhole flow.
         //
@@ -397,7 +437,7 @@ fn run_detection_pipeline<'ctx>(
         // shared by quad extraction and the decode pass — the two stages that unproject. It
         // replaces a per-point iterative solve that was 29 % of the extraction stage's CPU.
         #[cfg(feature = "non_rectified")]
-        let (n, unrefined) = match intrinsics.map(|k| (k, k.distortion)) {
+        let (n, unrefined, n_unquadded) = match intrinsics.map(|k| (k, k.distortion)) {
             Some((k, crate::pose::DistortionCoeffs::BrownConrady { k1, k2, p1, p2, k3 })) => {
                 let model = crate::camera::BrownConradyModel { k1, k2, p1, p2, k3 };
                 let table = *radial_table.insert(crate::camera::RadialInverseTable::build_in(
@@ -405,7 +445,7 @@ fn run_detection_pipeline<'ctx>(
                     &model,
                     crate::quad::frame_radius_bound(k, full_img.width, full_img.height),
                 ));
-                crate::quad::extract_quads_soa_with_camera(
+                let (n, unrefined) = crate::quad::extract_quads_soa_with_camera(
                     &mut state.batch,
                     &sharpened_img,
                     &label_result,
@@ -417,7 +457,8 @@ fn run_detection_pipeline<'ctx>(
                     &model,
                     k,
                     &table,
-                )
+                );
+                (n, unrefined, 0)
             },
             Some((k, crate::pose::DistortionCoeffs::KannalaBrandt { k1, k2, k3, k4 })) => {
                 let model = crate::camera::KannalaBrandtModel { k1, k2, k3, k4 };
@@ -426,7 +467,7 @@ fn run_detection_pipeline<'ctx>(
                     &model,
                     crate::quad::frame_radius_bound(k, full_img.width, full_img.height),
                 ));
-                crate::quad::extract_quads_soa_with_camera(
+                let (n, unrefined) = crate::quad::extract_quads_soa_with_camera(
                     &mut state.batch,
                     &sharpened_img,
                     &label_result,
@@ -438,9 +479,10 @@ fn run_detection_pipeline<'ctx>(
                     &model,
                     k,
                     &table,
-                )
+                );
+                (n, unrefined, 0)
             },
-            _ => crate::quad::extract_quads_soa(
+            _ => crate::quad::extract_quads_soa_tracked(
                 &mut state.batch,
                 &sharpened_img,
                 &label_result,
@@ -449,10 +491,12 @@ fn run_detection_pipeline<'ctx>(
                 &refinement_img,
                 min_outer_dim,
                 debug_telemetry,
+                component_of,
+                unquadded,
             ),
         };
         #[cfg(not(feature = "non_rectified"))]
-        let (n, unrefined) = crate::quad::extract_quads_soa(
+        let (n, unrefined, n_unquadded) = crate::quad::extract_quads_soa_tracked(
             &mut state.batch,
             &sharpened_img,
             &label_result,
@@ -461,6 +505,8 @@ fn run_detection_pipeline<'ctx>(
             &refinement_img,
             min_outer_dim,
             debug_telemetry,
+            component_of,
+            unquadded,
         );
 
         // 3.5 Fast-Path Funnel Gate — rejects candidates early based on
@@ -480,7 +526,13 @@ fn run_detection_pipeline<'ctx>(
             );
         }
 
-        (n, unrefined)
+        (
+            n,
+            unrefined,
+            label_result,
+            &unquadded[..n_unquadded],
+            tile_stats,
+        )
     };
 
     // Quad extraction (and the funnel gate above, which samples the upscaled
@@ -489,22 +541,9 @@ fn run_detection_pipeline<'ctx>(
     // coordinates before anything downstream (homography, decode, pose)
     // consumes them, with the inverse of `ImageView::upscale_to`
     // (`image::upscaled_to_full`). No-op (skipped) for `U = 1`.
-    let inv_upscale = 1.0 / upscale as f64;
     let map_f64 = |v: f64| crate::image::upscaled_to_full(v, upscale);
-    if upscale > 1 {
-        let map = |v: f32| map_f64(f64::from(v)) as f32;
-        let cov_scale = (inv_upscale * inv_upscale) as f32;
-        for i in 0..n {
-            for c in &mut state.batch.corners[i] {
-                c.x = map(c.x);
-                c.y = map(c.y);
-            }
-            // Covariances are in px^2 of the upscaled grid.
-            for v in &mut state.batch.corner_covariances[i] {
-                *v *= cov_scale;
-            }
-        }
-    }
+    map_to_full(&mut state.batch, 0..n, upscale);
+    let extraction_refinement_img = refinement_img;
     // Decode and pose sample the original image.
     let refinement_img = full_img;
 
@@ -597,6 +636,67 @@ fn run_detection_pipeline<'ctx>(
                 config,
             );
         },
+    }
+
+    // 5b. Seeded split (`quad_split_fused`): a component whose outline did not decode, or that
+    // traced no quad, may be several markers fused at their corners. Only the pinhole extraction
+    // records components, so only its candidates are listed, and the pieces decode on that
+    // route, from slot `n` on: the decode loop clears the id of every slot it is handed that is
+    // not `Active`, so the settled candidates stay out of its range.
+    let mut n = n;
+    if config.quad_split_fused {
+        let mut n_failed = 0;
+        for i in 0..n {
+            if state.batch.status_mask[i] == crate::batch::CandidateState::FailedDecode
+                && component_of[i] != 0
+            {
+                component_of[n_failed] = component_of[i];
+                n_failed += 1;
+            }
+        }
+        let n_split = crate::quad::extract_split_quads(
+            &mut state.batch,
+            n,
+            &component_of[..n_failed],
+            unquadded,
+            &sharpened_img,
+            &label_result,
+            config,
+            config.decimation,
+            &extraction_refinement_img,
+            min_outer_dim,
+            debug_telemetry,
+        );
+        if n_split > n {
+            // The pieces meet the same contrast gate as first-pass candidates (it also sets
+            // their `funnel_status`, which the reused batch would otherwise carry over from the
+            // previous frame). The split runs only on the pinhole route, where the gate holds.
+            crate::funnel::apply_funnel_gate_from(
+                &mut state.batch,
+                n,
+                n_split,
+                &sharpened_img,
+                &tile_stats,
+                config.threshold_tile_size,
+                config.decoder_min_contrast,
+                1.0 / config.decimation as f64,
+            );
+            map_to_full(&mut state.batch, n..n_split, upscale);
+            crate::decoder::compute_homographies_soa(
+                &state.batch.corners[n..n_split],
+                &state.batch.status_mask[n..n_split],
+                &mut state.batch.homographies[n..n_split],
+            );
+            crate::decoder::decode_batch_soa_from(
+                &mut state.batch,
+                n,
+                n_split,
+                &refinement_img,
+                decoders,
+                config,
+            );
+            n = n_split;
+        }
     }
 
     // Partition valid candidates to the front [0..v]

@@ -222,7 +222,7 @@ const ROWS_PER_UNION_STRIPE: usize = 32;
 /// the previous implementation's first-encounter branch picked. A run is never
 /// empty, so `pixel_count == 0` is a reliable "untouched" marker.
 #[inline]
-fn accumulate_run(stats: &mut ComponentStats, run: &RleSegment, need_moments: bool) {
+pub(crate) fn accumulate_run(stats: &mut ComponentStats, run: &RleSegment, need_moments: bool) {
     if stats.pixel_count == 0 {
         stats.first_pixel_x = run.start_x;
         stats.first_pixel_y = run.y;

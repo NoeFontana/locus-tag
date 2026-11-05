@@ -110,5 +110,5 @@ def test_omitted_keys_parse_identically_in_rust_and_python(document: str) -> Non
     assert rust_side.decoder.max_border_error_rate == python_side.decoder.max_border_error_rate
     assert rust_side.decoder.marker_border_bits == python_side.decoder.marker_border_bits
     assert rust_side.segmentation.connectivity == python_side.segmentation.connectivity
-    for gate in ("min_fill_ratio", "max_elongation", "min_density"):
+    for gate in ("min_fill_ratio", "max_elongation", "min_density", "split_fused"):
         assert getattr(rust_side.quad, gate) == getattr(python_side.quad, gate)
