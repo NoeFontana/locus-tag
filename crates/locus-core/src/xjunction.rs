@@ -19,7 +19,8 @@
 //! minimum stays at the junction however wrong the edge profile is. The product form ignores the
 //! correlation the blur introduces between the two lines when they are not orthogonal; it is
 //! point symmetric too, and measured equal to the exact bivariate-normal model on rendered
-//! AprilGrids at up to 70° incidence.
+//! AprilGrids at up to 70° incidence. A window the frame clips is not point symmetric, so there
+//! a wrong edge profile can bias the fit; it is still consistent, and beats the seed.
 
 use crate::image::ImageView;
 use crate::simd::math::{F64x4, erf_and_gauss_x4, wrap_angle};
@@ -43,6 +44,10 @@ const MAX_SAMPLES: usize = (MAX_SIDE * MAX_SIDE).next_multiple_of(LANES);
 /// time; 1.5 px is no better and 1.0 px is worse (0.040), since the edge profiles reach that
 /// far.
 const FLAT_PX: f64 = 2.0;
+/// Fewest window pixels per fitted parameter. A 12 px Kalibr tag's window holds 21-30 pixels;
+/// at 4 per parameter its corners kept their seeds (rendered 12 px tags: 6.8x the bound, 1.5 %
+/// of tags 0.1 px inward); at 3 they are fitted (4.6x, 0.8 %), and 2 adds nothing.
+const MIN_SAMPLES_PER_PARAM: usize = 3;
 /// Width (px) of the window's soft rim: weights fall from 1 to 0 over it, so a pixel entering or
 /// leaving the window does not make the cost jump.
 const RIM_PX: f64 = 1.0;
@@ -79,7 +84,7 @@ impl Window {
     /// edge directions `axes = [u, v]` and `reach = [a, b]` px: the image of a disk on the
     /// marker's plane, so a foreshortened border gets a window as narrow as the border. Pixels
     /// farther than `FLAT_PX` from both lines are left out. `None` when the edges are nearly
-    /// parallel or the window leaves the image.
+    /// parallel or the window lies outside the image.
     fn gather(
         img: &ImageView,
         centre: [f64; 2],
@@ -105,10 +110,21 @@ impl Window {
             (centre[1] - half_y * shrink).floor(),
             (centre[1] + half_y * shrink).ceil(),
         );
-        if !(x0 >= 0.0 && y0 >= 0.0) || x1 >= img.width as f64 || y1 >= img.height as f64 {
+        // A window the image clips keeps the pixels it has. The fit needs no symmetric window
+        // to be consistent, only for its robustness to a wrong edge profile, and the corners
+        // it serves (within a few pixels of the frame, at the fisheye rim) otherwise keep
+        // seeds 0.4-2.8 px off.
+        // `clamp`, unlike `max`/`min`, keeps a NaN bound (a degenerate seed or reach), which the
+        // ordering test then refuses instead of scanning the whole image.
+        let (x0, y0) = (x0.clamp(0.0, f64::INFINITY), y0.clamp(0.0, f64::INFINITY));
+        let (x1, y1) = (
+            x1.clamp(f64::NEG_INFINITY, img.width as f64 - 1.0),
+            y1.clamp(f64::NEG_INFINITY, img.height as f64 - 1.0),
+        );
+        if !(x0 <= x1 && y0 <= y1) {
             return None;
         }
-        // Non-negative and inside the image: checked just above.
+        // Non-negative, inside the image and ordered: clamped and checked just above.
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         let (x0, x1, y0, y1) = (x0 as usize, x1 as usize, y0 as usize, y1 as usize);
         let min_reach = reach[0].min(reach[1]) * shrink;
@@ -369,24 +385,47 @@ fn normal(t: f64) -> [f64; 2] {
 /// along `toward[0]` and `toward[1]` (the marker's two edges from the corner, any length),
 /// fitted over the window reaching `reach[i]` px along each (`Window::gather`).
 ///
-/// `None` when the window leaves the image, the fit does not converge, or the result is not
-/// this marker's X-junction: it moved more than `MAX_MOVE_PX` (or half the window's shorter
-/// reach, after any shrink to the buffers), a line turned more than `MAX_TURN_RAD`, the blur
-/// scale left `[MIN_SCALE_PX, max(reach)]`, the wedge between the
-/// edges is not the dark one, or the residual RMS exceeds `MAX_RELATIVE_RMS` of `|B|`.
+/// A fit that lands past the move limit (`fit_once`) is refitted once over a window centred
+/// where it landed, and accepted only if that refit stays within its own limit: the window
+/// that finally vouches for the junction then holds it. Seeds of foreshortened tags (50°
+/// incidence) start 1.5-2 px off, past what one window can vouch for.
+///
+/// `None` when either fit is refused, or the refit moves past its limit too.
 pub(crate) fn fit_x_junction(
     img: &ImageView,
     start: [f64; 2],
     toward: [[f64; 2]; 2],
     reach: [f64; 2],
 ) -> Option<[f64; 2]> {
+    let (fit, held) = fit_once(img, start, toward, reach)?;
+    if held {
+        return Some(fit);
+    }
+    let (fit, held) = fit_once(img, fit, toward, reach)?;
+    held.then_some(fit)
+}
+
+/// One fit over the window at `start`, and whether it stayed within the move limit:
+/// `MAX_MOVE_PX`, or half the window's shorter reach after any shrink to the buffers.
+///
+/// `None` when the window lies outside the image or holds too few pixels, the fit does not
+/// converge, or the result is not this marker's X-junction: it left the image, a line turned
+/// more than `MAX_TURN_RAD`, the blur scale left `[MIN_SCALE_PX, max(reach)]`, the wedge
+/// between the edges is not the dark one, or the residual RMS exceeds `MAX_RELATIVE_RMS` of
+/// `|B|`.
+fn fit_once(
+    img: &ImageView,
+    start: [f64; 2],
+    toward: [[f64; 2]; 2],
+    reach: [f64; 2],
+) -> Option<([f64; 2], bool)> {
     let unit = |d: [f64; 2]| {
         let len = d[0].hypot(d[1]);
         (len > 0.0).then(|| [d[0] / len, d[1] / len])
     };
     let axes = [unit(toward[0])?, unit(toward[1])?];
     let win = Window::gather(img, start, axes, reach)?;
-    if win.len < 4 * PARAMS {
+    if win.len < MIN_SAMPLES_PER_PARAM * PARAMS {
         return None;
     }
     let angles = axes.map(|d| d[1].atan2(d[0]));
@@ -448,15 +487,20 @@ pub(crate) fn fit_x_junction(
     let sum_w: f64 = win.weight[..win.len].iter().sum();
     let rms = (cost / (sum_w - PARAMS as f64).max(1.0)).sqrt();
     let accepted = converged
-        // The window's own reach, not the requested one: a shrunk window cannot vouch for a
-        // junction it does not hold.
-        && params[CX].hypot(params[CY]) <= MAX_MOVE_PX.max(0.5 * win.min_reach)
         && wrap_angle(params[T1] - angles[0]).abs() <= MAX_TURN_RAD
         && wrap_angle(params[T2] - angles[1]).abs() <= MAX_TURN_RAD
         && (MIN_SCALE_PX..=reach[0].max(reach[1])).contains(&params[SCALE])
         && params[CONTRAST] * dark_sign > 0.0
         && rms <= MAX_RELATIVE_RMS * params[CONTRAST].abs();
-    accepted.then(|| [start[0] + params[CX], start[1] + params[CY]])
+    let fit = [start[0] + params[CX], start[1] + params[CY]];
+    // A clipped window may let the fit run off the frame, where no pixel holds the junction
+    // and the downstream probes read clamped edge pixels.
+    let inside =
+        (0.0..img.width as f64).contains(&fit[0]) && (0.0..img.height as f64).contains(&fit[1]);
+    // The window's own reach, not the requested one: a shrunk window cannot vouch for a
+    // junction it does not hold.
+    let held = params[CX].hypot(params[CY]) <= MAX_MOVE_PX.max(0.5 * win.min_reach);
+    (accepted && inside).then_some((fit, held))
 }
 
 #[cfg(test)]
@@ -526,6 +570,45 @@ mod tests {
         .expect("fit");
         let err = (fit[0] - c[0]).hypot(fit[1] - c[1]);
         assert!(err < 0.02, "error {err}");
+    }
+
+    /// A junction 2 px from the frame: the window is clipped, and the fit still places it.
+    #[test]
+    fn fits_a_junction_the_frame_clips() {
+        let side = 32;
+        let c = [2.37, 16.21];
+        let (t1, t2) = (0.2, 0.2 + 1.7);
+        let data = render(c, t1, t2, side);
+        let img = ImageView::new(&data, side, side, side).unwrap();
+        let (d1, d2) = ([t1.cos(), t1.sin()], [t2.cos(), t2.sin()]);
+        let (start, reach) = ([c[0] + 0.3, c[1] - 0.2], 4.5);
+        // The premise: the window's bounding box crosses the left frame edge.
+        assert!(start[0] - reach * d1[0].hypot(d2[0]) < 0.0);
+        let fit = fit_x_junction(&img, start, [d1, [-d2[0], -d2[1]]], [reach; 2]).expect("fit");
+        let err = (fit[0] - c[0]).hypot(fit[1] - c[1]);
+        assert!(err < 0.05, "error {err}");
+    }
+
+    /// A seed past one window's move limit: the first fit lands at the junction but cannot
+    /// vouch for it; the refit centred there can.
+    #[test]
+    fn refits_a_seed_past_the_move_limit() {
+        let side = 32;
+        let c = [16.27, 15.61];
+        let (t1, t2) = (0.3, 0.3 + 1.9);
+        let data = render(c, t1, t2, side);
+        let img = ImageView::new(&data, side, side, side).unwrap();
+        let (d1, d2) = ([t1.cos(), t1.sin()], [t2.cos(), t2.sin()]);
+        let toward = [d1, [-d2[0], -d2[1]]];
+        let (start, reach) = ([c[0] + 1.3, c[1] - 1.0], [3.0; 2]);
+        // The premise: one fit converges but moves past its limit (1.5 px here).
+        assert!(matches!(
+            fit_once(&img, start, toward, reach),
+            Some((_, false))
+        ));
+        let fit = fit_x_junction(&img, start, toward, reach).expect("fit");
+        let err = (fit[0] - c[0]).hypot(fit[1] - c[1]);
+        assert!(err < 0.05, "error {err}");
     }
 
     #[test]

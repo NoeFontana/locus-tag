@@ -7,6 +7,40 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **AprilGrid corners at the frame edge and on the smallest tags are fitted, not left at
+  their seeds.** Against rendered truth (Kalibr's AprilGrid), tags whose mean corner error
+  exceeds 0.1 px appear only under hard geometry. In every case one corner had kept its quad
+  seed, 0.4-3.5 px off, because the X-junction fit refused it:
+  - Within a few pixels of the frame (the fisheye rim) the fit window left the image. The
+    window is now clipped to the image. The fit stays consistent; only its robustness to a
+    wrong edge profile needed the symmetric window.
+  - On 12 px tags the window holds 21-30 pixels, under the 28-sample floor. The floor is now
+    3 per parameter (21).
+  - At 50° incidence, seeds of foreshortened tags start 1.5-2 px off, past what one window
+    can vouch for. A fit that lands past the move limit is now refitted once over a window
+    centred where it landed, and kept only if that refit stays within its own limit. Tags
+    0.1 px inward 0.95 % → 0.47 %; every other case, EuRoC and the dataset suites unchanged.
+
+  Measured:
+  - Rendered 70° field angle: such tags 0.75 % inward / 0.94 % outward → 0.19 % / 0.19 %;
+    error over the bound 3.24 → 3.09, p90 0.058 → 0.045 px.
+  - Rendered 12 px tags: error over the bound 6.8 → 4.6, p90 0.196 → 0.098 px; tags
+    0.1 px inward 1.5 % → 0.8 %.
+  - Baseline cases unchanged.
+  - AprilGrid board (`standard`): rotation mean −12 %, p99 0.080° → 0.076°, translation mean
+    −5.1 %. Translation p95 rises 0.42 → 0.58 mm from two frames, by cancellation: in one,
+    the small-tag corners off by more than 0.3 px fall from 91 to 26 while the board's error
+    rises 0.42 → 3.28 mm, because the remaining biased corners no longer cancel.
+  - `high_accuracy` rotation mean −4.9 %, translation p95 −11 %; `forstner` rotation p99 −14 %.
+  - EuRoC `cam_april` (`standard`) unchanged: leave-one-out median 0.2263 → 0.2262 px, recall
+    and false positives the same.
+
+  Measured and dropped: a symmetric clip (a pixel kept only if its mirror is in frame) is
+  worse at the frame edge (p90 0.059 → 0.068 px), and a move limit of 0.75-1.0 of the reach
+  matches the refit's gain without requiring the final window to hold the junction. The
+  remaining 70° incidence outliers are 13-16 px tags whose seeds are 3 px off on a ~1 px
+  border.
+
 - **The board's per-estimator inset needs four markers of its own class.** `BoardEstimator`
   required four inlier markers before estimating an estimator class's photometric inset, but
   counted markers with no corner in that class. Since #483 moved X-junction-fit corners into
