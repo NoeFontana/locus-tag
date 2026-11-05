@@ -68,6 +68,10 @@ const MAX_TURN_RAD: f64 = 0.35;
 const MIN_SCALE_PX: f64 = 0.2;
 const MAX_RELATIVE_RMS: f64 = 0.35;
 
+/// A refused fit that landed farther than this (px) from its window's centre gets one refit
+/// over a window centred where it landed (`fit_x_junction`).
+const RECENTRE_PX: f64 = 0.5;
+
 /// The window: each pixel's centre relative to the window centre, its value and its weight.
 struct Window {
     dx: [f64; MAX_SAMPLES],
@@ -385,34 +389,40 @@ fn normal(t: f64) -> [f64; 2] {
 /// along `toward[0]` and `toward[1]` (the marker's two edges from the corner, any length),
 /// fitted over the window reaching `reach[i]` px along each (`Window::gather`).
 ///
-/// A fit that lands past the move limit (`fit_once`) is refitted once over a window centred
-/// where it landed, and accepted only if that refit stays within its own limit: the window
-/// that finally vouches for the junction then holds it. Seeds of foreshortened tags (50°
-/// incidence) start 1.5-2 px off, past what one window can vouch for.
+/// A refused fit that landed more than `RECENTRE_PX` from its start is refitted once over a
+/// window centred where it landed, and only that refit is judged. A window off-centre by a
+/// pixel or more holds the junction but describes it badly: its far side is mostly one wedge,
+/// so the fit fails the residual gate (a split piece's seed pushed 1 px into the neck), or the
+/// move limit (foreshortened tags at 50° incidence start 1.5-2 px off).
 ///
-/// `None` when either fit is refused, or the refit moves past its limit too.
+/// `None` when the fit, or its refit, is refused.
 pub(crate) fn fit_x_junction(
     img: &ImageView,
     start: [f64; 2],
     toward: [[f64; 2]; 2],
     reach: [f64; 2],
 ) -> Option<[f64; 2]> {
-    let (fit, held) = fit_once(img, start, toward, reach)?;
-    if held {
+    let (fit, accepted) = fit_once(img, start, toward, reach)?;
+    if accepted {
         return Some(fit);
     }
-    let (fit, held) = fit_once(img, fit, toward, reach)?;
-    held.then_some(fit)
+    if (fit[0] - start[0]).hypot(fit[1] - start[1]) <= RECENTRE_PX {
+        return None;
+    }
+    let (refit, accepted) = fit_once(img, fit, toward, reach)?;
+    accepted.then_some(refit)
 }
 
-/// One fit over the window at `start`, and whether it stayed within the move limit:
-/// `MAX_MOVE_PX`, or half the window's shorter reach after any shrink to the buffers.
+/// One fit over the window at `start`: where it landed and whether it passed every gate.
 ///
-/// `None` when the window lies outside the image or holds too few pixels, the fit does not
-/// converge, or the result is not this marker's X-junction: it left the image, a line turned
-/// more than `MAX_TURN_RAD`, the blur scale left `[MIN_SCALE_PX, max(reach)]`, the wedge
-/// between the edges is not the dark one, or the residual RMS exceeds `MAX_RELATIVE_RMS` of
-/// `|B|`.
+/// The gates refuse a result that is not this marker's X-junction: it moved more than
+/// `MAX_MOVE_PX` (or half the window's shorter reach, after any shrink to the buffers), a line
+/// turned more than `MAX_TURN_RAD`, the blur scale left `[MIN_SCALE_PX, max(reach)]`, the
+/// wedge between the edges is not the dark one, or the residual RMS exceeds
+/// `MAX_RELATIVE_RMS` of `|B|`.
+///
+/// `None`, with no landing point to refit from, when the window lies outside the image or
+/// holds too few pixels, or the fit does not converge, leaves the image or leaves the window.
 fn fit_once(
     img: &ImageView,
     start: [f64; 2],
@@ -486,8 +496,7 @@ fn fit_once(
     }
     let sum_w: f64 = win.weight[..win.len].iter().sum();
     let rms = (cost / (sum_w - PARAMS as f64).max(1.0)).sqrt();
-    let accepted = converged
-        && wrap_angle(params[T1] - angles[0]).abs() <= MAX_TURN_RAD
+    let accepted = wrap_angle(params[T1] - angles[0]).abs() <= MAX_TURN_RAD
         && wrap_angle(params[T2] - angles[1]).abs() <= MAX_TURN_RAD
         && (MIN_SCALE_PX..=reach[0].max(reach[1])).contains(&params[SCALE])
         && params[CONTRAST] * dark_sign > 0.0
@@ -499,8 +508,9 @@ fn fit_once(
         (0.0..img.width as f64).contains(&fit[0]) && (0.0..img.height as f64).contains(&fit[1]);
     // The window's own reach, not the requested one: a shrunk window cannot vouch for a
     // junction it does not hold.
-    let held = params[CX].hypot(params[CY]) <= MAX_MOVE_PX.max(0.5 * win.min_reach);
-    (accepted && inside).then_some((fit, held))
+    let moved = params[CX].hypot(params[CY]);
+    let held = moved <= MAX_MOVE_PX.max(0.5 * win.min_reach);
+    (converged && inside && moved <= win.min_reach).then_some((fit, accepted && held))
 }
 
 #[cfg(test)]

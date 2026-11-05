@@ -7,6 +7,36 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **`quad.split_fused` (`grid`) no longer breaks rim tags into fragments.** The seeded split
+  opened fused components with a 3 × 3 erosion, which also opens borders 2 px wide. At the
+  fisheye rim, radial compression thins a Kalibr tag's 2-cell border to about that, so the
+  erosion broke the tag's ring into cores that were no marker; 14 % of the tags at a rendered
+  70° field angle were lost this way, and 5-12 % elsewhere. The erosion is now 2 × 2, the
+  smallest that opens anything: it keeps strokes 2 px wide and still cuts the diagonal pinch
+  where ink spread joins two squares at an X-junction (cores are labelled 4-connected). The
+  core floor follows, `4·(2·cells/border − 2)` px. Measured:
+  - Rendered Kalibr AprilGrid recall: baseline 89.4 → 97.2 %, 70° field angle
+    77.9 → 95.3 %, 40° field angle 89.0 → 97.5 %, ink 0.4 mm 82.9 → 95.6 %, 32 px tags
+    94.4 → 99.7 %, 50° incidence 45 → 67 %; no wrong ids. The recovered tags' corners match
+    the others' (median 0.017-0.022 px, p90 0.037-0.050 px).
+  - Real TUM-VI calibration frames, share of Kalibr's corners also found: 86-93 % → 95-97 %;
+    between 0.6 and 0.8 of the half-diagonal 61-65 % → 88-94 % on `calib-cam1`/`cam2`.
+    Corners more than half a corner spacing from Kalibr's rise from 0.13 % to 0.20 % of the
+    matched ones, mostly where locus-tag now finds rim corners Kalibr does not.
+  - EuRoC `cam_april` (`grid`): recall 99.41 → 99.52 %, false positives (1) and
+    leave-one-out error unchanged.
+  - Latency, 1 thread: EuRoC +0.3 % (noise), rendered baseline +4 %, rendered 70° field
+    angle +12 % (23 % more tags refined).
+  - Dataset suites: no `grid` snapshot moves.
+- **A refused X-junction fit whose window was off-centre is refitted.** #485 refitted a fit
+  that landed past the move limit. Any refused fit that landed more than 0.5 px from its start
+  is now refitted once over a window centred where it landed, and only the refit is judged: a
+  window a pixel off-centre holds the junction but its far side is mostly one wedge, so the
+  model fails the residual gate. A split piece's seed sits 1 px into the neck that way.
+  Rendered 70° field angle: recovered tags with a corner off by more than 0.5 px 5 → 2 of 122.
+  AprilGrid board (`standard`): translation mean −7.5 %, p95 0.58 → 0.38 mm, rotation p99
+  0.076° → 0.064°; `forstner` within 2 %; EuRoC (`standard`) unchanged.
+
 - **AprilGrid corners at the frame edge and on the smallest tags are fitted, not left at
   their seeds.** Against rendered truth (Kalibr's AprilGrid), tags whose mean corner error
   exceeds 0.1 px appear only under hard geometry. In every case one corner had kept its quad
