@@ -1557,19 +1557,17 @@ fn finalize_decoded_candidate(
     if subpix {
         let seed = quad_to_f64(corners_slot);
         let border = config.marker_border();
-        let (subpix_corners, bits, junctions) =
+        let (subpix_corners, bits, junction_fit) =
             crate::refinement::subpix_marker_corners(img, seed, cells, border);
-        // Remove the photometric inset the decoded marker's bit edges measure. An X-junction
-        // has none: the junction is a point of symmetry whatever the edge profile, so its
-        // fitted position stands.
-        let mut final_corners =
+        // Remove the photometric inset the decoded marker's bit edges measure. A fitted
+        // X-junction has none (a point of symmetry, whatever the edge profile), so the
+        // calibration is not even run.
+        let final_corners = if junction_fit {
+            subpix_corners
+        } else {
             crate::marker_inset::calibrate_marker_corners(img, subpix_corners, cells, border)
-                .unwrap_or(subpix_corners);
-        for (j, corner) in final_corners.iter_mut().enumerate() {
-            if junctions & (1 << j) != 0 {
-                *corner = subpix_corners[j];
-            }
-        }
+                .unwrap_or(subpix_corners)
+        };
         refined_bits = bits;
         *corners_slot = quad_to_f32(&final_corners);
     }

@@ -205,7 +205,8 @@ const SUBPIX_EPS: f64 = 0.005;
 /// chessboard corner next to the marker's white square, or clutter beside a small tag. A
 /// refined corner is therefore kept only if the image around it still shows the corner of this
 /// marker's black border, as checked by [`marker_corner_consistent`]. A rejected corner keeps
-/// its seed. Also returns which corners moved (bit `j` = corner `j`).
+/// its seed. Also returns which corners moved (bit `j` = corner `j`) and whether the
+/// X-junction fit placed all four (such corners carry no photometric inset).
 ///
 /// **Fusion with the whole-edge corner.** The junction estimate sees only the corner's
 /// neighbourhood. Each edge also carries information along its whole length:
@@ -234,7 +235,7 @@ pub(crate) fn subpix_marker_corners(
     seed: [[f64; 2]; 4],
     cells: usize,
     border: usize,
-) -> ([[f64; 2]; 4], u8, u8) {
+) -> ([[f64; 2]; 4], u8, bool) {
     let side = mean_side(&seed);
     // The corner's models live in the black border, so its width bounds windows, probes and
     // edge bands: one cell by default, two on Kalibr's AprilGrid.
@@ -290,70 +291,70 @@ pub(crate) fn subpix_marker_corners(
     // markers half fitted and half at seeds 0.8 px inward, and the standard board's p95
     // translation rose 28 %. The window spans the border along each edge, where the pattern is
     // exactly an X, plus the blur's reach.
-    let cell_fraction = border as f64 / cells.max(1) as f64;
-    let mut fitted = out;
-    let all_fitted = (0..4).all(|j| {
-        // A corner the gradient-orthogonality pass left at its seed is tried from the seed:
-        // under the cell floor that pass's window reads the bits; the model rejects them.
-        let start = picks[j].map_or(out[j], |pick| pick.corner);
+    // Classified once, before any fit: a marker with one L-corner is never fitted, and the
+    // fusion gate below reads the same answer. A corner the gradient-orthogonality pass left
+    // at its seed is tried from the seed (under the cell floor that pass reads the bits).
+    let is_x: [bool; 4] = core::array::from_fn(|j| {
         let (prev, next) = (out[(j + 3) % 4], out[(j + 1) % 4]);
-        if !junction_is_x(img, start, prev, next, out[j], probe) {
-            return false;
-        }
-        let toward = [
-            [prev[0] - out[j][0], prev[1] - out[j][1]],
-            [next[0] - out[j][0], next[1] - out[j][1]],
-        ];
-        // Along each edge the border spans `border / cells` of that edge's length.
-        let reach = toward.map(|d| d[0].hypot(d[1]) * cell_fraction + XJ_RADIUS_MARGIN_PX);
-        crate::xjunction::fit_x_junction(img, start, toward, reach)
-            .filter(|&fit| marker_corner_consistent(img, fit, prev, next, out[j], probe))
-            .inspect(|&fit| fitted[j] = fit)
-            .is_some()
+        junction_is_x(img, out[j], prev, next, out[j], probe)
     });
-    if all_fitted {
-        return (fitted, 0b1111, 0b1111);
+    if is_x.iter().all(|&x| x) {
+        let cell_fraction = border as f64 / cells.max(1) as f64;
+        let mut fitted = out;
+        let all_fitted = (0..4).all(|j| {
+            let (prev, next) = (out[(j + 3) % 4], out[(j + 1) % 4]);
+            let toward = [
+                [prev[0] - out[j][0], prev[1] - out[j][1]],
+                [next[0] - out[j][0], next[1] - out[j][1]],
+            ];
+            // Along each edge the border spans `border / cells` of that edge's length.
+            let reach = toward.map(|d| d[0].hypot(d[1]) * cell_fraction + XJ_RADIUS_MARGIN_PX);
+            crate::xjunction::fit_x_junction(img, out[j], toward, reach)
+                .filter(|&fit| marker_corner_consistent(img, fit, prev, next, out[j], probe))
+                .inspect(|&fit| fitted[j] = fit)
+                .is_some()
+        });
+        if all_fitted {
+            return (fitted, 0b1111, true);
+        }
     }
     // Fuse each L-corner with the intersection of its two whole-edge lines. All four corners
     // or none: a marker whose corners mix the two estimators (they differ by the junction
     // model's apex bias) is no longer a consistent square, which the pose turns into rotation
     // error. So every corner must be a refined L-corner before any edge is fitted.
     let [Some(p0), Some(p1), Some(p2), Some(p3)] = picks else {
-        return (out, refined_bits, 0);
+        return (out, refined_bits, false);
     };
     // Under the cell floor the edge bands would span the bits.
     if count == 0 {
-        return (out, refined_bits, 0);
+        return (out, refined_bits, false);
     }
     let locals = [p0, p1, p2, p3];
     // Edges between the locally refined corners: their directions are already corrected.
     let anchors = out;
-    if (0..4).any(|j| {
-        let (prev, next) = (anchors[(j + 3) % 4], anchors[(j + 1) % 4]);
-        junction_is_x(img, locals[j].corner, prev, next, anchors[j], probe)
-    }) {
-        return (out, refined_bits, 0);
+    if is_x.iter().any(|&x| x) {
+        return (out, refined_bits, false);
     }
     let edges: [Option<EdgeLine>; 4] = edge_lines(img, &anchors, half);
     let mut fused = [[0.0f64; 2]; 4];
     for (j, local) in locals.iter().enumerate() {
         let (Some(before), Some(after)) = (edges[(j + 3) % 4], edges[j]) else {
-            return (out, refined_bits, 0);
+            return (out, refined_bits, false);
         };
         let Some((line_corner, line_cov)) = intersect_edges(&before, &after) else {
-            return (out, refined_bits, 0);
+            return (out, refined_bits, false);
         };
         let moved = (line_corner[0] - anchors[j][0]).hypot(line_corner[1] - anchors[j][1]);
         if moved > LINE_CORNER_MAX_MOVE_PX {
-            return (out, refined_bits, 0);
+            return (out, refined_bits, false);
         }
         let Some(corner) = fuse_corner(local.corner, local.cov, line_corner, line_cov) else {
-            return (out, refined_bits, 0);
+            return (out, refined_bits, false);
         };
         fused[j] = corner;
     }
     out = fused;
-    (out, refined_bits, 0)
+    (out, refined_bits, false)
 }
 
 /// The marker junction near `seed` (adjacent corners `prev`, `next`): [`corner_subpix`] at each
@@ -1066,7 +1067,7 @@ mod subpix_tests {
         }
         let img = ImageView::new(&data, W, W, W).unwrap();
         let seed = [[24.6, 23.6], [40.6, 23.6], [40.6, 39.6], [24.6, 39.6]];
-        assert_eq!(subpix_marker_corners(&img, seed, 8, 1), (seed, 0, 0));
+        assert_eq!(subpix_marker_corners(&img, seed, 8, 1), (seed, 0, false));
     }
 
     /// A 16 px marker (2 px cells, under the floor) on an AprilGrid: connector squares touch its

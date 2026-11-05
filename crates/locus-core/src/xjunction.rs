@@ -22,6 +22,7 @@
 //! AprilGrids at up to 70° incidence.
 
 use crate::image::ImageView;
+use crate::simd::math::{ERF_COEFFS, ERF_P};
 use nalgebra::{SMatrix, SVector};
 
 /// Number of fitted parameters: `c` (2), `t₁`, `t₂`, `s`, `A`, `B`.
@@ -181,9 +182,11 @@ impl F4 {
             f(self.0[3], o.0[3]),
         ])
     }
+    /// `(l0 + l2) + (l1 + l3)`: the AVX2 kernel's reduction order, so the two kernels differ
+    /// only by FMA rounding.
     #[inline]
     fn sum(self) -> f64 {
-        (self.0[0] + self.0[1]) + (self.0[2] + self.0[3])
+        (self.0[0] + self.0[2]) + (self.0[1] + self.0[3])
     }
 }
 
@@ -246,28 +249,16 @@ const INV_FACTORIALS: [f64; 12] = [
     1.0 / 39_916_800.0,
 ];
 
-/// Abramowitz & Stegun 7.1.26 constants of [`erf_and_gauss`].
-const ERF_P: f64 = 0.327_591_1;
-const ERF_COEFFS: [f64; 5] = [
-    0.254_829_592,
-    -0.284_496_736,
-    1.421_413_741,
-    -1.453_152_027,
-    1.061_405_429,
-];
-
 /// `erf(x)` and `exp(−x²)`: Abramowitz & Stegun 7.1.26 (absolute error under 1.5·10⁻⁷), as
 /// `simd::math::erf_approx` but branch-free. The Gaussian is also the Jacobian's, so one
 /// exponential serves both.
 #[inline]
 fn erf_and_gauss(x: F4) -> (F4, F4) {
-    const P: f64 = ERF_P;
-    const COEFFS: [f64; 5] = ERF_COEFFS;
     let abs = x.map(f64::abs);
-    let tau = F4::splat(1.0) / (F4::splat(1.0) + F4::splat(P) * abs);
+    let tau = F4::splat(1.0) / (F4::splat(1.0) + F4::splat(ERF_P) * abs);
     let gauss = exp_neg(abs * abs);
-    let mut poly = F4::splat(COEFFS[4]);
-    for &c in COEFFS[..4].iter().rev() {
+    let mut poly = F4::splat(ERF_COEFFS[4]);
+    for &c in ERF_COEFFS[..4].iter().rev() {
         poly = poly * tau + F4::splat(c);
     }
     let erf = (F4::splat(1.0) - poly * tau * gauss).zip(x, f64::copysign);
@@ -390,8 +381,8 @@ fn assemble(tri: [f64; TRIANGLE], grad: [f64; PARAMS], cost: f64) -> NormalEquat
 #[cfg(target_arch = "x86_64")]
 mod avx2 {
     use super::{
-        CONTRAST, CX, CY, LANES, LEVEL, NormalEquations, PARAMS, Params, SCALE, T1, T2, TRIANGLE,
-        Window, assemble, normal,
+        CONTRAST, CX, CY, ERF_COEFFS, ERF_P, LANES, LEVEL, NormalEquations, PARAMS, Params, SCALE,
+        T1, T2, TRIANGLE, Window, assemble, normal,
     };
     use core::arch::x86_64::{
         __m256d, _mm_add_pd, _mm_add_sd, _mm_cvtsd_f64, _mm_unpackhi_pd, _mm256_and_pd,
@@ -434,10 +425,10 @@ mod avx2 {
         let sign = _mm256_set1_pd(-0.0);
         let abs = _mm256_andnot_pd(sign, x);
         let one = _mm256_set1_pd(1.0);
-        let tau = _mm256_div_pd(one, _mm256_fmadd_pd(_mm256_set1_pd(super::ERF_P), abs, one));
+        let tau = _mm256_div_pd(one, _mm256_fmadd_pd(_mm256_set1_pd(ERF_P), abs, one));
         let gauss = exp_neg(_mm256_mul_pd(abs, abs));
-        let mut poly = _mm256_set1_pd(super::ERF_COEFFS[4]);
-        for &c in super::ERF_COEFFS[..4].iter().rev() {
+        let mut poly = _mm256_set1_pd(ERF_COEFFS[4]);
+        for &c in ERF_COEFFS[..4].iter().rev() {
             poly = _mm256_fmadd_pd(poly, tau, _mm256_set1_pd(c));
         }
         let magnitude = _mm256_fnmadd_pd(_mm256_mul_pd(poly, tau), gauss, one);

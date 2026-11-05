@@ -78,6 +78,17 @@ pub(crate) fn bilinear_interpolate_fixed(x: f32, y: f32, p00: u8, p10: u8, p01: 
     res as u8
 }
 
+/// Abramowitz & Stegun 7.1.26: `erf(x) ≈ 1 − (a₁t + … + a₅t⁵)·e^(−x²)` with
+/// `t = 1/(1 + p·x)`, `x ≥ 0`. Shared by every erf kernel so they cannot drift apart.
+pub(crate) const ERF_P: f64 = 0.327_591_1;
+pub(crate) const ERF_COEFFS: [f64; 5] = [
+    0.254_829_592,
+    -0.284_496_736,
+    1.421_413_741,
+    -1.453_152_027,
+    1.061_405_429,
+];
+
 /// Approximate error function (erf) using the Abramowitz and Stegun approximation.
 ///
 /// Maximum error: 1.5e-7 over the entire domain.
@@ -100,15 +111,8 @@ pub(crate) fn erf_approx_with_gauss(x: f64, gauss: f64) -> f64 {
     let sign = if x < 0.0 { -1.0 } else { 1.0 };
     let x = x.abs();
 
-    // Abramowitz and Stegun constants (formula 7.1.26)
-    let a1 = 0.254_829_592;
-    let a2 = -0.284_496_736;
-    let a3 = 1.421_413_741;
-    let a4 = -1.453_152_027;
-    let a5 = 1.061_405_429;
-    let p = 0.327_591_1;
-
-    let t = 1.0 / (1.0 + p * x);
+    let [a1, a2, a3, a4, a5] = ERF_COEFFS;
+    let t = 1.0 / (1.0 + ERF_P * x);
     let y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * gauss;
 
     sign * y
