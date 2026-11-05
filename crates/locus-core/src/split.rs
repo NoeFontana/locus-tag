@@ -8,10 +8,13 @@
 //! piece covers every border pixel the erosion kept, which is all a marker's outer contour needs.
 //! It drops what the erosion removed: the neck stubs, which would otherwise bend that contour.
 //!
-//! The structuring element is 2 × 2, the smallest that opens anything: it keeps every stroke at
-//! least 2 px wide. A 3 × 3 one also opened 2 px borders, and fisheye compression thins a
-//! 2-cell border to that at the rim: it broke 14 % of the tags at a rendered 70° field angle
-//! into fragments, none a marker.
+//! The structuring element is 2 × 2, the smallest that opens anything: it keeps every
+//! axis-aligned stroke at least 2 px wide. A 3 × 3 one also opened 2 px borders, and fisheye
+//! compression thins a 2-cell border to that at the rim: it broke 14 % of the tags at a rendered
+//! 70° field angle into fragments, none a marker. A stroke at 45° needs more, up to 2√2 px
+//! depending on its phase, because its cores step diagonally: that is the same property that
+//! cuts the pinch, so a rolled marker with a 2 px border still shatters (measured: 2.0 px
+//! shatters, 2.2 px survives).
 //!
 //! Everything runs on the component's runs, so the cost follows its run count, not its bounding
 //! box. A background component can span the whole frame.

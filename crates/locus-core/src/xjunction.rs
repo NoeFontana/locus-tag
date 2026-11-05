@@ -389,11 +389,13 @@ fn normal(t: f64) -> [f64; 2] {
 /// along `toward[0]` and `toward[1]` (the marker's two edges from the corner, any length),
 /// fitted over the window reaching `reach[i]` px along each (`Window::gather`).
 ///
-/// A refused fit that landed more than `RECENTRE_PX` from its start is refitted once over a
-/// window centred where it landed, and only that refit is judged. A window off-centre by a
-/// pixel or more holds the junction but describes it badly: its far side is mostly one wedge,
-/// so the fit fails the residual gate (a split piece's seed pushed 1 px into the neck), or the
-/// move limit (foreshortened tags at 50° incidence start 1.5-2 px off).
+/// A fit refused only by the move limit or the residual gate, after landing more than
+/// `RECENTRE_PX` from its start, is refitted once over a window centred where it landed, and
+/// only that refit is judged. A window off-centre by half a pixel or more holds the junction
+/// but describes it badly: its far side is mostly one wedge, so the fit fails the residual gate
+/// (a split piece's seed pushed 1 px into the neck), or the move limit (foreshortened tags at
+/// 50° incidence start 1.5-2 px off). A fit whose lines turned or whose wedge is bright found
+/// some other structure, and is not a seed.
 ///
 /// `None` when the fit, or its refit, is refused.
 pub(crate) fn fit_x_junction(
@@ -402,18 +404,29 @@ pub(crate) fn fit_x_junction(
     toward: [[f64; 2]; 2],
     reach: [f64; 2],
 ) -> Option<[f64; 2]> {
-    let (fit, accepted) = fit_once(img, start, toward, reach)?;
-    if accepted {
-        return Some(fit);
+    let (fit, verdict) = fit_once(img, start, toward, reach)?;
+    match verdict {
+        Verdict::Accepted => Some(fit),
+        Verdict::OffCentre(moved) if moved > RECENTRE_PX => {
+            let (refit, verdict) = fit_once(img, fit, toward, reach)?;
+            matches!(verdict, Verdict::Accepted).then_some(refit)
+        },
+        _ => None,
     }
-    if (fit[0] - start[0]).hypot(fit[1] - start[1]) <= RECENTRE_PX {
-        return None;
-    }
-    let (refit, accepted) = fit_once(img, fit, toward, reach)?;
-    accepted.then_some(refit)
 }
 
-/// One fit over the window at `start`: where it landed and whether it passed every gate.
+/// How a fit's landing fared at the gates (`fit_once`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Verdict {
+    Accepted,
+    /// The lines, blur scale and dark wedge are this marker's junction, but the fit moved past
+    /// the limit or left a residual over the gate, as a window off-centre does. Carries the move
+    /// (px).
+    OffCentre(f64),
+    Refused,
+}
+
+/// One fit over the window at `start`: where it landed and its verdict.
 ///
 /// The gates refuse a result that is not this marker's X-junction: it moved more than
 /// `MAX_MOVE_PX` (or half the window's shorter reach, after any shrink to the buffers), a line
@@ -422,13 +435,13 @@ pub(crate) fn fit_x_junction(
 /// `MAX_RELATIVE_RMS` of `|B|`.
 ///
 /// `None`, with no landing point to refit from, when the window lies outside the image or
-/// holds too few pixels, or the fit does not converge, leaves the image or leaves the window.
+/// holds too few pixels, or the fit does not converge or leaves the image.
 fn fit_once(
     img: &ImageView,
     start: [f64; 2],
     toward: [[f64; 2]; 2],
     reach: [f64; 2],
-) -> Option<([f64; 2], bool)> {
+) -> Option<([f64; 2], Verdict)> {
     let unit = |d: [f64; 2]| {
         let len = d[0].hypot(d[1]);
         (len > 0.0).then(|| [d[0] / len, d[1] / len])
@@ -496,11 +509,11 @@ fn fit_once(
     }
     let sum_w: f64 = win.weight[..win.len].iter().sum();
     let rms = (cost / (sum_w - PARAMS as f64).max(1.0)).sqrt();
-    let accepted = wrap_angle(params[T1] - angles[0]).abs() <= MAX_TURN_RAD
+    let shaped = wrap_angle(params[T1] - angles[0]).abs() <= MAX_TURN_RAD
         && wrap_angle(params[T2] - angles[1]).abs() <= MAX_TURN_RAD
         && (MIN_SCALE_PX..=reach[0].max(reach[1])).contains(&params[SCALE])
-        && params[CONTRAST] * dark_sign > 0.0
-        && rms <= MAX_RELATIVE_RMS * params[CONTRAST].abs();
+        && params[CONTRAST] * dark_sign > 0.0;
+    let described = rms <= MAX_RELATIVE_RMS * params[CONTRAST].abs();
     let fit = [start[0] + params[CX], start[1] + params[CY]];
     // A clipped window may let the fit run off the frame, where no pixel holds the junction
     // and the downstream probes read clamped edge pixels.
@@ -510,7 +523,12 @@ fn fit_once(
     // junction it does not hold.
     let moved = params[CX].hypot(params[CY]);
     let held = moved <= MAX_MOVE_PX.max(0.5 * win.min_reach);
-    (converged && inside && moved <= win.min_reach).then_some((fit, accepted && held))
+    let verdict = match (shaped, described && held) {
+        (true, true) => Verdict::Accepted,
+        (true, false) => Verdict::OffCentre(moved),
+        (false, _) => Verdict::Refused,
+    };
+    (converged && inside).then_some((fit, verdict))
 }
 
 #[cfg(test)]
@@ -614,7 +632,7 @@ mod tests {
         // The premise: one fit converges but moves past its limit (1.5 px here).
         assert!(matches!(
             fit_once(&img, start, toward, reach),
-            Some((_, false))
+            Some((_, Verdict::OffCentre(_)))
         ));
         let fit = fit_x_junction(&img, start, toward, reach).expect("fit");
         let err = (fit[0] - c[0]).hypot(fit[1] - c[1]);

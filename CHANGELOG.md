@@ -29,8 +29,8 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     angle +12 % (23 % more tags refined).
   - Dataset suites: no `grid` snapshot moves.
 - **A refused X-junction fit whose window was off-centre is refitted.** #485 refitted a fit
-  that landed past the move limit. Any refused fit that landed more than 0.5 px from its start
-  is now refitted once over a window centred where it landed, and only the refit is judged: a
+  that landed past the move limit. Any fit refused only by the move limit or the residual gate,
+  after landing more than 0.5 px from its start, is now refitted once over a window centred where it landed, and only the refit is judged: a
   window a pixel off-centre holds the junction but its far side is mostly one wedge, so the
   model fails the residual gate. A split piece's seed sits 1 px into the neck that way.
   Rendered 70° field angle: recovered tags with a corner off by more than 0.5 px 5 → 2 of 122.
