@@ -13,7 +13,7 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   their own class, a class could be held by one marker's corners and still pass. It now counts
   only contributing markers, as documented. AprilGrid board (`standard`): translation mean
   0.109 → 0.104 mm, rotation p95 0.0233° → 0.0209°; `high_accuracy` rotation mean
-  0.00126° → 0.00130°; ChArUco boards within 0.1 % on their means. Measured and dropped:
+  0.00126° → 0.00130°; ChArUco boards within 0.13 % on their means. Measured and dropped:
   a marker-clustered standard error for the inset's significance test, on the grounds that a
   marker's corners share errors. It also drops ChArUco insets that are real: ChArUco
   `high_accuracy` translation mean +28 %, rotation p99 +52 %.
