@@ -425,6 +425,9 @@ const INSET_HUBER_PX: f64 = 0.5;
 const INSET_IRLS_ITERATIONS: usize = 5;
 /// Standard errors an inset must exceed to be modelled.
 const INSET_SIGNIFICANCE: f64 = 3.0;
+/// Inlier markers with a corner in a class needed to estimate that class's inset: a marker's
+/// corners share its errors, so one marker's spread says nothing of the board's.
+const INSET_MIN_MARKERS: u32 = 4;
 
 /// The board's marker-corner photometric inset model: per-correspondence estimator classes
 /// and one edge offset (px) per class; `None` in a class means that estimator shows no
@@ -529,8 +532,9 @@ fn inset_direction(quad: &[[f64; 2]; MARKER_GROUP], j: usize) -> Option<[f64; 2]
 /// indistinguishable from depth. On a board the layout fixes the marker centres, and the
 /// offset is the location of the per-corner insets along each corner's edge-offset direction
 /// ([`inset_direction`]), estimated with a Huber M-estimator (scale `INSET_HUBER_PX`) so a few gross corners cannot
-/// move it. `None` for non-marker correspondences (ChArUco saddles), fewer than four inlier
-/// markers, or an inset within `INSET_SIGNIFICANCE` standard errors of zero.
+/// move it. `None` for non-marker correspondences (ChArUco saddles), fewer than
+/// `INSET_MIN_MARKERS` inlier markers with a corner in `class`, or an inset within
+/// `INSET_SIGNIFICANCE` standard errors of zero.
 fn estimate_corner_inset(
     pose: &Pose,
     corr: &PointCorrespondences<'_>,
@@ -551,12 +555,19 @@ fn estimate_corner_inset(
                 continue;
             }
             let start = g * MARKER_GROUP;
+            // Skip the projection for markers outside the class: on X-junction-fitted
+            // AprilGrids that is nearly every marker, for every IRLS pass of classes 0 and 1.
+            let in_class: [bool; MARKER_GROUP] =
+                core::array::from_fn(|j| corner_class(corner_classes, start + j) == class);
+            if !in_class.contains(&true) {
+                continue;
+            }
             let Some(quad) = project_marker(&pose, corr, intrinsics, start) else {
                 continue;
             };
-            groups += 1;
+            let mut contributes = false;
             for (j, &[u, v]) in quad.iter().enumerate() {
-                if corner_class(corner_classes, start + j) != class {
+                if !in_class[j] {
                     continue;
                 }
                 if let Some([dx, dy]) = inset_direction(&quad, j) {
@@ -564,16 +575,20 @@ fn estimate_corner_inset(
                     let observed = corr.image_points[start + j];
                     let d2 = dx * dx + dy * dy;
                     f(((f64::from(observed.x) - u) * dx + (f64::from(observed.y) - v) * dy) / d2);
+                    contributes = true;
                 }
             }
+            // Count contributing markers only: a class held by one marker's corners would
+            // otherwise pass on the whole board's marker count.
+            groups += u32::from(contributes);
         }
         groups
     };
     // IRLS for the Huber location, from 0 (no inset).
     let mut inset = 0.0;
-    let (mut spread, mut weight) = (0.0, 0.0);
+    let (mut spread, mut weight, mut weight_sq) = (0.0, 0.0, 0.0);
     for _ in 0..INSET_IRLS_ITERATIONS {
-        let (mut sum_wr, mut sum_wrr, mut sum_w) = (0.0, 0.0, 0.0);
+        let (mut sum_wr, mut sum_wrr, mut sum_w, mut sum_w_sq) = (0.0, 0.0, 0.0, 0.0);
         let groups = for_each_residual(&mut |r| {
             let a = (r - inset).abs();
             let w = if a <= INSET_HUBER_PX {
@@ -584,17 +599,22 @@ fn estimate_corner_inset(
             sum_wr += w * r;
             sum_wrr += w * r * r;
             sum_w += w;
+            sum_w_sq += w * w;
         });
-        if groups < 4 || sum_w <= 0.0 {
+        if groups < INSET_MIN_MARKERS || sum_w <= 0.0 {
             return None;
         }
         inset = sum_wr / sum_w;
         spread = (sum_wrr / sum_w - inset * inset).max(0.0);
         weight = sum_w;
+        weight_sq = sum_w_sq;
     }
     // Keep the inset only when it is significant: on boards whose corners carry no photometric
     // offset (AprilGrid connectors make X-junctions) an estimated zero only adds variance.
-    let standard_error = (spread / weight).sqrt();
+    // Standard error from the unbiased weighted variance over Kish's effective sample size
+    // `(Σw)²/Σw²`: with as few as four corners, the biased form understated it by ~13 %.
+    let n_eff = weight * weight / weight_sq.max(f64::MIN_POSITIVE);
+    let standard_error = (spread / (n_eff - 1.0).max(f64::MIN_POSITIVE)).sqrt();
     (inset.abs() > INSET_SIGNIFICANCE * standard_error).then_some(inset)
 }
 
@@ -1489,7 +1509,9 @@ impl RobustPoseSolver {
         // Re-estimate the inset without the dropped marker.
         let inset_3 = inset.map(|model| CornerInset {
             delta: core::array::from_fn(|class| {
-                model.delta[class].and_then(|previous| {
+                // Re-estimated without the dropped marker, or none: an inset fitted with the
+                // outlier, or one whose class no longer meets the floor, must not be kept.
+                model.delta[class].and_then(|_| {
                     estimate_corner_inset(
                         pose_4,
                         corr,
@@ -1498,7 +1520,6 @@ impl RobustPoseSolver {
                         &masked_mask,
                         class,
                     )
-                    .or(Some(previous))
                 })
             }),
             ..model
@@ -2273,6 +2294,57 @@ mod tests {
             "inset modelled {:.2e} m vs ignored {:.2e} m",
             err(&modelled),
             err(&ignored)
+        );
+    }
+
+    /// A class's inset needs `INSET_MIN_MARKERS` markers of its own: one marker's four corners
+    /// do not pass on the board's marker count, four markers' single corners do.
+    #[test]
+    fn corner_inset_class_counts_only_its_own_markers() {
+        const INSET_PX: f64 = 0.7;
+        let config = math_test_config();
+        let estimator = BoardEstimator::new(Arc::clone(&config));
+        let intrinsics = test_intrinsics();
+        let true_pose = Pose::new(Matrix3::identity(), Vector3::new(0.0, 0.0, 1.0));
+        let (mut batch, num_valid) =
+            build_synthetic_batch(&config.obj_points, &true_pose, &intrinsics);
+        let v = batch.partition(num_valid);
+        let view = batch.view(v);
+        let (mut img, obj, info) =
+            build_correspondences_from_batch(&config.obj_points, &view, &estimator);
+        for group in img.chunks_mut(MARKER_GROUP) {
+            let quad: [[f64; 2]; MARKER_GROUP] =
+                core::array::from_fn(|j| [f64::from(group[j].x), f64::from(group[j].y)]);
+            for (j, p) in group.iter_mut().enumerate() {
+                let [dx, dy] = inset_direction(&quad, j).expect("non-degenerate marker");
+                p.x = (quad[j][0] + INSET_PX * dx) as f32;
+                p.y = (quad[j][1] + INSET_PX * dy) as f32;
+            }
+        }
+        assert!(img.len() >= 4 * MARKER_GROUP, "need four markers");
+        let corr = PointCorrespondences {
+            image_points: &img,
+            object_points: &obj,
+            information_matrices: &info,
+            group_size: MARKER_GROUP,
+        };
+        let all_inliers = [u64::MAX; 16];
+        let estimate = |classes: &[u8]| {
+            estimate_corner_inset(&true_pose, &corr, classes, &intrinsics, &all_inliers, 1)
+        };
+
+        let mut one_marker = vec![0u8; img.len()];
+        one_marker[..MARKER_GROUP].fill(1);
+        assert_eq!(estimate(&one_marker), None);
+
+        let mut four_markers = vec![0u8; img.len()];
+        for k in (0..4).map(|g| g * MARKER_GROUP) {
+            four_markers[k] = 1;
+        }
+        let inset = estimate(&four_markers).expect("four contributing markers");
+        assert!(
+            (inset - INSET_PX).abs() < 0.01,
+            "estimated inset {inset:.4} px"
         );
     }
 

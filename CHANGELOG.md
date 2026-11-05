@@ -23,17 +23,33 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   - Rendered 12 px tags: error over the bound 6.8 → 4.6, p90 0.196 → 0.098 px; tags
     0.1 px inward 1.5 % → 0.8 %.
   - Baseline cases unchanged.
-  - AprilGrid board (`standard`): rotation mean −11 %, p99 0.080° → 0.076°, translation mean
-    −4.7 %. Translation p95 rises 0.42 → 0.56 mm from two frames, by cancellation: in one,
+  - AprilGrid board (`standard`): rotation mean −12 %, p99 0.080° → 0.076°, translation mean
+    −5.1 %. Translation p95 rises 0.42 → 0.58 mm from two frames, by cancellation: in one,
     the small-tag corners off by more than 0.3 px fall from 91 to 26 while the board's error
     rises 0.42 → 3.28 mm, because the remaining biased corners no longer cancel.
-  - `high_accuracy` rotation mean −3.8 %; `forstner` rotation p99 −14 %.
+  - `high_accuracy` rotation mean −4.9 %, translation p95 −11 %; `forstner` rotation p99 −14 %.
   - EuRoC `cam_april` (`standard`) unchanged: leave-one-out median 0.2263 → 0.2262 px, recall
     and false positives the same.
 
   Measured and dropped: a move limit of 0.75-1.0 of the window's reach for the remaining 50°
   incidence outliers (0.95 % → 0.47 % there, no change elsewhere).
 
+- **The board's per-estimator inset needs four markers of its own class.** `BoardEstimator`
+  required four inlier markers before estimating an estimator class's photometric inset, but
+  counted markers with no corner in that class. Since #483 moved X-junction-fit corners into
+  their own class, a class could be held by one marker's corners and still pass. It now counts
+  only contributing markers, as documented. AprilGrid board (`standard`): translation mean
+  0.109 → 0.104 mm, rotation p95 0.0233° → 0.0209°; `high_accuracy` rotation mean
+  0.00126° → 0.00130°; ChArUco boards within 0.13 % on their means. Measured and dropped:
+  a marker-clustered standard error for the inset's significance test, on the grounds that a
+  marker's corners share errors. It also drops ChArUco insets that are real: ChArUco
+  `high_accuracy` translation mean +28 %, rotation p99 +52 %.
+
+  Two related corrections in the same estimator: after the board drops its worst marker it
+  no longer falls back to the inset fitted with that marker when the re-estimate fails
+  (unreachable on the hub boards, results identical), and the inset's significance test uses
+  the unbiased variance over Kish's effective sample size, which at four corners the biased
+  form understated by ~13 % (ChArUco boards move by 0.01 %).
 - **The X-junction fit now reaches AprilGrid tags under the cell floor, and the board gives its
   corners their own inset class.** On the hub AprilGrid, 24 px tags (one-cell border, 3 px)
   had corners sitting at their quad seeds, 0.8 px inward on average. Seen from there, the
