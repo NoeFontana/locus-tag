@@ -57,6 +57,48 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     5.2 px off the reference outline). Leave-one-out corner median 0.2423 → 0.2443 px.
     1-thread latency +12 % (5.72 → 6.42 ms, serial A-B-B-A).
   - No shipped profile sets it, and with the default every dataset snapshot is byte-identical.
+- **`quad.split_fused`** (default `false`, on in `grid`; Python `QuadConfig.split_fused`): split
+  components fused at their corners. Ink spread and blur close the diagonal contact where two
+  dark squares meet corner to corner, and on Kalibr's AprilGrid every tag meets its neighbours'
+  connector squares that way. One component then holds a tag and its connectors, or several
+  tags, and its outline is no single marker's: it either decodes nothing or traces no quad.
+  After the decode pass, each such component able to hold two markers is eroded by a 3 × 3
+  square, which opens the one-to-two-pixel necks. Every core of at least a marker's size is
+  dilated back (a morphological opening, labelled per core), and the pieces are traced and
+  decoded as candidates appended after the first pass, so they never displace one. The whole
+  pass runs on runs, so its cost follows the component's run count, not its bounding box.
+  - On the physically based render of Kalibr's AprilGrid (`grid`, `marker_border_bits = 2`),
+    against the rendered truth:
+    - recall 0.780 → 0.894 at the baseline (Kalibr's extractor 0.788);
+    - 0.361 → 0.829 at 0.4 mm ink (Kalibr 0.736), 0.438 → 0.944 on 32 px tags (0.904);
+    - 0.389 → 0.725 at 70° field angle (0.705), 0.853 → 0.991 at 0° incidence (0.992).
+    Locus now matches or exceeds Kalibr's recall in every case. Bias stays within the
+    ±0.01 px target (0.4 mm ink moves inside it, +0.0106 → +0.0075 px). Error over the
+    Cramér–Rao bound is unchanged or slightly lower.
+  - Real TUM-VI calibration frames (`grid`, `marker_border_bits = 2`), against Kalibr's corners
+    on the same frames, over eight recordings and cameras:
+    - share of Kalibr's corners also found: 0.29–0.52 → 0.86–0.93;
+    - at 0.6–0.8 of the half-diagonal: 0.09–0.29 → 0.61–0.85.
+    The localization-outlier rate is unchanged at about 0.14 %. The tag-scale offset against
+    Kalibr is unchanged except on `calib-cam4` (+0.002 → +0.014 px).
+  - EuRoC `cam_april` (`grid`): recall 88.0 → 99.4 %, leave-one-out corner median 0.2424 →
+    0.2461 px, since the recovered tags are the hard ones. One false positive (0 → 1): tag 3 in
+    the frame where `marker_border_bits = 2` already had its one, 5.1 px off the reference.
+    With `marker_border_bits = 2`, recall is 88.3 → 99.7 %, with false positives 1 → 2.
+  - Cost: about 30 % of detect-to-decode time on EuRoC frames (in-process timing; the
+    serial A-B-B-A wall clock gave +24–28 % under external load). On textured frames it is
+    33–36 % and finds nothing, which is why `standard` and `high_accuracy` leave it off. Every
+    dataset snapshot is byte-identical.
+  - Measured and not shipped:
+    - running the split on every component: textured frames fill the candidate cap with
+      pieces and push real tags out (ICRA grid recall 0.67 → 0.26);
+    - geodesic regrowth over the bounding box: up to 2.6 pt more recall on the renders, but
+      up to 424 ms on a frame-sized texture component, where the opening on runs stays
+      bounded by the run count;
+    - a 5 × 5 erosion: it opens small markers' own borders;
+    - requiring two cores: a tag fused only to its connectors has one;
+    - skipping a lone piece that keeps ≥ 90 % of its component: −5 % cost, but it loses up
+      to 0.9 pt of recall.
 
 ### Changed
 

@@ -1645,7 +1645,7 @@ pub fn decode_batch_soa_with_camera<C: crate::camera::CameraModel>(
     match (C::IS_RECTIFIED, intrinsics) {
         (false, Some(intrinsics)) => decode_batch_soa_generic(
             batch,
-            n,
+            0..n,
             img,
             decoders,
             config,
@@ -1662,6 +1662,20 @@ pub fn decode_batch_soa_with_camera<C: crate::camera::CameraModel>(
     }
 }
 
+/// [`decode_batch_soa`] over candidates `start..n` only: a later pass decodes the candidates it
+/// appended without touching the slots an earlier pass already settled (the decode loop zeroes
+/// the id and payload of every slot it is handed that is not `Active`).
+pub(crate) fn decode_batch_soa_from(
+    batch: &mut crate::batch::DetectionBatch,
+    start: usize,
+    n: usize,
+    img: &crate::image::ImageView,
+    decoders: &[Box<dyn TagDecoder + Send + Sync>],
+    config: &crate::config::DetectorConfig,
+) {
+    decode_batch_soa_generic(batch, start..n, img, decoders, config, &NoWarp);
+}
+
 /// Decode all active candidates in the batch using the Structure of Arrays (SoA) layout, for a
 /// pinhole camera (no lens distortion).
 ///
@@ -1676,7 +1690,7 @@ pub fn decode_batch_soa(
     decoders: &[Box<dyn TagDecoder + Send + Sync>],
     config: &crate::config::DetectorConfig,
 ) {
-    decode_batch_soa_generic(batch, n, img, decoders, config, &NoWarp);
+    decode_batch_soa_generic(batch, 0..n, img, decoders, config, &NoWarp);
 }
 
 /// The decode pass itself, shared by the pinhole and distortion-aware routes.
@@ -1688,7 +1702,7 @@ pub fn decode_batch_soa(
 #[allow(clippy::too_many_lines, clippy::cast_possible_wrap)]
 fn decode_batch_soa_generic<W: Warp + Sync>(
     batch: &mut crate::batch::DetectionBatch,
-    n: usize,
+    candidates: std::ops::Range<usize>,
     img: &crate::image::ImageView,
     decoders: &[Box<dyn TagDecoder + Send + Sync>],
     config: &crate::config::DetectorConfig,
@@ -1741,26 +1755,26 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
     // those slots at end-of-closure preserve the original sequential
     // semantics (refined-corners overwrite first, then optional rotation
     // permutation + homography recompute).
-    let status_out = &mut batch.status_mask[..n];
-    let ids_out = &mut batch.ids[..n];
-    let payloads_out = &mut batch.payloads[..n];
-    let error_rates_out = &mut batch.error_rates[..n];
-    let corners_out = &mut batch.corners[..n];
-    let homographies_out = &mut batch.homographies[..n];
-    let refined_out = &mut batch.corner_refined[..n];
+    let status_out = &mut batch.status_mask[candidates.clone()];
+    let ids_out = &mut batch.ids[candidates.clone()];
+    let payloads_out = &mut batch.payloads[candidates.clone()];
+    let error_rates_out = &mut batch.error_rates[candidates.clone()];
+    let corners_out = &mut batch.corners[candidates.clone()];
+    let homographies_out = &mut batch.homographies[candidates.clone()];
+    let refined_out = &mut batch.corner_refined[candidates.clone()];
 
     // Rayon `Zip` truncates to the shortest input; guard the disjoint-slice
     // contract so a future off-by-one fix on any column fails loudly in
     // debug rather than silently dropping the last candidate.
-    debug_assert_eq!(status_out.len(), n);
-    debug_assert_eq!(ids_out.len(), n);
-    debug_assert_eq!(payloads_out.len(), n);
-    debug_assert_eq!(error_rates_out.len(), n);
-    debug_assert_eq!(corners_out.len(), n);
-    debug_assert_eq!(homographies_out.len(), n);
+    debug_assert_eq!(status_out.len(), candidates.len());
+    debug_assert_eq!(ids_out.len(), candidates.len());
+    debug_assert_eq!(payloads_out.len(), candidates.len());
+    debug_assert_eq!(error_rates_out.len(), candidates.len());
+    debug_assert_eq!(corners_out.len(), candidates.len());
+    debug_assert_eq!(homographies_out.len(), candidates.len());
     // The seventh `zip` input, and the one the merged loop dropped: an off-by-one on
     // `corner_refined` is exactly the case this block exists to catch loudly.
-    debug_assert_eq!(refined_out.len(), n);
+    debug_assert_eq!(refined_out.len(), candidates.len());
 
     status_out
         .par_iter_mut()

@@ -246,6 +246,11 @@
           "title": "Min Fill Ratio",
           "type": "number"
         },
+        "split_fused": {
+          "default": false,
+          "title": "Split Fused",
+          "type": "boolean"
+        },
         "subpixel_refinement_sigma": {
           "default": 0.6,
           "minimum": 0.0,

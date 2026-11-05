@@ -750,6 +750,12 @@ fn cases() -> Vec<FieldCase> {
             inert_reason: None,
         },
         FieldCase {
+            field: "quad_split_fused",
+            base: noop,
+            mutate: |c| c.quad_split_fused = true,
+            inert_reason: None,
+        },
+        FieldCase {
             field: "quad_extraction_mode",
             base: |c| c.refinement_mode = CornerRefinementMode::None,
             mutate: |c| c.quad_extraction_mode = QuadExtractionMode::EdLines,
@@ -815,6 +821,7 @@ fn every_config_field() -> Vec<&'static str> {
         pose_edge_refinement_enabled: _,
         quad_max_elongation: _,
         quad_min_density: _,
+        quad_split_fused: _,
         quad_extraction_mode: _,
         edlines_imbalance_gate: _,
         quad_extraction_policy: _,
@@ -853,6 +860,7 @@ fn every_config_field() -> Vec<&'static str> {
         "pose_edge_refinement_enabled",
         "quad_max_elongation",
         "quad_min_density",
+        "quad_split_fused",
         "quad_extraction_mode",
         "edlines_imbalance_gate",
         "quad_extraction_policy",
