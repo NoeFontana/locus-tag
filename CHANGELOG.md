@@ -18,6 +18,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   marker's corners share errors. It also drops ChArUco insets that are real: ChArUco
   `high_accuracy` translation mean +28 %, rotation p99 +52 %.
 
+  Two related corrections in the same estimator: after the board drops its worst marker it
+  no longer falls back to the inset fitted with that marker when the re-estimate fails
+  (unreachable on the hub boards, results identical), and the inset's significance test uses
+  the unbiased variance over Kish's effective sample size, which at four corners the biased
+  form understated by ~13 % (ChArUco boards move by 0.01 %).
 - **The X-junction fit now reaches AprilGrid tags under the cell floor, and the board gives its
   corners their own inset class.** On the hub AprilGrid, 24 px tags (one-cell border, 3 px)
   had corners sitting at their quad seeds, 0.8 px inward on average. Seen from there, the

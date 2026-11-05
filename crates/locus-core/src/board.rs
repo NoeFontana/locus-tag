@@ -586,9 +586,9 @@ fn estimate_corner_inset(
     };
     // IRLS for the Huber location, from 0 (no inset).
     let mut inset = 0.0;
-    let (mut spread, mut weight) = (0.0, 0.0);
+    let (mut spread, mut weight, mut weight_sq) = (0.0, 0.0, 0.0);
     for _ in 0..INSET_IRLS_ITERATIONS {
-        let (mut sum_wr, mut sum_wrr, mut sum_w) = (0.0, 0.0, 0.0);
+        let (mut sum_wr, mut sum_wrr, mut sum_w, mut sum_w_sq) = (0.0, 0.0, 0.0, 0.0);
         let groups = for_each_residual(&mut |r| {
             let a = (r - inset).abs();
             let w = if a <= INSET_HUBER_PX {
@@ -599,6 +599,7 @@ fn estimate_corner_inset(
             sum_wr += w * r;
             sum_wrr += w * r * r;
             sum_w += w;
+            sum_w_sq += w * w;
         });
         if groups < INSET_MIN_MARKERS || sum_w <= 0.0 {
             return None;
@@ -606,10 +607,14 @@ fn estimate_corner_inset(
         inset = sum_wr / sum_w;
         spread = (sum_wrr / sum_w - inset * inset).max(0.0);
         weight = sum_w;
+        weight_sq = sum_w_sq;
     }
     // Keep the inset only when it is significant: on boards whose corners carry no photometric
     // offset (AprilGrid connectors make X-junctions) an estimated zero only adds variance.
-    let standard_error = (spread / weight).sqrt();
+    // Standard error from the unbiased weighted variance over Kish's effective sample size
+    // `(Σw)²/Σw²`: with as few as four corners, the biased form understated it by ~13 %.
+    let n_eff = weight * weight / weight_sq.max(f64::MIN_POSITIVE);
+    let standard_error = (spread / (n_eff - 1.0).max(f64::MIN_POSITIVE)).sqrt();
     (inset.abs() > INSET_SIGNIFICANCE * standard_error).then_some(inset)
 }
 
@@ -1504,7 +1509,9 @@ impl RobustPoseSolver {
         // Re-estimate the inset without the dropped marker.
         let inset_3 = inset.map(|model| CornerInset {
             delta: core::array::from_fn(|class| {
-                model.delta[class].and_then(|previous| {
+                // Re-estimated without the dropped marker, or none: an inset fitted with the
+                // outlier, or one whose class no longer meets the floor, must not be kept.
+                model.delta[class].and_then(|_| {
                     estimate_corner_inset(
                         pose_4,
                         corr,
@@ -1513,7 +1520,6 @@ impl RobustPoseSolver {
                         &masked_mask,
                         class,
                     )
-                    .or(Some(previous))
                 })
             }),
             ..model
