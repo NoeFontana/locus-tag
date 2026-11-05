@@ -1568,7 +1568,9 @@ fn finalize_decoded_candidate(
             crate::marker_inset::calibrate_marker_corners(img, subpix_corners, cells, border)
                 .unwrap_or(subpix_corners)
         };
-        refined_bits = bits;
+        // Low nibble: the junction pass placed corner `j`; high nibble: the X-junction fit did
+        // (all four or none), which the board models as a separate, inset-free estimator.
+        refined_bits = bits | if junction_fit { 0xF0 } else { 0 };
         *corners_slot = quad_to_f32(&final_corners);
     }
 
@@ -1589,7 +1591,8 @@ fn finalize_decoded_candidate(
         *corners_slot = temp_corners;
         // Corner j now holds the old corner (j + rot) % 4.
         let r = u32::from(rot) % 4;
-        refined_bits = ((refined_bits >> r) | (refined_bits << (4 - r))) & 0x0F;
+        let rotate = |nibble: u8| ((nibble >> r) | (nibble << (4 - r))) & 0x0F;
+        refined_bits = rotate(refined_bits & 0x0F) | (rotate(refined_bits >> 4) << 4);
     }
     *refined_slot = refined_bits;
 

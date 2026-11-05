@@ -113,9 +113,9 @@ pub struct DetectionBatch {
     /// Layout: [c0_xx, c0_xy, c0_yx, c0_yy, c1_xx, ...]
     pub corner_covariances: [[f32; 16]; MAX_CANDIDATES],
     /// Bit `j` set ⇔ corner `j` was moved by the decoder's gradient-orthogonality pass
-    /// (`decoder.corner_subpix`); clear ⇔ it is the refinement mode's corner. The two
-    /// estimators carry different photometric offsets, which the board pose models
-    /// separately.
+    /// (`decoder.corner_subpix`); clear ⇔ it is the refinement mode's corner. Bit `4 + j` set ⇔
+    /// the X-junction model fit placed it (all four or none). The estimators carry different
+    /// photometric offsets, which the board pose models separately.
     pub corner_refined: [u8; MAX_CANDIDATES],
     /// Aggregate Mahalanobis d² (χ²(2) statistic) from the pose-consistency
     /// gate. NaN means the gate did not run (e.g., `pose_consistency_fpr == 0`
