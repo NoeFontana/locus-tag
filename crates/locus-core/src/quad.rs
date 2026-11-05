@@ -283,6 +283,9 @@ fn write_candidate(
         chunk.copy_from_slice(cov);
     }
     batch.corner_refined[i] = 0;
+    // The batch outlives the frame and split-pass slots never meet the funnel gate, so clear
+    // the previous frame's verdict rather than report it as this candidate's.
+    batch.funnel_status[i] = crate::batch::FunnelStatus::None;
     // Skip telemetry writes when disabled: the columns retain their
     // `DetectionBatch::new_boxed()` defaults (ROUTED_TO_STATIC, 0.0),
     // preserving Static-mode byte-identity regardless of policy.

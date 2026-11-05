@@ -427,6 +427,9 @@ pub struct DetectorConfig {
     /// corner, so on a grid of markers joined at their corners (Kalibr's AprilGrid connectors)
     /// one component can hold several markers. Off by default because it costs time on any
     /// frame with large undecoded components, textured backgrounds included; `grid` turns it on.
+    ///
+    /// Inert under a declared lens model and whenever the extraction policy may route to
+    /// EdLines: only the pinhole contour extractor records the components it splits.
     pub quad_split_fused: bool,
 
     /// Quad extraction mode: legacy contour tracing (default) or EDLines.

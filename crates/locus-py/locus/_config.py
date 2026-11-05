@@ -216,7 +216,8 @@ class QuadConfig(BaseModel):
     one-pixel erosion opens, and offer the pieces as candidates. Ink spread and blur join
     markers that touch at their corners (Kalibr's AprilGrid connectors) into one component.
     Off by default because it costs time on frames with large undecoded components, textured
-    backgrounds included; ``grid`` turns it on."""
+    backgrounds included; ``grid`` turns it on. Inert under a declared lens model and whenever
+    the extraction policy may route to EdLines."""
     extraction_mode: _QuadExtractionField = Field(
         default_factory=lambda: QuadExtractionMode.ContourRdp
     )

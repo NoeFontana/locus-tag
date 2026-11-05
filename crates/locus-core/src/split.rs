@@ -11,7 +11,7 @@
 //! Everything runs on the component's runs, so the cost follows its run count, not its bounding
 //! box. A background component can span the whole frame.
 
-use crate::segmentation::ComponentStats;
+use crate::segmentation::{ComponentStats, UnionFindSlice};
 use crate::simd_ccl_fusion::RleSegment;
 use bumpalo::Bump;
 use bumpalo::collections::Vec as BumpVec;
@@ -124,7 +124,7 @@ fn label_cores<'a>(
     min_core: u32,
 ) -> (&'a mut [u32], u32) {
     let spans = &cores.spans;
-    let parent = arena.alloc_slice_fill_iter(0..spans.len() as u32);
+    let mut uf = UnionFindSlice::new(arena.alloc_slice_fill_iter(0..spans.len() as u32), 0);
     for k in 2..height - 1 {
         let above = cores.row_start[k - 1] as usize..cores.row_start[k] as usize;
         let here = cores.row_start[k] as usize..cores.row_start[k + 1] as usize;
@@ -132,7 +132,7 @@ fn label_cores<'a>(
         while up < above.end && down < here.end {
             let (a, b) = (spans[up], spans[down]);
             if a.s < b.e && b.s < a.e {
-                union(parent, up as u32, down as u32);
+                uf.union(up as u32, down as u32);
             }
             if a.e <= b.e {
                 up += 1;
@@ -143,14 +143,14 @@ fn label_cores<'a>(
     }
     let size = arena.alloc_slice_fill_copy(spans.len(), 0u32);
     for (idx, span) in spans.iter().enumerate() {
-        size[find(parent, idx as u32) as usize] += u32::from(span.e - span.s);
+        size[uf.find(idx as u32) as usize] += u32::from(span.e - span.s);
     }
     // Roots come first in scan order (min-index union), so one pass numbers them and maps
     // every span to its root's number.
     let piece_of = arena.alloc_slice_fill_copy(spans.len(), u32::MAX);
     let mut n_pieces = 0u32;
     for idx in 0..spans.len() {
-        let root = find(parent, idx as u32) as usize;
+        let root = uf.find(idx as u32) as usize;
         if root == idx {
             if size[idx] >= min_core {
                 piece_of[idx] = n_pieces;
@@ -286,23 +286,6 @@ fn intersect3(rows: [&[Span]; 3], out: &mut BumpVec<'_, Span>) {
         // Advance the span that ends first; it cannot meet anything further right.
         let first = (0..3).find(|&r| spans[r].e == end).unwrap_or(0);
         at[first] += 1;
-    }
-}
-
-fn find(parent: &mut [u32], mut idx: u32) -> u32 {
-    while parent[idx as usize] != idx {
-        let grand = parent[parent[idx as usize] as usize];
-        parent[idx as usize] = grand;
-        idx = grand;
-    }
-    idx
-}
-
-/// Min-index union, so a root is its set's first core span in scan order.
-fn union(parent: &mut [u32], a: u32, b: u32) {
-    let (ra, rb) = (find(parent, a), find(parent, b));
-    if ra != rb {
-        parent[ra.max(rb) as usize] = ra.min(rb);
     }
 }
 
