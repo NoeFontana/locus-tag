@@ -385,18 +385,40 @@ fn normal(t: f64) -> [f64; 2] {
 /// along `toward[0]` and `toward[1]` (the marker's two edges from the corner, any length),
 /// fitted over the window reaching `reach[i]` px along each (`Window::gather`).
 ///
-/// `None` when the window lies outside the image or holds too few pixels, the fit does not
-/// converge, or the result is not this marker's X-junction: it moved more than `MAX_MOVE_PX`
-/// (or half the window's shorter reach, after any shrink to the buffers) or out of the image, a
-/// line turned more than `MAX_TURN_RAD`, the blur
-/// scale left `[MIN_SCALE_PX, max(reach)]`, the wedge between the
-/// edges is not the dark one, or the residual RMS exceeds `MAX_RELATIVE_RMS` of `|B|`.
+/// A fit that lands past the move limit (`fit_once`) is refitted once over a window centred
+/// where it landed, and accepted only if that refit stays within its own limit: the window
+/// that finally vouches for the junction then holds it. Seeds of foreshortened tags (50°
+/// incidence) start 1.5-2 px off, past what one window can vouch for.
+///
+/// `None` when either fit is refused, or the refit moves past its limit too.
 pub(crate) fn fit_x_junction(
     img: &ImageView,
     start: [f64; 2],
     toward: [[f64; 2]; 2],
     reach: [f64; 2],
 ) -> Option<[f64; 2]> {
+    let (fit, held) = fit_once(img, start, toward, reach)?;
+    if held {
+        return Some(fit);
+    }
+    let (fit, held) = fit_once(img, fit, toward, reach)?;
+    held.then_some(fit)
+}
+
+/// One fit over the window at `start`, and whether it stayed within the move limit:
+/// `MAX_MOVE_PX`, or half the window's shorter reach after any shrink to the buffers.
+///
+/// `None` when the window lies outside the image or holds too few pixels, the fit does not
+/// converge, or the result is not this marker's X-junction: it left the image, a line turned
+/// more than `MAX_TURN_RAD`, the blur scale left `[MIN_SCALE_PX, max(reach)]`, the wedge
+/// between the edges is not the dark one, or the residual RMS exceeds `MAX_RELATIVE_RMS` of
+/// `|B|`.
+fn fit_once(
+    img: &ImageView,
+    start: [f64; 2],
+    toward: [[f64; 2]; 2],
+    reach: [f64; 2],
+) -> Option<([f64; 2], bool)> {
     let unit = |d: [f64; 2]| {
         let len = d[0].hypot(d[1]);
         (len > 0.0).then(|| [d[0] / len, d[1] / len])
@@ -465,9 +487,6 @@ pub(crate) fn fit_x_junction(
     let sum_w: f64 = win.weight[..win.len].iter().sum();
     let rms = (cost / (sum_w - PARAMS as f64).max(1.0)).sqrt();
     let accepted = converged
-        // The window's own reach, not the requested one: a shrunk window cannot vouch for a
-        // junction it does not hold.
-        && params[CX].hypot(params[CY]) <= MAX_MOVE_PX.max(0.5 * win.min_reach)
         && wrap_angle(params[T1] - angles[0]).abs() <= MAX_TURN_RAD
         && wrap_angle(params[T2] - angles[1]).abs() <= MAX_TURN_RAD
         && (MIN_SCALE_PX..=reach[0].max(reach[1])).contains(&params[SCALE])
@@ -478,7 +497,10 @@ pub(crate) fn fit_x_junction(
     // and the downstream probes read clamped edge pixels.
     let inside =
         (0.0..img.width as f64).contains(&fit[0]) && (0.0..img.height as f64).contains(&fit[1]);
-    (accepted && inside).then_some(fit)
+    // The window's own reach, not the requested one: a shrunk window cannot vouch for a
+    // junction it does not hold.
+    let held = params[CX].hypot(params[CY]) <= MAX_MOVE_PX.max(0.5 * win.min_reach);
+    (accepted && inside).then_some((fit, held))
 }
 
 #[cfg(test)]
@@ -563,6 +585,28 @@ mod tests {
         // The premise: the window's bounding box crosses the left frame edge.
         assert!(start[0] - reach * d1[0].hypot(d2[0]) < 0.0);
         let fit = fit_x_junction(&img, start, [d1, [-d2[0], -d2[1]]], [reach; 2]).expect("fit");
+        let err = (fit[0] - c[0]).hypot(fit[1] - c[1]);
+        assert!(err < 0.05, "error {err}");
+    }
+
+    /// A seed past one window's move limit: the first fit lands at the junction but cannot
+    /// vouch for it; the refit centred there can.
+    #[test]
+    fn refits_a_seed_past_the_move_limit() {
+        let side = 32;
+        let c = [16.27, 15.61];
+        let (t1, t2) = (0.3, 0.3 + 1.9);
+        let data = render(c, t1, t2, side);
+        let img = ImageView::new(&data, side, side, side).unwrap();
+        let (d1, d2) = ([t1.cos(), t1.sin()], [t2.cos(), t2.sin()]);
+        let toward = [d1, [-d2[0], -d2[1]]];
+        let (start, reach) = ([c[0] + 1.3, c[1] - 1.0], [3.0; 2]);
+        // The premise: one fit converges but moves past its limit (1.5 px here).
+        assert!(matches!(
+            fit_once(&img, start, toward, reach),
+            Some((_, false))
+        ));
+        let fit = fit_x_junction(&img, start, toward, reach).expect("fit");
         let err = (fit[0] - c[0]).hypot(fit[1] - c[1]);
         assert!(err < 0.05, "error {err}");
     }

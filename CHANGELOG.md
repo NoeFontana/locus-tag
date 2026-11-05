@@ -16,6 +16,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
     wrong edge profile needed the symmetric window.
   - On 12 px tags the window holds 21-30 pixels, under the 28-sample floor. The floor is now
     3 per parameter (21).
+  - At 50° incidence, seeds of foreshortened tags start 1.5-2 px off, past what one window
+    can vouch for. A fit that lands past the move limit is now refitted once over a window
+    centred where it landed, and kept only if that refit stays within its own limit. Tags
+    0.1 px inward 0.95 % → 0.47 %; every other case, EuRoC and the dataset suites unchanged.
 
   Measured:
   - Rendered 70° field angle: such tags 0.75 % inward / 0.94 % outward → 0.19 % / 0.19 %;
@@ -31,8 +35,11 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   - EuRoC `cam_april` (`standard`) unchanged: leave-one-out median 0.2263 → 0.2262 px, recall
     and false positives the same.
 
-  Measured and dropped: a move limit of 0.75-1.0 of the window's reach for the remaining 50°
-  incidence outliers (0.95 % → 0.47 % there, no change elsewhere).
+  Measured and dropped: a symmetric clip (a pixel kept only if its mirror is in frame) is
+  worse at the frame edge (p90 0.059 → 0.068 px), and a move limit of 0.75-1.0 of the reach
+  matches the refit's gain without requiring the final window to hold the junction. The
+  remaining 70° incidence outliers are 13-16 px tags whose seeds are 3 px off on a ~1 px
+  border.
 
 - **The board's per-estimator inset needs four markers of its own class.** `BoardEstimator`
   required four inlier markers before estimating an estimator class's photometric inset, but
