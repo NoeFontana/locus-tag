@@ -369,7 +369,7 @@ fn run_detection_pipeline<'ctx>(
         .alloc_slice_fill_copy(crate::batch::MAX_CANDIDATES, 0u32);
 
     // 1. Thresholding & 2. Segmentation & 3. Quad Extraction
-    let (n, unrefined, label_result, unquadded) = {
+    let (n, unrefined, label_result, unquadded, tile_stats) = {
         let mut engine = crate::threshold::ThresholdEngine::from_config(config);
         if config.threshold_mode == crate::config::ThresholdMode::LocalMean {
             // Estimate on the raw sensor image (where the white-noise model holds) and carry
@@ -526,7 +526,13 @@ fn run_detection_pipeline<'ctx>(
             );
         }
 
-        (n, unrefined, label_result, &unquadded[..n_unquadded])
+        (
+            n,
+            unrefined,
+            label_result,
+            &unquadded[..n_unquadded],
+            tile_stats,
+        )
     };
 
     // Quad extraction (and the funnel gate above, which samples the upscaled
@@ -662,6 +668,19 @@ fn run_detection_pipeline<'ctx>(
             debug_telemetry,
         );
         if n_split > n {
+            // The pieces meet the same contrast gate as first-pass candidates (it also sets
+            // their `funnel_status`, which the reused batch would otherwise carry over from the
+            // previous frame). The split runs only on the pinhole route, where the gate holds.
+            crate::funnel::apply_funnel_gate_from(
+                &mut state.batch,
+                n,
+                n_split,
+                &sharpened_img,
+                &tile_stats,
+                config.threshold_tile_size,
+                config.decoder_min_contrast,
+                1.0 / config.decimation as f64,
+            );
             map_to_full(&mut state.batch, n..n_split, upscale);
             crate::decoder::compute_homographies_soa(
                 &state.batch.corners[n..n_split],

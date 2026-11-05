@@ -15,10 +15,35 @@ pub fn apply_funnel_gate(
     min_contrast: f64,
     sampling_scale: f64,
 ) {
+    apply_funnel_gate_from(
+        batch,
+        0,
+        n,
+        img,
+        tile_stats,
+        tile_size,
+        min_contrast,
+        sampling_scale,
+    );
+}
+
+/// [`apply_funnel_gate`] on candidates `start..n` only: the seeded split's pieces, appended
+/// after first-pass candidates the gate has already judged.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn apply_funnel_gate_from(
+    batch: &mut DetectionBatch,
+    start: usize,
+    n: usize,
+    img: &ImageView,
+    tile_stats: &[TileStats],
+    tile_size: usize,
+    min_contrast: f64,
+    sampling_scale: f64,
+) {
     let tiles_wide = img.width / tile_size;
     let tiles_high = img.height / tile_size;
 
-    for i in 0..n {
+    for i in start..n {
         if batch.status_mask[i] != CandidateState::Active {
             continue;
         }
