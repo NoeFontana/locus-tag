@@ -197,10 +197,220 @@ pub(crate) fn erf_approx_v4(x: [f64; 4]) -> [f64; 4] {
     ]
 }
 
+// ── 4-lane f64 kernels ───────────────────────────────────────────────────────
+
+/// Four `f64` lanes with element-wise arithmetic: the portable form of the 4-wide kernels
+/// (the AVX2 ones in [`avx2`] mirror it op for op). LLVM does not reliably turn it into vector
+/// code, so hot loops dispatch to [`avx2`] where the CPU has it.
+#[derive(Clone, Copy)]
+pub(crate) struct F64x4(pub(crate) [f64; 4]);
+
+impl F64x4 {
+    /// Lane count: four `f64` fill one AVX2 register.
+    pub(crate) const LANES: usize = 4;
+
+    #[inline]
+    pub(crate) fn splat(v: f64) -> Self {
+        Self([v; Self::LANES])
+    }
+    #[inline]
+    pub(crate) fn load(s: &[f64]) -> Self {
+        Self([s[0], s[1], s[2], s[3]])
+    }
+    #[inline]
+    pub(crate) fn map(self, f: impl Fn(f64) -> f64) -> Self {
+        Self(self.0.map(f))
+    }
+    #[inline]
+    pub(crate) fn zip(self, o: Self, f: impl Fn(f64, f64) -> f64) -> Self {
+        Self([
+            f(self.0[0], o.0[0]),
+            f(self.0[1], o.0[1]),
+            f(self.0[2], o.0[2]),
+            f(self.0[3], o.0[3]),
+        ])
+    }
+    /// `(l0 + l2) + (l1 + l3)`: [`avx2::sum`]'s order, so the portable and AVX2 kernels differ
+    /// only by FMA rounding.
+    #[inline]
+    pub(crate) fn sum(self) -> f64 {
+        (self.0[0] + self.0[2]) + (self.0[1] + self.0[3])
+    }
+}
+
+macro_rules! f64x4_op {
+    ($trait:ident, $method:ident, $op:tt) => {
+        impl core::ops::$trait for F64x4 {
+            type Output = F64x4;
+            #[inline]
+            fn $method(self, o: F64x4) -> F64x4 {
+                self.zip(o, |a, b| a $op b)
+            }
+        }
+    };
+}
+f64x4_op!(Add, add, +);
+f64x4_op!(Sub, sub, -);
+f64x4_op!(Mul, mul, *);
+f64x4_op!(Div, div, /);
+
+/// `e^(−x)` for `x ≥ 0` without a libm call or a branch, so it vectorizes: `2^(−k)·e^(−r)` with
+/// `k = round(x/ln 2)`, `|r| ≤ ln2/2` and a degree-11 Taylor polynomial (under 10⁻¹⁴
+/// relative). `2^(−k)` is written into the exponent bits; `x` is clamped where the result
+/// underflows anyway.
+#[inline]
+pub(crate) fn exp_neg_x4(x: F64x4) -> F64x4 {
+    // 1.5·2⁵²: adding it rounds to an integer held in the low mantissa bits.
+    const ROUND: f64 = 6_755_399_441_055_744.0;
+    let x = x.map(|v| v.min(700.0));
+    let shifted = x * F64x4::splat(core::f64::consts::LOG2_E) + F64x4::splat(ROUND);
+    let k = shifted - F64x4::splat(ROUND);
+    // r = k·ln2 − x, so e^r · 2^(−k) = e^(−x).
+    let r = (k * F64x4::splat(LN2_HI) - x) + k * F64x4::splat(LN2_LO);
+    let mut poly = F64x4::splat(INV_FACTORIALS[11]);
+    for &c in INV_FACTORIALS[..11].iter().rev() {
+        poly = poly * r + F64x4::splat(c);
+    }
+    let scale = shifted.map(|v| {
+        let k = v.to_bits().wrapping_sub(ROUND.to_bits());
+        f64::from_bits(1023u64.wrapping_sub(k) << 52)
+    });
+    poly * scale
+}
+
+/// `ln 2` split so that `k·LN2_HI` is exact for the `k` of [`exp_neg_x4`].
+const LN2_HI: f64 = 0.693_147_180_369_123_8;
+const LN2_LO: f64 = 1.908_214_929_270_587_7e-10;
+/// `1/n!` for the Taylor polynomial of [`exp_neg_x4`].
+const INV_FACTORIALS: [f64; 12] = [
+    1.0,
+    1.0,
+    1.0 / 2.0,
+    1.0 / 6.0,
+    1.0 / 24.0,
+    1.0 / 120.0,
+    1.0 / 720.0,
+    1.0 / 5_040.0,
+    1.0 / 40_320.0,
+    1.0 / 362_880.0,
+    1.0 / 3_628_800.0,
+    1.0 / 39_916_800.0,
+];
+
+/// `erf(x)` and `exp(−x²)`: Abramowitz & Stegun 7.1.26 (absolute error under 1.5·10⁻⁷), as
+/// [`erf_approx`] but branch-free and with a vectorizable exponential. Both are returned
+/// because an erf model's Jacobian needs the Gaussian, and one exponential serves both.
+#[inline]
+pub(crate) fn erf_and_gauss_x4(x: F64x4) -> (F64x4, F64x4) {
+    let abs = x.map(f64::abs);
+    let tau = F64x4::splat(1.0) / (F64x4::splat(1.0) + F64x4::splat(ERF_P) * abs);
+    let gauss = exp_neg_x4(abs * abs);
+    let mut poly = F64x4::splat(ERF_COEFFS[4]);
+    for &c in ERF_COEFFS[..4].iter().rev() {
+        poly = poly * tau + F64x4::splat(c);
+    }
+    let erf = (F64x4::splat(1.0) - poly * tau * gauss).zip(x, f64::copysign);
+    (erf, gauss)
+}
+
+/// AVX2+FMA forms of the [`F64x4`] kernels, op for op. Callable without `unsafe` only from
+/// functions with the same features enabled.
+#[cfg(target_arch = "x86_64")]
+pub(crate) mod avx2 {
+    use core::arch::x86_64::{
+        __m256d, _mm_add_pd, _mm_add_sd, _mm_cvtsd_f64, _mm_unpackhi_pd, _mm256_and_pd,
+        _mm256_andnot_pd, _mm256_castpd_si256, _mm256_castpd256_pd128, _mm256_castsi256_pd,
+        _mm256_div_pd, _mm256_extractf128_pd, _mm256_fmadd_pd, _mm256_fnmadd_pd, _mm256_min_pd,
+        _mm256_mul_pd, _mm256_or_pd, _mm256_set1_epi64x, _mm256_set1_pd, _mm256_setzero_pd,
+        _mm256_slli_epi64, _mm256_sub_epi64, _mm256_sub_pd,
+    };
+
+    /// [`super::exp_neg_x4`] in one register.
+    #[target_feature(enable = "avx2,fma")]
+    pub(crate) fn exp_neg(x: __m256d) -> __m256d {
+        const ROUND: f64 = 6_755_399_441_055_744.0;
+        let x = _mm256_min_pd(x, _mm256_set1_pd(700.0));
+        let round = _mm256_set1_pd(ROUND);
+        let shifted = _mm256_fmadd_pd(x, _mm256_set1_pd(core::f64::consts::LOG2_E), round);
+        let k = _mm256_sub_pd(shifted, round);
+        let r = _mm256_fmadd_pd(
+            k,
+            _mm256_set1_pd(super::LN2_LO),
+            _mm256_fmadd_pd(
+                k,
+                _mm256_set1_pd(super::LN2_HI),
+                _mm256_sub_pd(_mm256_setzero_pd(), x),
+            ),
+        );
+        let mut poly = _mm256_set1_pd(super::INV_FACTORIALS[11]);
+        for &c in super::INV_FACTORIALS[..11].iter().rev() {
+            poly = _mm256_fmadd_pd(poly, r, _mm256_set1_pd(c));
+        }
+        // 2^(−k): exponent bits (1023 − k) << 52, k read from the rounded mantissa.
+        let k_bits = _mm256_sub_epi64(_mm256_castpd_si256(shifted), _mm256_castpd_si256(round));
+        let biased = _mm256_sub_epi64(_mm256_set1_epi64x(1023), k_bits);
+        _mm256_mul_pd(poly, _mm256_castsi256_pd(_mm256_slli_epi64::<52>(biased)))
+    }
+
+    /// [`super::erf_and_gauss_x4`] in one register.
+    #[target_feature(enable = "avx2,fma")]
+    pub(crate) fn erf_and_gauss(x: __m256d) -> (__m256d, __m256d) {
+        let sign = _mm256_set1_pd(-0.0);
+        let abs = _mm256_andnot_pd(sign, x);
+        let one = _mm256_set1_pd(1.0);
+        let tau = _mm256_div_pd(one, _mm256_fmadd_pd(_mm256_set1_pd(super::ERF_P), abs, one));
+        let gauss = exp_neg(_mm256_mul_pd(abs, abs));
+        let mut poly = _mm256_set1_pd(super::ERF_COEFFS[4]);
+        for &c in super::ERF_COEFFS[..4].iter().rev() {
+            poly = _mm256_fmadd_pd(poly, tau, _mm256_set1_pd(c));
+        }
+        let magnitude = _mm256_fnmadd_pd(_mm256_mul_pd(poly, tau), gauss, one);
+        (_mm256_or_pd(magnitude, _mm256_and_pd(sign, x)), gauss)
+    }
+
+    /// `(l0 + l2) + (l1 + l3)`, as [`super::F64x4::sum`].
+    #[target_feature(enable = "avx2,fma")]
+    pub(crate) fn sum(v: __m256d) -> f64 {
+        let pair = _mm_add_pd(_mm256_castpd256_pd128(v), _mm256_extractf128_pd::<1>(v));
+        _mm_cvtsd_f64(_mm_add_sd(pair, _mm_unpackhi_pd(pair, pair)))
+    }
+}
+
+/// `a` wrapped to `(−π, π]`: the signed difference of two angles is `wrap_angle(a − b)`.
+#[must_use]
+pub(crate) fn wrap_angle(a: f64) -> f64 {
+    use core::f64::consts::{PI, TAU};
+    let d = a.rem_euclid(TAU);
+    if d > PI { d - TAU } else { d }
+}
+
 #[cfg(test)]
 #[allow(clippy::expect_used, clippy::float_cmp, clippy::unwrap_used)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exp_neg_x4_matches_std() {
+        // Up to the clamp: past it the result is below 10⁻³⁰⁴ either way.
+        for k in 0..18_000 {
+            let x = f64::from(k) * 0.0371;
+            let (got, want) = (exp_neg_x4(F64x4::splat(x)).0[0], (-x).exp());
+            assert!((got - want).abs() <= 1e-14 * want, "{x}: {got} vs {want}");
+        }
+    }
+
+    #[test]
+    fn erf_and_gauss_x4_matches_reference_values() {
+        for (x, want) in [
+            (0.0, 0.0),
+            (0.5, 0.520_499_877_8),
+            (1.0, 0.842_700_792_9),
+            (-2.0, -0.995_322_265),
+        ] {
+            assert!((erf_and_gauss_x4(F64x4::splat(x)).0.0[0] - want).abs() < 2e-7);
+        }
+    }
+
     use proptest::prelude::*;
 
     proptest! {
