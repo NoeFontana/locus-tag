@@ -7,6 +7,28 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **Split pieces get their corners back.** The seeded split's opening cuts the neck where a
+  Kalibr tag touches a connector square, which chamfers that corner; the contour's vertex then
+  sits at one end of the chamfer, up to ~3 px along a side, and the bit grid sampled through it
+  misses. Against Kalibr's own detections on the TUM-VI calibration frames, these tags, not
+  blurred ones, were the decode failures: decoded from Kalibr's corners, 93-98 % of the missed
+  tags read correctly, from the detector's quad 0.3 %. A piece's vertex now moves to the
+  intersection of its two sides' lines when that lies outward by more than 1 px (and at most a
+  quarter side, on sides of at least 14 px). Measured:
+  - TUM-VI `calib-cam1`..`cam4` (cam0), share of Kalibr's tags found: 97.10 → 98.62 %,
+    95.52 → 97.48 %, 97.51 → 98.60 %, 96.37 → 97.91 %; decode failures down 58-62 %; no
+    wrong ids.
+  - Rendered Kalibr AprilGrids (`grid`): 70° field angle 95.5 → 96.5 %, ink 0.4 mm
+    97.0 → 97.6 %, noiseless 96.9 → 97.6 %, the rest equal or up; no wrong ids.
+  - Dataset suites byte-identical (only `grid` splits).
+
+  Measured and not shipped: ISI equalisation of the cell samples (a per-tag PSF scale fitted on
+  the known border, then a box-constrained deconvolution of the payload). On renders it is large
+  (blur 0.8 px with truth corners 86 → 100 %, 12 px tags 72 → 96 %), but on the TUM-VI frames it
+  recovers 4 % of the missed tags (about +0.1 pp), because their misses are geometric. Applying
+  the side-line intersection to every quad (not only split pieces) moved ChArUco board coverage
+  and percentiles for no real-data gain.
+
 - **`quad.split_fused` (`grid`) no longer breaks rim tags into fragments.** The seeded split
   opened fused components with a 3 × 3 erosion, which also opens borders 2 px wide. At the
   fisheye rim, radial compression thins a Kalibr tag's 2-cell border to about that, so the
