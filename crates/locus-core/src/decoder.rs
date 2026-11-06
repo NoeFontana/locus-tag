@@ -573,9 +573,9 @@ fn unreliable_fraction(
     for (i, (&v, &t)) in m.data().iter().zip(m.thresholds()).enumerate() {
         let confidence = (v - t).abs();
         total += confidence;
-        if ((codeword >> i) & 1 == 1) != (v > t) {
-            against += confidence;
-        }
+        // Branch-free: the disagreement mask scales the confidence.
+        let disagrees = ((codeword >> i) & 1 == 1) != (v > t);
+        against += confidence * f64::from(u8::from(disagrees));
     }
     for &v in m.ring() {
         total += (v - mid).abs();
@@ -741,10 +741,29 @@ fn grid_dda(h: &Homography, points: &[(f64, f64)], dim: usize) -> HomographyDda 
     h.to_dda(points[0].0, points[0].1, du, dv)
 }
 
-/// Per-decoder Hamming budget (`max_hamming_error`, else the family default) and border-ring
-/// error rate ([`ring_error_rate`]), resolved once per batch so the per-candidate loops read
-/// plain values. The arrays stay on the stack; the detector registers at most one decoder per
-/// family.
+/// Whether a match `hamming` bits from its codeword stands. Within the hard budget `max_h` the
+/// border ring decides; past it, up to the unique-decoding radius `soft_h`, the codeword's soft
+/// evidence does ([`unreliable_fraction`]). The soft rule never rescues an in-budget match the
+/// ring rejected: that would bypass the configured ring budget.
+#[inline]
+fn accepts_match(
+    hamming: u32,
+    max_h: u32,
+    soft_h: u32,
+    ring_ok: impl FnOnce() -> bool,
+    reliable: impl FnOnce() -> bool,
+) -> bool {
+    if hamming <= max_h {
+        ring_ok()
+    } else {
+        hamming <= soft_h && reliable()
+    }
+}
+
+/// Per-decoder Hamming budget (`max_hamming_error`, else the family default), border-ring
+/// error rate ([`ring_error_rate`]) and soft budget ([`accepts_match`]), resolved once per batch
+/// so the per-candidate loops read plain values. The arrays stay on the stack; the detector
+/// registers at most one decoder per family.
 fn decoder_budgets(
     decoders: &[Box<dyn TagDecoder + Send + Sync>],
     config: &crate::config::DetectorConfig,
@@ -766,12 +785,17 @@ fn decoder_budgets(
             .unwrap_or_else(|| d.default_max_hamming());
         ring_rate[idx] = ring_error_rate(config, max_h[idx], d.bit_count());
         // Within half the minimum distance the nearest codeword is unique, so a decode there
-        // can be wrong only if the evidence is: `unreliable_fraction` judges that. An explicit
-        // budget is a hard cap.
+        // can be wrong only if the evidence is: `unreliable_fraction` judges that. Only where
+        // random bits rarely reach that radius at all (it lies within the recovery window), so
+        // the evidence is a second, independent guard: 36h11 and ArUcoMip36h12 (radius 5,
+        // window 6), not tag16h5 (radius 2, window 1). An explicit budget is a hard cap.
         if config.max_hamming_error.is_none() {
-            soft_h[idx] = d
+            let unique = d
                 .dictionary()
                 .map_or(0, |t| t.min_hamming.saturating_sub(1) / 2);
+            if unique <= recovery_window(d.bit_count(), d.num_codes()) {
+                soft_h[idx] = unique;
+            }
         }
     }
     (max_h, ring_rate, soft_h)
@@ -2009,6 +2033,9 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                         // Ring evidence is evaluated on the reported (unscaled) quad, so it
                         // depends only on the decoder: compute it at most once per decoder.
                         let mut ring_cache = [None::<bool>; MAX_DECODERS];
+                        // The soft verdict is likewise taken on the reported quad: cache it per
+                        // decoder for the codeword (id, rotation) it judged.
+                        let mut soft_cache = [None::<(u32, u8, bool)>; MAX_DECODERS];
                         // The quad-stage refinement of a decode-first seed depends only on the
                         // seed corners: run it at most once per candidate.
                         let seed_corners = quad_to_f64(corners);
@@ -2073,29 +2100,35 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                 // (`homography`), not the scaled one that happened to decode.
                                 // A quiet zone's outer contour decodes at scale 0.9 but its
                                 // ring is white.
-                                // Past the hard budget but within unique decoding, the
-                                // evidence decides: bits flipped by blur on a small marker are
-                                // unreliable, a non-marker's are not.
-                                let mut hard = || {
-                                    hamming <= decoder_max_h[decoder_idx]
-                                        && *ring_cache[decoder_idx].get_or_insert_with(|| {
-                                            sampler.ring_ok(
-                                                seed_ring_rate[decoder_idx],
-                                                homography,
-                                                decoder.as_ref(),
-                                            )
-                                        })
-                                };
-                                let soft = || {
-                                    hamming <= decoder_soft_h[decoder_idx]
-                                        && sampler.codeword_reliable(
-                                            homography,
-                                            decoder.as_ref(),
-                                            id,
-                                            rot,
-                                        )
-                                };
-                                if hamming < best_h_in_scale && (hard() || soft()) {
+                                if hamming < best_h_in_scale
+                                    && accepts_match(
+                                        hamming,
+                                        decoder_max_h[decoder_idx],
+                                        decoder_soft_h[decoder_idx],
+                                        || {
+                                            *ring_cache[decoder_idx].get_or_insert_with(|| {
+                                                sampler.ring_ok(
+                                                    seed_ring_rate[decoder_idx],
+                                                    homography,
+                                                    decoder.as_ref(),
+                                                )
+                                            })
+                                        },
+                                        || match soft_cache[decoder_idx] {
+                                            Some((i, r, ok)) if (i, r) == (id, rot) => ok,
+                                            _ => {
+                                                let ok = sampler.codeword_reliable(
+                                                    homography,
+                                                    decoder.as_ref(),
+                                                    id,
+                                                    rot,
+                                                );
+                                                soft_cache[decoder_idx] = Some((id, rot, ok));
+                                                ok
+                                            },
+                                        },
+                                    )
+                                {
                                     best_h_in_scale = hamming;
                                     best_match_in_scale =
                                         Some((id, hamming, rot, code, decoder_idx));
@@ -2163,17 +2196,23 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                         })
                                         .filter(|&(_, id_ref, hamming_ref, rot_ref)| {
                                             id_ref == id
-                                                && ((hamming_ref <= decoder_max_h[decoder_idx]
-                                                    && sampler.ring_ok(
-                                                        decoder_ring_rate[decoder_idx],
-                                                        &ref_h_mat,
-                                                        decoder,
-                                                    ))
-                                                    || (hamming_ref <= decoder_soft_h[decoder_idx]
-                                                        && sampler
-                                                            .codeword_reliable(
-                                                                &ref_h_mat, decoder, id_ref, rot_ref,
-                                                            )))
+                                                && accepts_match(
+                                                    hamming_ref,
+                                                    decoder_max_h[decoder_idx],
+                                                    decoder_soft_h[decoder_idx],
+                                                    || {
+                                                        sampler.ring_ok(
+                                                            decoder_ring_rate[decoder_idx],
+                                                            &ref_h_mat,
+                                                            decoder,
+                                                        )
+                                                    },
+                                                    || {
+                                                        sampler.codeword_reliable(
+                                                            &ref_h_mat, decoder, id_ref, rot_ref,
+                                                        )
+                                                    },
+                                                )
                                         });
                                         if let Some((code_ref, _, hamming_ref, rot_ref)) = verified
                                         {

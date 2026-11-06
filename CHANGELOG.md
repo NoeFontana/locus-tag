@@ -213,6 +213,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
   family's minimum distance (5 bits for 36h11, where the nearest codeword is unique) now stands
   when the confidence of the disagreeing bits plus the bright border cells is at most 2 % of
   the marker's total; decode-first matches are verified on the refined quad by the same rule.
+  It applies only where random bits rarely reach that radius at all (it lies within the
+  family's recovery window: 36h11 and ArUcoMip36h12, not tag16h5), so the evidence is a
+  second, independent guard, and never to an in-budget match whose border ring failed.
   The 2 % comes from rendered Kalibr AprilGrids against 102 595 candidates from tag16h5 and
   ChArUco renders: negatives never fell below 3.3 %, true tags' median is 0.5-1.4 %. An
   explicit `decoder.max_hamming_error` still caps it. Measured:
