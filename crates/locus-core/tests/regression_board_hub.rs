@@ -887,20 +887,7 @@ mod tests {
             .run(&provider);
     }
 
-    // ── CharucoRefiner integration test ─────────────────────────────────────
-    //
-    // Until 2026-05-16 there was no integration coverage for `CharucoRefiner`
-    // (the saddle-refinement pose path exposed to Python users via the
-    // `locus_tag.CharucoRefiner` wrapper). The existing `regression_board_*`
-    // tests above exercise `BoardEstimator` (the tag-corner path) — even on
-    // the ChArUco dataset.
-    //
-    // `CharucoRefiner` now ships the homography-projection-only saddle path
-    // (the iterative Newton refinement was deleted after `regression_board_hub::
-    // board_charuco_v1_golden_forstner` falsified the principled Förstner
-    // replacement at 4.5× pose regression; see `memory/project_refine_saddle_noop.md`).
-    // This test anchors the production behaviour so silently-broken changes
-    // to the saddle path are caught against a known baseline.
+    // Regression test anchoring CharucoRefiner saddle projection and pose estimation.
 
     /// Per-frame diagnostic for the CharucoRefiner. Prints accepted-saddle
     /// counts, rejection telemetry, and the homography-vs-detected-corner

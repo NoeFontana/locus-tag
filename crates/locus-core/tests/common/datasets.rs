@@ -1,27 +1,7 @@
-//! Where a dataset lives, and whether a suite may decline to run.
+//! Dataset location resolver and strict availability policy.
 //!
-//! One resolver for every dataset-backed suite. Before this module the same two questions —
-//! *where is the data* and *may I skip* — had five different answers in five files:
-//! `common::hub::run_render_tag_test` read the env var and returned on `Err`;
-//! `regression_board_hub` read it with a `tests/data/hub_cache` default;
-//! `regression_distortion_hub` read it, returned on `Err`, then asserted the subdir existed;
-//! `common::resolve_dataset_root` read it and otherwise preferred an in-tree stub over the
-//! real dataset; `diagnose_render_tag_2160p` read it and returned on `Err`. The divergence
-//! was not cosmetic — it decided whether a suite ran at all, and two of those five answers
-//! silently meant "don't".
-//!
-//! ## Declining must not look like passing
-//!
-//! The Rust harness offers two verdicts, and these suites spent "pass" on "could not run".
-//! Measured on `4242890`: `cargo test --test regression_render_tag` with `LOCUS_HUB_DATASET_DIR`
-//! unset reports *"8 passed; finished in 0.00s"*, and `regression_icra2020` reports
-//! *"9 passed in 0.09s"* against 8.44s with data. Under that cover PR #449 moved render-tag
-//! corner RMSE by 25-40 % across the tag36h11 baselines and cost recall on `tag16h5` and two
-//! ICRA configs, with every suite green. A gate that cannot fail is not a gate.
-//!
-//! So a missing dataset is a **failure** here. An environment that genuinely has no data says
-//! so out loud by setting [`ALLOW_MISSING`], which keeps the vacuum in the caller's command
-//! line or workflow file where a reader can see it, instead of in a `println!` nobody reads.
+//! Missing datasets cause test failure unless explicitly allowed via `ALLOW_MISSING`
+//! to prevent test suites from silently succeeding when data is absent.
 
 use std::env;
 use std::path::PathBuf;

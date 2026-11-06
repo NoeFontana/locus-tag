@@ -174,55 +174,19 @@ impl BrownConradyModel {
     }
 }
 
-/// How far `distort(undistort(u))` may land from `u`, in **normalized-plane** units, for the
-/// inverse to be trusted.
-///
-/// Both models' [`CameraModel::undistort`] is infallible by signature: outside the model's
-/// invertible domain it returns its best effort, which is not a preimage. Every consumer that
-/// feeds an unprojected point into geometry must therefore re-distort and check against this
-/// budget — and must reject non-finite residuals explicitly, since a comparison with NaN is
-/// false and a bare `>` would *admit* them.
-///
-/// 2e-4 normalized is ~0.27 px at the shipped hub datasets' focal lengths, three orders above
-/// a converged inverse (~1e-12 normalized) and three below the corner accuracy it protects. It
-/// was originally chosen at 2x the `robustness/camera_geometry.rs` round-trip proptest envelope
-/// (`< 1e-4`), so a diverging solve bails while well-conditioned points stay.
-///
-/// Public because it is observable contract, not a private tuning knob: it is the bound the
-/// default [`CameraModel::undistort_checked`] applies, so anyone implementing the trait or
-/// reading its `None` needs the number.
+/// Maximum round-trip residual `||distort(undistort(u)) - u||` in normalized units to trust inversion.
 #[cfg(feature = "non_rectified")]
 pub const MAX_UNDISTORT_RESIDUAL: f64 = 2e-4;
 
-/// Knots stored by [`RadialInverseTable`] (so `KNOTS - 1` interpolation intervals).
-///
-/// 1024 knots is 16 KiB in the frame arena. Only the handful of cache lines a candidate's
-/// contour touches are ever hot — one contour spans a narrow radius band — so the table's size
-/// costs no cache in practice, and 1024 knots buys enough headroom that the interpolation
-/// error (measured 2.0e-5 px on the Kannala-Brandt hub, 2.1e-7 px on Brown-Conrady) sits four
-/// orders below the corner accuracy the pipeline reports, which is what keeps every regression
-/// snapshot digit unchanged. Halving it would still meet a looser budget, at 3.2e-4 px.
+/// Knots stored by [`RadialInverseTable`].
 #[cfg(feature = "non_rectified")]
 const RADIAL_TABLE_KNOTS: usize = 1024;
 
 /// Knot storage for a disabled [`RadialInverseTable`].
-///
-/// Never read: a disabled table has `s_max = 0`, and `scale` is only reachable once a caller
-/// has established `s <= s_max`. It exists so the live table can hold a *fixed-size array*
-/// reference instead of an `Option` or a slice, which is what keeps `scale` branch-free.
 #[cfg(feature = "non_rectified")]
 static RADIAL_TABLE_UNUSED: [[f64; 2]; RADIAL_TABLE_KNOTS] = [[1.0, 0.0]; RADIAL_TABLE_KNOTS];
 
-/// Interpolation-error budget for [`RadialInverseTable`], in **normalized** units.
-///
-/// `1e-7` normalized is ~7e-5 px at the shipped hub focal lengths: three orders below any
-/// corner accuracy this pipeline has ever measured, and three orders inside
-/// [`MAX_UNDISTORT_RESIDUAL`]. The build *verifies* this rather than assuming it, at the knot
-/// midpoints where Hermite interpolation is worst, and shrinks its domain until it holds.
-///
-/// Public because it is observable contract, not a private tuning knob: it is the bound
-/// [`RadialInverseTable::build_in`] guarantees and the value
-/// [`RadialInverseTable::verified_error`] is meaningful against.
+/// Verification error budget for [`RadialInverseTable`] in normalized units.
 #[cfg(feature = "non_rectified")]
 pub const RADIAL_TABLE_BUDGET: f64 = 1e-7;
 
@@ -273,58 +237,20 @@ const RADIAL_SOLVE_REL_TOL: f64 = 1e-15;
 /// The companion to [`RADIAL_SOLVE_REL_TOL`], and the one that actually binds at the fisheye
 /// periphery. Kannala-Brandt has `g'(r) = dθ_d/dθ · 1/(1+r²)`, which decays as `r = tan θ`
 /// grows, so around `r ≈ 14` the step `(g - r_d)/g'` has a round-off floor of ~7e-14 against a
-/// step tolerance of 1.4e-14: `solve_radial` burned all 32 iterations and returned `None`, the
-/// fill reported `Truncated`, and the table silently shrank its domain to 90.4 % of the frame
-/// radius — 2.45 % of a 1920x1080 lattice permanently falling back to the per-point solve,
-/// precisely where that solve is most expensive. Nothing signalled it: `is_enabled()` stayed
-/// true and `verified_error()` reported 1.7e-11 over the *shrunk* domain.
-///
-/// A residual test has none of that trouble: it asks whether `g(r)` actually equals `r_d`,
-/// which is the question, in units that mean something. 8 ulps leaves room for the handful of
-/// roundings in a `radial_forward` evaluation. Same correction as the pose LM's step-gate →
-/// function-tolerance change in #341, and the same class as the sub-ulp absolute tolerance
-/// fixed in the Brown-Conrady inverter in #443 — third instance, so prefer a residual or
-/// relative-cost test over a step test by default.
+/// Residual tolerance for the radial solve in ulps of `r_d`.
+/// Tested against `|g(r) - r_d| <= TOL * ulp(r_d)` to handle steep distortion branches.
 #[cfg(feature = "non_rectified")]
 const RADIAL_SOLVE_RESIDUAL_ULPS: f64 = 8.0;
 
 /// Tangential fixed-point iterations used by [`RadialInverseTable::undistort_checked`].
-///
-/// The iteration is `u ← radial_inverse(xd − tangential(u))`, whose contraction factor is
-/// `O(|∂tangential/∂u| / g')` — at OpenCV-scale tangential coefficients (`|p| ~ 1e-4`) about
-/// `1e-3` per step, so two steps take the residual from `~3e-4` to `~1e-10` normalized. A
-/// forward evaluation then verifies it, so a calibration with implausibly large tangential
-/// terms degrades to the iterative solve instead of returning a non-preimage.
 #[cfg(feature = "non_rectified")]
 const RADIAL_TABLE_TANGENTIAL_ITERS: usize = 2;
 
 /// Tabulated inverse of a camera model's radial forward map, built once per frame.
 ///
-/// # Why this exists
-/// Straight-space quad extraction unprojects **every contour point of every candidate** —
-/// measured at 83,623 points per frame on the Brown-Conrady hub, 29 % of that stage's CPU time
-/// at 122.7 ns per call. The cost was almost entirely iteration and division: the per-point
-/// solve ran up to eight radial Newton steps, then a 2-D polish, then a verification
-/// evaluation — around nine `f64` divisions in all, each ~20 cycles.
-///
-/// The radial sub-problem `g(r_u) = r_d` is one-dimensional and monotone, so it can be solved
-/// once per frame and read per point. Because `g` is odd, `scale(s) = r_u / r_d` is a *smooth*
-/// function of `s = r_d²` — so the table is indexed by `s` directly and a lookup needs **no
-/// square root and no division**, just a multiply, a truncation and a cubic Hermite
-/// evaluation. Uniform knots in `s` also place resolution where the map bends most, since
-/// `ds = 2 r dr`. Tangential terms are then removed by a fixed point that reuses the same
-/// table, again without a division.
-///
-/// # Why it is safer than the iterative solve
-/// Knots are filled outward from `s = 0` with each solve seeded from its predecessor, so every
-/// stored value lies on the *same monotone branch* as the origin. A lookup therefore cannot
-/// land on the mirrored far branch `g(−r) = −g(r)`, which an unguarded polish converges onto
-/// and which re-distorts to a tiny residual — a true-but-wrong preimage that a round-trip gate
-/// accepts. Here branch safety is structural rather than a guard.
-///
-/// Outside the verified domain — past the branch limit, past the model's asymptotic reach, or
-/// a non-finite input — lookups fall back to [`CameraModel::undistort_checked`], so no
-/// behaviour is lost; only the fast path is tabulated.
+/// Avoids repeated per-point iterative solves during straight-space contour unprojection.
+/// Tabulates `scale(s) = r_u / r_d` over `s = r_d²` using cubic Hermite interpolation.
+/// Out-of-domain points fall back to iterative [`CameraModel::undistort_checked`].
 #[cfg(feature = "non_rectified")]
 #[derive(Clone, Copy, Debug)]
 pub struct RadialInverseTable<'a> {
@@ -759,33 +685,9 @@ impl CameraModel for BrownConradyModel {
     }
 
     fn undistort(&self, xd: f64, yd: f64) -> [f64; 2] {
-        // Two-stage inversion.
-        //
-        // Stage 1 solves the *radial* sub-problem, which is one-dimensional and strictly
-        // monotone on `[0, r_turn)`, where `r_turn` is the first positive root of
-        // `g'(r)`: find `r_u` with `g(r_u) = r_d`. Newton from `r_u = r_d` converges
-        // quadratically, and is **exact** when `p1 = p2 = 0`, which is why stage 2 is
-        // skipped entirely in that (common) case.
-        //
-        // Stage 2 is a 2-D Newton polish against the full forward map, absorbing the
-        // tangential terms stage 1 ignores. It runs only if stage 1 converged.
-        //
-        // Both stages replace a 5-iteration *fixed point* (`xu ← (xd − dx(xu))/radial(xu)`,
-        // only linearly convergent). At the coefficients of the shipped Brown-Conrady hub
-        // dataset (`k1 = -0.28`, `k2 = 0.08`) that iteration had not converged after 5
-        // steps and left **0.42 px** of round-trip error at the image corner — above
-        // `quad.rs`'s `MAX_UNDISTORT_RESIDUAL`, so it silently discarded every candidate
-        // touching ~1.8 % of the frame.
-        //
-        // **Out-of-domain inputs must not be polished.** Beyond `g(r_turn)` the radius
-        // `r_d` has no preimage on the invertible branch, but the *full* map still has
-        // one: the mirrored far branch, `g(-r) = -g(r)`. A polish started past the
-        // turning point converges onto it and re-distorts to ~1e-14, so the caller's
-        // residual gate would ACCEPT a point at several times the correct radius and the
-        // wrong sign (`k1 = -0.1`, `r_d = 1.335` returns `r_u = -3.69`). Stage 1
-        // therefore restores the last on-branch iterate and reports non-convergence,
-        // which keeps a large residual and makes the gate reject — the behaviour the
-        // superseded fixed point had by accident.
+        // Stage 1 solves the 1D radial Newton problem along the monotone branch.
+        // Stage 2 (if p1/p2 != 0) polishes 2D coordinates with full Jacobian to absorb tangential terms.
+        // Out-of-domain inputs restore the last on-branch iterate to ensure round-trip rejection.
         let r_d = (xd * xd + yd * yd).sqrt();
         if r_d < NEAR_AXIS_RADIUS {
             return [xd, yd];

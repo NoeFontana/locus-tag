@@ -21,54 +21,23 @@ pub enum SegmentationConnectivity {
     Eight,
 }
 
-/// How the per-pixel foreground threshold that feeds segmentation is built.
-///
-/// The connected-component stage marks a pixel as foreground when
-/// `pixel < threshold_map[pixel]`, so this enum fully determines which pixels
-/// segmentation sees. A threshold of `0` is the canonical "never foreground"
-/// value (no `u8` is `< 0`).
+/// Strategy for computing the per-pixel binarization threshold.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ThresholdMode {
-    /// A fixed fraction of the min/max range over a 3x3 tile neighbourhood —
-    /// [`crate::threshold::CUT_NUM`]/[`crate::threshold::CUT_DEN`] of it, below
-    /// the midpoint the name records and this mode originally used. The
-    /// historical default; every shipped profile uses it, and it is the only
-    /// mode whose output the regression snapshots pin.
-    ///
-    /// Two fragilities follow from the threshold being a function of the local
-    /// *extremes* rather than the local background. A flat tile gets `t` at or
-    /// just above its own grey level, so sensor noise speckles uniform regions
-    /// with foreground. And a nearby highlight widens the range and lifts the
-    /// cut with it, so a dark background can still cross into foreground and
-    /// fuse with a marker — cutting below the midpoint shrinks that window but
-    /// does not close it, which is what [`Self::LocalMean`] exists for.
+    /// Binarize using a fraction of the 3×3 tile min/max range.
     TileMidExtreme,
-    /// Per-pixel local mean over a `(2r+1)^2` window minus a noise-calibrated offset
-    /// `clamp(round(k · σ̂ₙ), 2, 20)`, where `r` is
-    /// [`DetectorConfig::threshold_local_mean_radius`] and `k` is
-    /// [`DetectorConfig::threshold_noise_k`]. Computed with a sliding column-sum
-    /// accumulator, not an integral image.
-    ///
-    /// The threshold tracks the local *background level* instead of the local
-    /// extremes, which is what keeps a dark textured background from fusing
-    /// with a marker; the offset is what keeps sensor noise in a uniform
-    /// region below the threshold. Opt-in: it changes detector output on every
-    /// frame.
+    /// Binarize using a local window mean minus a sensor-noise-calibrated offset.
     LocalMean,
 }
 
-/// Mode for subpixel corner refinement.
+/// Subpixel corner refinement strategy.
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CornerRefinementMode {
-    /// Trust the extractor's native corners. With `EdLines` these are
-    /// the Gauss-Newton sub-pixel corners (metrology-grade per
-    /// `docs/engineering/benchmarking/lessons.md §4.1`); with
-    /// `ContourRdp` these are integer-precision midpoints.
+    /// Use native corners (Gauss-Newton for EdLines, integer midpoints for ContourRdp).
     None,
-    /// PSF-blurred step function fit via Gauss-Newton on the gradient
-    /// profile. Default for `ContourRdp`.
+    /// Fit a PSF-blurred step function via 1D Gauss-Newton along edge gradients.
     Erf,
 }
 
@@ -76,35 +45,26 @@ pub enum CornerRefinementMode {
 #[derive(Clone, Copy, Debug, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum QuadExtractionMode {
-    /// Legacy contour tracing + Douglas-Peucker + reduce-to-quad (default, backward compatible).
+    /// Contour tracing with Douglas-Peucker simplification.
     #[default]
     ContourRdp,
-    /// Localized Edge Drawing: anchor routing → line fitting → corner intersection.
+    /// Localized Edge Drawing (EDLines): anchor routing, line fitting, corner intersection.
     EdLines,
 }
 
-/// Policy controlling the EdLines AXIS→DIAG imbalance gate.
-///
-/// The gate triggers when AXIS-mode boundary segmentation produces one
-/// arc above 40 % and another below 16 % of the boundary, indicating
-/// two adjacent corners have collapsed onto a single TRBL extremal.
-/// When enabled it diverts the candidate to DIAG-mode (NW/NE/SE/SW
-/// extremals); when disabled the AXIS partition is kept (which is what
-/// distortion-suite aprilgrid sub-tags need — they can legitimately
-/// produce min-arc 8–15 % without being collapsed).
+/// Policy for EdLines AXIS→DIAG candidate diversion when boundaries collapse.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum EdLinesImbalanceGatePolicy {
-    /// Gate is off — keep the AXIS 4-arc partition unconditionally.
+    /// Keep AXIS partition unconditionally.
     #[default]
     Disabled,
-    /// Gate is on — divert to DIAG-mode when the AXIS partition is severely
-    /// unbalanced.
+    /// Divert to DIAG-mode when AXIS partition is severely unbalanced.
     Enabled,
 }
 
 impl EdLinesImbalanceGatePolicy {
-    /// Lower the policy to the boolean consumed by the EdLines extractor.
+    /// Returns true if the imbalance gate is enabled.
     #[must_use]
     #[inline]
     pub const fn is_enabled(self) -> bool {
@@ -112,27 +72,19 @@ impl EdLinesImbalanceGatePolicy {
     }
 }
 
-/// Per-candidate routing config for [`QuadExtractionPolicy::AdaptivePpb`].
-///
-/// A pixels-per-bit (PPB) estimate is computed per candidate from its
-/// segmentation bounding box and the minimum tag outer dimension across
-/// configured decoders. Candidates with `ppb < threshold` take the `low_*`
-/// route (typically ContourRdp + Erf for small/blurry tags); candidates with
-/// `ppb >= threshold` take the `high_*` route (typically EdLines + None
-/// for metrology-grade accuracy). When `ppb == threshold` exactly, the low
-/// route wins (deterministic tie-break for snapshot stability).
+/// Per-candidate routing parameters for [`QuadExtractionPolicy::AdaptivePpb`].
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct AdaptivePpbConfig {
-    /// PPB cutoff separating low and high routes. Validated to fall in `(1.0, 5.0)`.
+    /// PPB threshold in `(1.0, 5.0)` separating low and high routes.
     pub threshold: f32,
-    /// Extraction mode applied when estimated PPB < threshold.
+    /// Extraction mode when PPB < threshold.
     pub low_extraction: QuadExtractionMode,
-    /// Extraction mode applied when estimated PPB >= threshold.
+    /// Extraction mode when PPB >= threshold.
     pub high_extraction: QuadExtractionMode,
-    /// Corner refinement mode applied on the low route.
+    /// Corner refinement mode when PPB < threshold.
     pub low_refinement: CornerRefinementMode,
-    /// Corner refinement mode applied on the high route.
+    /// Corner refinement mode when PPB >= threshold.
     pub high_refinement: CornerRefinementMode,
 }
 
@@ -189,22 +141,11 @@ pub struct DetectorConfig {
     /// Enable Laplacian sharpening to enhance edges for small tags (default: true).
     pub enable_sharpening: bool,
 
-    /// How the per-pixel foreground threshold is built (default:
-    /// [`ThresholdMode::TileMidExtreme`], the historical behaviour).
+    /// Strategy for computing the per-pixel threshold (default: [`ThresholdMode::TileMidExtreme`]).
     pub threshold_mode: ThresholdMode,
-    /// Window radius, in pixels, of the local-mean thresholder (default: 7).
-    /// Only read by [`ThresholdMode::LocalMean`]; the window is `(2r+1)^2`.
+    /// Window radius in pixels for [`ThresholdMode::LocalMean`] (default: 7).
     pub threshold_local_mean_radius: usize,
-    /// Noise-calibrated offset `k` of [`ThresholdMode::LocalMean`] (default: 4.0; must be
-    /// finite and positive).
-    ///
-    /// The offset subtracted from the local mean is chosen per frame as
-    /// `clamp(round(k · σ̂ₙ), 2, 20)` grey levels, where `σ̂ₙ` is the sensor-noise standard
-    /// deviation of the thresholded image (Immerkær estimate on the raw frame, scaled by the
-    /// pre-filter white-noise gain). A flat background pixel then becomes foreground with
-    /// probability ≈ Φ(−k), whatever the camera's noise level — one physical parameter
-    /// instead of a per-camera grey-level constant. Ignored by
-    /// [`ThresholdMode::TileMidExtreme`].
+    /// Noise offset multiplier `k` for [`ThresholdMode::LocalMean`] (default: 4.0).
     pub threshold_noise_k: f32,
 
     // Quad filtering parameters
@@ -212,242 +153,67 @@ pub struct DetectorConfig {
     pub quad_min_area: u32,
     /// Maximum aspect ratio of bounding box (default: 10.0).
     pub quad_max_aspect_ratio: f32,
-    /// Minimum fill ratio (pixel count / bbox area); 0.0 (the default) disables it.
+    /// Minimum fill ratio (pixel count / bbox area); 0.0 disables.
     pub quad_min_fill_ratio: f32,
     /// Maximum fill ratio (default: 0.98).
     pub quad_max_fill_ratio: f32,
     /// Minimum edge length in pixels (default: 4.0).
     pub quad_min_edge_length: f64,
-    /// Edge-contrast floor of the quad edge gate (default: 4.0): the minimum mean gradient
-    /// contrast, in grey levels, across each candidate edge. Not a normalised 0..1 score;
-    /// `0.0` disables the gate.
+    /// Minimum mean gradient edge contrast in grey levels (default: 4.0; 0.0 disables).
     pub quad_min_edge_score: f64,
     /// PSF blur factor for subpixel refinement (default: 0.6).
     pub subpixel_refinement_sigma: f64,
-    /// Segmentation connectivity of dark regions (default: 4-way).
-    ///
-    /// Where two dark squares touch at a corner (AprilGrid connector squares, any tag touching
-    /// dark structure diagonally) 8-way connectivity always joins them through the diagonal
-    /// pixels, fusing a whole board into one component (EuRoC `cam_april`: 20 % recall vs 86 %).
-    /// 8-way only helps rings thinner than a pixel on the diagonal.
+    /// Segmentation connectivity (default: 4-way to avoid diagonal fusion of touching tags).
     pub segmentation_connectivity: SegmentationConnectivity,
     /// Factor to upscale the image before detection (1 = no upscaling).
-    /// Increasing this to 2 allows detecting smaller tags (e.g., < 15px)
-    /// at the cost of processing speed (O(N^2)). Bilinear interpolation is used.
-    /// Thresholding, segmentation and quad extraction run on the upscaled grid
-    /// (so `quad_min_area`, `quad_min_edge_length` are in upscaled pixels), but
-    /// all outputs (corners, homography, pose, covariance) are reported in
-    /// original-image coordinates. Ignored when `decimation > 1`.
     pub upscale_factor: usize,
-
     /// Decimation factor for preprocessing (1 = no decimation).
     pub decimation: usize,
-
-    /// Rayon worker count for **intra-frame** parallelism (0 = global pool).
-    ///
-    /// `0` (the default) leaves the pipeline on Rayon's global pool, whose
-    /// size is governed by `RAYON_NUM_THREADS` or the core count. A non-zero
-    /// value makes `LocusEngine` build one scoped [`rayon::ThreadPool`] of
-    /// exactly that size at construction and run `detect` /
-    /// `detect_concurrent` under `ThreadPool::install`, bounding the detector's
-    /// CPU footprint independently of the process-wide pool.
-    ///
-    /// Output is invariant to this value: every parallel stage writes to
-    /// disjoint, index-addressed chunks, so results are bit-identical across
-    /// thread counts. Only latency and CPU usage change.
-    ///
-    /// Not a profile field — set it per call site
-    /// ([`crate::DetectorBuilder::with_threads`], or `Detector(threads=…)` in
-    /// Python), not in a shipped JSON profile.
+    /// Worker thread count for intra-frame parallelism (0 = global Rayon pool).
     pub nthreads: usize,
 
     // Decoder parameters
-    /// Minimum contrast range for Otsu-based bit classification (default: 20.0).
-    /// For checkerboard patterns with densely packed tags, lower values (e.g., 10.0)
-    /// can improve recall on small/blurry tags.
+    /// Minimum contrast range for Otsu bit classification (default: 20.0).
     pub decoder_min_contrast: f64,
-    /// Largest fraction of the one-cell black border ring that may read bright for a decoded
-    /// candidate to be accepted. `None` (the default) gives each family the codeword's own
-    /// error density, `max_hamming_error / bit_count`: one ring cell of 28 for tag36h11 at
-    /// h = 2, none for tag16h5 at h = 0. `Some(1.0)` disables the check (`high_accuracy`).
-    ///
-    /// The ring (`4·(d + 1)` cells around a `d×d` payload) is sampled through the candidate
-    /// homography; a cell is an error when it reads nearly as bright as the payload's bright
-    /// class. It is marker evidence the codeword does not carry, which matters for small
-    /// dictionaries (tag16h5) where textured candidates decode by chance; for a strong code a
-    /// zero budget would only reject real markers with one glare- or occlusion-hit ring cell.
+    /// Maximum bright fraction of black border ring tolerated (None = default error density).
     pub decoder_max_border_error_rate: Option<f32>,
-    /// Sub-pixel corner stage of every decoded marker (default: on).
-    ///
-    /// Runs after the configured [`CornerRefinementMode`] on candidates that decoded, and the
-    /// homography is recomputed from the moved corners. Three steps, none configured:
-    /// 1. Each corner `c` moves to the minimiser of `Σ w·(∇I(p)·(c − p))²` over a
-    ///    Gaussian-weighted window sized from the marker's cell (the `cv::cornerSubPix`
-    ///    model).
-    /// 2. It is fused, by inverse covariance, with the intersection of the marker's two
-    ///    whole-edge lines. A corner whose seed is no junction at all (quad extraction cut
-    ///    across a blurred apex or a touching square) is first re-placed at the crossing of
-    ///    its two edges, fitted from the neighbouring corners.
-    /// 3. The corners are calibrated against the marker's own bit edges, which removes the
-    ///    tone-curve inset every gradient estimator has on gamma-encoded images.
-    ///
-    /// Applies to undistorted cameras, and skips markers whose black border is under ~3.3 px
-    /// wide, one cell by default (their seed corners are kept).
+    /// Sub-pixel corner optimization after decoding (default: true).
     pub decoder_corner_subpix: bool,
-    /// Width of the printed black border, in bits (default 1; OpenCV's `markerBorderBits`).
-    ///
-    /// The detected quad is the border's outline, so a marker printed with a wider border than
-    /// it is decoded with has its bits sampled off-centre: Kalibr's AprilGrid prints 36h11 with
-    /// 2 border bits, a 10-cell tag that a 1-bit layout reads as 8 cells. Set it to the printed
-    /// width: the payload is then sampled on its true lattice, every border ring is verified,
-    /// and the corner and inset stages size their windows from the border. In
-    /// `1..=MAX_MARKER_BORDER_BITS`.
+    /// Width of the marker border in bits (default: 1; AprilGrid uses 2).
     pub decoder_marker_border_bits: u8,
-    /// Strategy for refining corner positions (default: [`CornerRefinementMode::Erf`]).
-    ///
-    /// Read only under [`QuadExtractionPolicy::Static`]; `AdaptivePpb` requires `None` here
-    /// and takes its per-route modes from the policy.
+    /// Strategy for refining corner positions under static policy (default: [`CornerRefinementMode::Erf`]).
     pub refinement_mode: CornerRefinementMode,
-    /// Maximum number of Hamming errors allowed for tag decoding.
-    ///
-    /// `None` (the default) defers to each registered family's
-    /// `TagDecoder::default_max_hamming` — tighter on dense codebooks
-    /// (e.g. 16h5 = 0, 4x4_* = 1) and looser on sparse ones
-    /// (e.g. 36h11 = 2, 6x6_250 = 2). `Some(n)` is an explicit override
-    /// applied uniformly to every family.
+    /// Maximum Hamming errors tolerated for decoding (None = family default).
     pub max_hamming_error: Option<u32>,
 
     // Pose estimation tuning parameters
-    /// Huber delta for LM reprojection (pixels) in Fast mode.
-    /// Residuals beyond this threshold are down-weighted linearly.
-    /// 1.5 px is a standard robust threshold for sub-pixel corner detectors.
+    /// Huber delta (pixels) for robust Levenberg-Marquardt reprojection cost (default: 1.5).
     pub huber_delta_px: f64,
-
-    /// Maximum Tikhonov regularisation alpha (px^2) for ill-conditioned corners
-    /// in Accurate mode. Controls the gain-scheduled regularisation of the
-    /// Structure Tensor information matrix on foreshortened tags.
+    /// Maximum Tikhonov regularization alpha for ill-conditioned corner structure tensors.
     pub tikhonov_alpha_max: f64,
-
-    /// Pixel noise variance (sigma_n^2) assumed for the Structure Tensor
-    /// covariance model in Accurate mode. Typical webcams: ~4.0.
-    ///
-    /// Also serves as the isotropic noise variance for the Fast-mode pose
-    /// consistency gate (`pose_consistency_fpr`) when no per-corner covariance
-    /// is available.
+    /// Assumed pixel noise variance for covariance modeling (default: 4.0).
     pub sigma_n_sq: f64,
-
-    /// Radius (in pixels) of the window used for Structure Tensor computation
-    /// in Accurate mode. A radius of 2 yields a 5x5 window.
-    /// Smaller values (1) are better for small tags; larger (3-4) for noisy images.
-    /// Validation caps this at 8 to keep the covariance kernel stack-only.
+    /// Window radius for structure tensor covariance computation in Accurate mode (default: 2).
     pub structure_tensor_radius: u8,
-
-    /// Target false-positive rate for the pose-consistency gate.
-    ///
-    /// `0.0` (the default) disables the gate — `estimate_tag_pose` returns
-    /// the LM-refined pose unconditionally and the legacy IPPE branch
-    /// selection (lowest reprojection error in ideal corner space) is used.
-    ///
-    /// A positive value `p ∈ (0, 1)` derives a chi-squared critical value
-    /// `χ²(2)` for the aggregate Mahalanobis distance `d² = rᵀ Σ⁻¹ r` over
-    /// the four corners (8 obs − 6 DOF) and `χ²(1)` for each per-corner
-    /// residual; both must pass or the pose is rejected (`Detection.pose`
-    /// becomes `None`). Σ is sourced from the Structure Tensor (Accurate
-    /// mode) or `Σ = sigma_n_sq · I` (Fast mode, isotropic fallback). Enabling the gate also activates
-    /// observed-space Mahalanobis IPPE branch selection with branch swap.
-    ///
-    /// Recommended starting values: `1e-3` (good FPR/recall trade-off for
-    /// tag36h11 1080p), `1e-4` (stricter), `0.0` (disabled).
+    /// Target false-positive rate for pose consistency gate (0.0 disables).
     pub pose_consistency_fpr: f64,
-
-    /// Pixel σ assumed by the pose-consistency χ² gate.
-    ///
-    /// The gate's null distribution is χ²(2) under the assumption that
-    /// post-LM residuals are 2-D Gaussian with covariance σ²·I. To keep
-    /// that calibration valid, the gate uses isotropic info matrices
-    /// `Σ⁻¹ = (1/σ²)·I` independent of the LM's per-corner weighting
-    /// (which can be anisotropic / structure-tensor-derived).
-    ///
-    /// Decoupled from `sigma_n_sq` because the LM and the gate serve
-    /// different roles: the LM weights real Gaussian sensor noise (σ_n
-    /// is typically 1–2 px on real cameras); the gate rejects
-    /// geometrically-impossible residuals — values of 0.5–1 px give
-    /// the gate enough resolution to catch sub-2-px false-positive
-    /// residuals that the looser LM noise model would let through.
-    /// Default: 1.0 px.
+    /// Assumed pixel noise sigma for the pose consistency chi-square gate (default: 1.0).
     pub pose_consistency_gate_sigma_px: f64,
-
-    /// Outlier-aware corner-drop trigger threshold (squared Mahalanobis).
-    ///
-    /// After the weighted LM converges, if any corner's reprojection
-    /// d²_i = rᵢᵀ Σᵢ⁻¹ rᵢ exceeds this threshold *and* dominates the
-    /// second-worst corner by a factor ≥ 2, the solver masks that
-    /// corner (zeroes its info matrix), re-runs the LM warm-started,
-    /// and keeps the 3-corner pose iff its aggregate d² over the
-    /// **three kept corners** is strictly lower than the 4-corner pose's
-    /// aggregate d² over those same three corners. This self-rejection
-    /// invariant catches catastrophic per-corner outliers (PSF artefacts,
-    /// motion-blur spikes, lens vignette edges) that survive the Huber
-    /// kernel's down-weighting but bias the rotation tail.
-    ///
-    /// `0.0` (the default) disables the mechanism — production binaries
-    /// stay byte-identical for profiles that have not opted in.
-    /// Recommended value: `25.0` (≡ 5σ², `χ²(1; 1.5e-6)`) — only triggers
-    /// on the genuinely catastrophic single-corner outliers driving the
-    /// rotation p99 tail.
+    /// Outlier-aware corner-drop threshold in squared Mahalanobis distance (0.0 disables).
     pub outlier_drop_d2_threshold: f64,
-
-    /// Enable the opt-in **model-edge pose refinement** stage (Accurate mode).
-    ///
-    /// After the corner-based pose, aligns the decoded tag's internal bit-grid
-    /// edges + border to the image and refines the pose against them (rotation
-    /// from ~40 distributed edges, translation re-anchored to the 4 corners).
-    /// Cuts rotation p99 substantially while preserving translation. Requires
-    /// camera intrinsics + `tag_size` (Accurate mode). `false` (default) keeps
-    /// production byte-identical for profiles that have not opted in.
+    /// Enable post-decode model-edge pose refinement against internal bit grid (default: false).
     pub pose_edge_refinement_enabled: bool,
-
-    /// Maximum elongation (λ_max / λ_min) allowed for a component before contour tracing.
-    /// 0.0 = disabled (the default).
-    ///
-    /// This gate and [`Self::quad_min_density`] / [`Self::quad_min_fill_ratio`] assume a filled
-    /// component. A marker merged with neighbouring structure, or one whose black cells are
-    /// wider than the threshold neighbourhood (a hollow ring), fails them although it decodes;
-    /// `standard` judges candidates by marker evidence instead (border ring, codeword budget).
+    /// Maximum component elongation before contour tracing (0.0 disables).
     pub quad_max_elongation: f64,
-
-    /// Minimum pixel density (pixel_count / bbox_area) required to pass the moments gate.
-    /// 0.0 = disabled (the default).
+    /// Minimum component density (pixel_count / bbox_area) (0.0 disables).
     pub quad_min_density: f64,
-
-    /// Split components whose outline did not decode, or that traced no quad, at the necks a
-    /// 2 × 2 erosion opens, and offer the pieces as candidates (default `false`).
-    ///
-    /// Ink spread and blur close the diagonal contact where two dark squares meet corner to
-    /// corner, so on a grid of markers joined at their corners (Kalibr's AprilGrid connectors)
-    /// one component can hold several markers. Off by default because it costs time on any
-    /// frame with large undecoded components, textured backgrounds included; `grid` turns it on.
-    ///
-    /// Inert under a declared lens model and whenever the extraction policy may route to
-    /// EdLines: only the pinhole contour extractor records the components it splits.
+    /// Split fused dark components via 2x2 erosion (default: false; enabled in `grid`).
     pub quad_split_fused: bool,
-
-    /// Quad extraction mode: legacy contour tracing (default) or EDLines.
-    ///
-    /// Read only when `quad_extraction_policy == Static`. Under
-    /// `AdaptivePpb(...)` the policy's low/high routes override this field
-    /// on a per-candidate basis.
+    /// Quad extraction mode under static policy (default: ContourRdp).
     pub quad_extraction_mode: QuadExtractionMode,
-
-    /// EdLines AXIS→DIAG imbalance-gate policy. See
-    /// [`EdLinesImbalanceGatePolicy`].
+    /// Imbalance gate policy for EdLines extraction.
     pub edlines_imbalance_gate: EdLinesImbalanceGatePolicy,
-
-    /// Per-frame extraction-routing policy.
-    ///
-    /// DO NOT change the default to `AdaptivePpb` without a planned
-    /// snapshot-review campaign: every downstream test that constructs a
-    /// default config would silently exercise new code.
+    /// Per-frame quad extraction policy (default: Static).
     pub quad_extraction_policy: QuadExtractionPolicy,
 }
 
@@ -464,13 +230,7 @@ impl Default for DetectorConfig {
             threshold_mode: ThresholdMode::TileMidExtreme,
             threshold_local_mean_radius: 7,
             threshold_noise_k: 4.0,
-            // 1 PPB on the smallest supported family's outer grid (6×6 cells:
-            // AprilTag16h5, ArUco4x4) — below 36 px² a quad cannot represent
-            // 1 pixel per bit on any family, so the decoder cannot succeed.
-            // 16 was a placeholder (~0.5–0.7 PPB depending on family) that
-            // never decoded anything it accepted that 36 wouldn't. Profiled
-            // recall-neutral against ICRA2020/forward (worst-case TP_min
-            // workload), tag36h11 1 PPB (= 64) costs 1 pp recall on forward.
+            // Minimum 1 pixel per bit on smallest outer grid (6x6 cells = 36 px²).
             quad_min_area: 36,
             quad_max_aspect_ratio: 10.0,
             quad_min_fill_ratio: 0.0,
@@ -614,12 +374,7 @@ impl DetectorConfig {
         Ok(())
     }
 
-    /// Whether decode-first ordering applies: candidates reach the decoder with their contour
-    /// corners and only those that decode (or nearly do) are refined. It needs the decoder's
-    /// ERF refinement on every candidate (the `Static` policy with `Erf`), and the refinement
-    /// grid must be the input image: an upscaled grid would be refined at one resolution by the
-    /// quad stage and another by the decoder. Every other configuration refines during quad
-    /// extraction, before decoding.
+    /// Whether decode-first ordering applies (ERF refinement on original grid under static policy).
     #[must_use]
     pub(crate) fn decode_first(&self) -> bool {
         self.refinement_mode == CornerRefinementMode::Erf
@@ -627,14 +382,7 @@ impl DetectorConfig {
             && matches!(self.quad_extraction_policy, QuadExtractionPolicy::Static)
     }
 
-    /// Returns `true` if the **static** extraction mode selects `EdLines`.
-    ///
-    /// Used by the distortion gate in `run_detection_pipeline` to reject
-    /// only the `Static` `EdLines` configuration on distorted intrinsics
-    /// (the user-explicit misconfiguration case). `AdaptivePpb` policies
-    /// gracefully degrade to `ContourRdp` on the distortion path inside
-    /// `extract_single_quad_with_camera` (in `crate::quad`), so they don't
-    /// trip the gate even when one of their routes is `EdLines`.
+    /// Returns `true` if the static extraction mode selects `EdLines`.
     #[must_use]
     pub fn static_uses_edlines(&self) -> bool {
         matches!(self.quad_extraction_policy, QuadExtractionPolicy::Static)

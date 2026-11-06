@@ -197,7 +197,7 @@ inverse reproduces its published cell to the thousandth, which is what identifie
 Recall (20.86 / 86.02 %) and false positives (6 / 1) move by at most 0.01 pp. Locus still
 wins the cell by a wide margin; only the size of the margin changes.
 
-The runs behind `sota_scoreboard_20261002/03/04.md` and `liu4k_euroc_sota_20261001.md` were
+The runs behind `sota_scoreboard_20261004.md` and `liu4k_euroc_sota_20261001.md` were
 not archived, and the common-tag set each of their cells used depended on which runs shared
 the directory at the time, which is not recoverable. Those pages are annotated with the
 bound above rather than rewritten: a figure rescaled by a factor measured on other runs

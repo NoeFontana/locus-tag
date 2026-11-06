@@ -127,7 +127,7 @@ Targets a **low latency** budget for high-resolution frames on modern CPUs.
 | **Corner stage** | $O(V)$ | Junction/edge fusion and inset calibration on decoded markers (`standard`, `grid`). |
 | **Pose Refinement** | $O(V)$ | Partitioned solver (valid tags only). |
 
-Current end-to-end latency per benchmark (1 thread, verified hardware) is in the [2026-10-04 EuRoC report](../engineering/benchmarking/euroc_sota_20261004.md#latency). An April 2026 per-stage estimate (~14.5 ms for 50 tags at 720p) predates decode-first ordering and the corner stage; it is kept in the [pipeline page](pipeline.md#latency) for context only.
+Current end-to-end latency per benchmark (1 thread, verified hardware) is documented in the [Benchmarking overview](../engineering/benchmarking.md).
 
 ## Extensibility
 

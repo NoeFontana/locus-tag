@@ -134,19 +134,12 @@ TELEMETRY_MODE=json cargo test --release --test regression_icra2020 --features b
 - [Benchmarking Lessons](benchmarking/lessons.md) — consolidated timeline + architecture/profile/algorithm tradeoffs that should inform future work
 - [Micro-Benchmarking Guide](benchmarking/micro-benchmarking-guide.md) — 3-tier validation loop
 
-### Point-in-time reports (historical snapshots)
+### Point-in-time reports
 
-The two 2026-10-04 reports describe the current `standard` pipeline; the rest are history.
-
-- [EuRoC, the real-data benchmark (2026-10-04)](benchmarking/euroc_sota_20261004.md) — **latest.** Scorer fixes, 4-connectivity, clipped and gross corners: EuRoC recall 20.9 → 86.0 %, 65/93 cells vs `main` 57/93; latency +17–28 %
-- [SOTA scoreboard checkpoint (2026-10-04)](benchmarking/sota_scoreboard_20261004.md) — **latest for corner metrics.** Fused + photometrically calibrated corners (#434): 52/73 vs `main` 47/73; render-tag corners ≈ 3.7× better than the best reference
-- [SOTA scoreboard checkpoint (2026-10-03)](benchmarking/sota_scoreboard_20261003.md) — `main` `a6199d4`, opt-in decode-first candidate (37/88) vs `standard` (32/88), 1T and 8T latency
-- [SOTA scoreboard baseline (2026-10-02)](benchmarking/sota_scoreboard_20261002.md) — `standard` vs the best OpenCV / aruco_nano operating point on every compatible dataset; `cargo xtask sota scoreboard`
-- [Real-image competitiveness: Liu4K + EuRoC (2026-10-01)](benchmarking/liu4k_euroc_sota_20261001.md) — reproduce with `cargo xtask sota` (`xtask/README.md`)
-- [Render-tag 1080p SOTA (2026-07-13, v0.7.0-refreshed)](benchmarking/render_tag_sota_20260713.md) — single-tag pose percentiles; predates decode-first, 4-connectivity and the corner stage
-- [Render-tag 2160p recall lift (2026-04-25)](benchmarking/render_tag_2160p_20260425.md)
-- [Render-tag 1080p SOTA pursuit (2026-04-25)](benchmarking/render_tag_sota_20260425.md)
-- [Release Performance Report (2026-04-18)](benchmarking/release_performance_20260418.md)
+- [EuRoC benchmark (2026-10-04)](benchmarking/euroc_sota_20261004.md) — Real-data benchmark results.
+- [SOTA scoreboard checkpoint (2026-10-04)](benchmarking/sota_scoreboard_20261004.md) — Metric comparison vs reference detectors.
+- [Real-image competitiveness: Liu4K + EuRoC (2026-10-01)](benchmarking/liu4k_euroc_sota_20261001.md) — Analysis of real camera data.
+- [Render-tag 1080p SOTA (2026-07-13)](benchmarking/render_tag_sota_20260713.md) — Single-tag pose accuracy on synthetic renders.
 
 ---
 

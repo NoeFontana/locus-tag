@@ -429,11 +429,7 @@ fn euroc_detection_baseline() {
     // the dark/bright cut off the midpoint of the tile extremes, so the 10.4 pp that change
     // recovered could have been lost again in silence.
     //
-    // This is a per-frame mean over whichever frames `LOCUS_EUROC_SAMPLE_STRIDE` samples, so
-    // the floor only means something if it holds at every stride the suite is run at. Measured
-    // 2026-10-05: stride 1 -> 0.806, 3 -> 0.807, 7 -> 0.802, 10 (default) -> 0.802,
-    // 13 -> 0.823, 23 -> 0.802. The spread is 2 pp and the minimum is 0.802, so 0.75 holds
-    // everywhere with room for the frame mix to shift; re-measure that sweep before moving it.
+    // Relative recall floor (0.75) guards against in-view tag detection regressions across sample strides.
     assert!(
         relative_recall_mean >= 0.75,
         "Relative recall too low: {relative_recall_mean:.2} (expected ≥ 0.75) over \

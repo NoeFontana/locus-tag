@@ -1,8 +1,7 @@
 # render-tag SOTA refresh — OpenCV 5.0 (2026-07-13)
 
 Refreshes the detector-comparison matrix after the **OpenCV 4.13 → 5.0.0** bump,
-with the OpenCV baseline **re-tuned** for its best 5.0 config. Supersedes the
-`render_tag_sota_20260425.md` snapshot for the OpenCV rows.
+with the OpenCV baseline **re-tuned** for its best 5.0 config.
 
 > **2026-07-19 update (v0.7.0).** The `Locus (high_accuracy)` rows in §1/§2 are
 > refreshed to the **v0.7.0 shipped config**, which enables model-edge pose

@@ -5,8 +5,7 @@ import pytest
 def test_profile_initialization():
     """`Detector(profile=...)` loads shipped JSON profiles with the expected settings."""
     d1 = locus.Detector(profile="high_accuracy")
-    # Shares `standard`'s geometry since 2026-10-07; what distinguishes the profile is
-    # its pose layer and its stricter detection gates (profiles/README.md).
+    # Shares standard's geometry; distinguished by pose refinement and detection gates.
     assert d1.config().quad.extraction_mode == locus.QuadExtractionMode.ContourRdp
     assert d1.config().pose.pose_edge_refinement_enabled is True
 

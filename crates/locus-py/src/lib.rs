@@ -1501,12 +1501,7 @@ fn validate_principal_point(
 ///     a tightly-packed scratch `Vec<u8>` over-allocated by 3 trailing
 ///     guard bytes.
 ///
-/// The fallback violates the otherwise-strict "no copies at the FFI" rule
-/// from `docs/engineering/constraints.md` §2, but it is a one-shot
-/// per-`detect()` cost that preserves the pre-PR-#287 public API (every
-/// `np.zeros((H, W))` call site continues to work transparently). PRs that
-/// touched this fallback should reconsider the trade-off if frame copy
-/// becomes a measurable cost.
+/// Transparently copies unpadded inputs to satisfy the 3-byte trailing SIMD gather invariant.
 enum FfiImageBuffer<'py> {
     /// Zero-copy view over the NumPy buffer. Used when the input has
     /// stride_y > width (≥3 trailing pad bytes per row).
@@ -1637,20 +1632,8 @@ fn prepare_image_view<'py>(img: &'py PyReadonlyArray2<'_, u8>) -> PyResult<FfiIm
         .map_err(|e| PyRuntimeError::new_err(e.clone()))?;
 
     // F1 (redesigned): SIMD kernels (e.g. AVX2 `sample_bilinear_v8` in
-    // `decoder.rs`) issue 32-bit gathers on 8-bit data and may read up to
-    // 3 bytes past the last logical pixel. If the input has ≥3 trailing
-    // bytes of slack (`has_simd_padding()`), return the zero-copy borrow.
-    // Otherwise, transparently copy into a padded scratch — this preserves
-    // the pre-PR public API for the natural NumPy idiom
-    // `np.zeros((H, W), dtype=np.uint8)`, at the cost of one `H * W`-byte
-    // allocation + copy per `detect()` call.
-    //
-    // Design rationale: PR #287's initial design rejected under-padded
-    // buffers with a `PyValueError`. The project owner chose the copy
-    // fallback over the reject after the xfail-comment menu at
-    // `tests/test_ffi_contracts.py:115-122` was reconsidered. See the
-    // CHANGELOG entry and `docs/engineering/ffi_contracts.md` §1 for the
-    // full record.
+    // SIMD gather kernels read up to 3 bytes past pixel boundaries. Borrow zero-copy
+    // if row padding satisfies this; otherwise copy into a padded scratch buffer.
     if view.has_simd_padding() {
         return Ok(FfiImageBuffer::Borrowed {
             data,

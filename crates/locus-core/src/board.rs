@@ -725,15 +725,8 @@ fn gn_step_on_sample(
 /// the centroid offset that the caller must apply, or `None` on pathological
 /// inputs (colinear points, singular `A^T A`).
 ///
-/// **Why this complements per-tag IPPE**: per-tag IPPE-Square on 4 noisy
-/// corners (≈ 20-30 px tag edges) can produce a pose biased by 50°+ — both
-/// branches end up wrong-sided.  The 16-point DLT homography averages corner
-/// noise across all 4 sampled tags and yields a much tighter homography
-/// estimate; running IPPE-Square on it preserves the two-branch
-/// disambiguation without losing the noise-averaging benefit.  This is the
-/// rescue path for the "catastrophic per-tag collapse" frames (e.g.
-/// `scene_0138` aprilgrid: 35 tags, per-tag rot mean 16.9°, max 69°) in
-/// `diagnostics/multi_ippe_seed_2026-05-14/MEMO.md`.
+/// Fits a 16-point DLT homography across the 4 sampled tags to average corner noise
+/// before IPPE-Square decomposition, preserving two-branch disambiguation.
 #[expect(
     clippy::similar_names,
     reason = "DLT/homography vars (cx_o/cy_o, h_n/h_metric) mirror the math notation"
@@ -878,24 +871,9 @@ fn ippe_branches_from_sample_homography(
 /// branch produces a higher reprojection score over the full sample, so the
 /// scoring step selects the correct global pose without per-tag voting.
 ///
-/// **Why DLT over all 4 × group_size points (not per-tag IPPE)**: per-tag
-/// IPPE-Square on 4 noisy corners (≈ 20-30 px tag edges) can produce a pose
-/// biased by 50°+ — both branches end up wrong-sided.  Fitting a single DLT
-/// homography over ALL sample correspondences averages corner noise across
-/// the 4 sampled tags / 16 saddle points and yields a much tighter homography
-/// estimate; running IPPE-Square on it preserves the two-branch
-/// disambiguation without losing the noise-averaging benefit.  See
-/// `diagnostics/multi_ippe_seed_2026-05-14/MEMO.md` for the
-/// catastrophic-per-tag-collapse frames this rescues and the algorithm
-/// rationale.
-///
-/// **Why this replaces DLT + Zhang homography decomposition**: DLT minimises
-/// algebraic error rather than geometric reprojection, but that's fine here
-/// because IPPE-Square performs a geometric re-projection check.  The Zhang
-/// decomposition `R = SO(3)-project(K^{-1} · H)` would have collapsed the
-/// planar Necker ambiguity at the SVD step — producing one branch
-/// unconditionally; IPPE-Square enumerates both branches and lets the joint
-/// reprojection score pick the winner.
+/// A joint DLT homography averages corner noise across sampled tags. IPPE-Square then
+/// enumerates both planar Necker branches, letting joint reprojection select the winner
+/// (avoiding the premature collapse of Zhang decomposition).
 ///
 /// Returns `None` only on pathological inputs (NaN intrinsics, degenerate
 /// sample) — callers should treat `None` as "skip this minimal sample".

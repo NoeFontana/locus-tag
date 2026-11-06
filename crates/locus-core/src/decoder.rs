@@ -504,16 +504,8 @@ const MAX_RING_CELLS: usize = {
     side * side - 8 * 8
 };
 
-/// A ring cell counts as bright (an error) only once it reaches this fraction of the way from
-/// the payload's dark class mean to its bright class mean.
-///
-/// On small markers (≲ 20 px, ≈ 2 px per cell) the PSF pulls ring cells next to the white
-/// surround well above the class midpoint, while a textured false positive has ring cells
-/// that are genuinely bright. Measured with `cargo xtask sota` (LocalMean front end, zero
-/// error budget), moving the cut from the midpoint (0.5) to 0.9 keeps tag16h5 false
-/// positives at 3 (112 without the check) and recovers ICRA `forward` recall from 64.6 %
-/// to 72.7 % (73.4 % without the check). Setup: full datasets, release build, 1 thread per
-/// detector, AMD EPYC-Milan (see `docs/engineering/benchmarking/sota_scoreboard_20261002.md`).
+/// Fraction from dark to bright class mean above which a border-ring cell counts as bright.
+/// Conservative threshold (0.9) accommodates PSF bleeding on small tags while rejecting false positives.
 const RING_BRIGHT_FRACTION: f64 = 0.9;
 
 /// Marker evidence beyond the codeword: the `border`-cell black border around the payload.
@@ -1251,10 +1243,7 @@ pub fn rotate90(bits: u64, dim: usize) -> u64 {
 /// straight and its bit grid really is a homography, and the warp applies the lens on the way
 /// to the sensor.
 ///
-/// This is what lets [`decode_batch_soa_generic`] be written once. The loop *was* written
-/// twice, and that duplication was the mechanism by which the gradient-orthogonality corner
-/// pass (#426, #430, #431, #432), the marker-inset calibration (#434) and the decode-first
-/// ordering with its near-miss recovery search (#433, #435) all reached the pinhole route only.
+/// Unified abstraction allowing `decode_batch_soa_generic` to serve both rectified and distorted cameras.
 pub(crate) trait Warp {
     /// `true` when this warp is the identity, so the ROI-cached SIMD kernels apply directly.
     ///
@@ -1394,11 +1383,7 @@ impl<C: crate::camera::CameraModel> Warp for LensWarp<'_, C> {
         config: &crate::config::DetectorConfig,
     ) -> Option<[[f64; 2]; 4]> {
         let refined = self.refine_curved(img, raw)?;
-        // The second half of `refine_decode_first_seed`: a seed only survives if its *refined*
-        // quad still shows edge contrast. Without this the shared loop's `else { continue; }`
-        // arm is unreachable on this route, so a textured blob that decodes by chance is
-        // verified by the ring budget alone — the class of defect #435 fixed, and the widened
-        // seed band in extraction makes it reachable.
+        // Confirms refined quad retains sufficient edge contrast, rejecting chance decodes on textured blobs.
         let quad = refined.map(|p| crate::Point { x: p[0], y: p[1] });
         crate::quad::curved_edge_contrast_exceeds(
             img,
@@ -1682,16 +1667,9 @@ fn sample_points_warped<W: Warp>(
 /// Finish one decoded candidate's corners: sub-pixel refinement, the marker-inset photometric
 /// calibration, the frame-clipping check, the rotation reorder, and the homography recompute.
 ///
-/// Called from one place, by one loop. This tail used to live only in the pinhole loop while
-/// `decode_batch_soa_with_camera_inner` was a second implementation, so the
-/// gradient-orthogonality pass (#426, #430, #431, #432), the marker-inset calibration (#434)
-/// and the frame-clipping rule (#436) **all** silently skipped distorted cameras:
-/// `decoder.corner_subpix` was a no-op there, at a cost of ~5x in corner RMSE on the distortion
-/// hubs. #443 made both loops share it; the loops themselves are now one, so there is no longer
-/// a second tail to forget. Every pass here is a local photometric or geometric test on the
-/// raw image — none needs
-/// a camera model, and a lens cannot make a corner stop being a corner. Keeping one copy is what
-/// stops the next one diverging again.
+/// Unified post-decode tail: sub-pixel corner refinement, photometric inset calibration,
+/// frame clipping check, canonical rotation reordering, and homography update.
+/// Shared across pinhole and distorted pipelines to guarantee consistent corner processing.
 ///
 /// `cells` is the decoded marker's grid (payload plus its printed black border), which sizes
 /// the sub-pixel window; `corners_already_moved` reports whether the caller's own refinement

@@ -1,7 +1,6 @@
 # SOTA scoreboard checkpoint (2026-10-04)
 
-Follows the [2026-10-03 checkpoint](sota_scoreboard_20261003.md). The champion is the `standard`
-profile of the branch for #434: decode-first and the dark-ring check by default (#433),
+Benchmark scoreboard evaluating the `standard` profile against reference detectors: decode-first and the dark-ring check by default (#433),
 `corner_subpix` with the junction window chosen per corner (#431, #432), plus #434's fused
 junction/edge-line corners with the photometric corner calibration. `main` at `365c9ba` is the
 before column. Reproduce any cell with `cargo xtask sota` (`xtask/README.md`).

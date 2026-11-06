@@ -1,9 +1,8 @@
 # Board-seed cleanup: Pool C alone is optimal — 2026-05-14
 
-Empirical ablation falsifies a static-reasoning claim in PR #256's memo
-(`diagnostics/multi_ippe_seed_2026-05-14/MEMO.md`) that Pool B (per-tag
-IPPE-Square branch enumeration) is sometimes a tighter seed than Pool C
-(sample-homography → IPPE-Square decomposition).  Across both standard
+Empirical ablation showed that Pool B (per-tag
+IPPE-Square branch enumeration) adds no benefit over Pool C
+(sample-homography → IPPE-Square decomposition). Across both standard
 and `high_accuracy` profiles on both board corpora, Pool A (centroid
 seed) and Pool B contribute nothing measurable — every tail metric is
 byte-identical and mean rotation drifts by ≤ 0.0015°.  This PR deletes
