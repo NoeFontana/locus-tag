@@ -323,7 +323,7 @@ Each bit cell is sampled at its grid center via the homography DDA. The sampled 
 
 **Nearest codeword.** The code is matched against all four rotations of every codeword in one branch-free pass: each entry yields the key $(\operatorname{popcount}(b \oplus c_i) \ll 16) \,|\, i$, and the minimum key is the nearest codeword, lowest index on ties. The pass is a vectorizable popcount-and-min, dispatched at runtime to `popcnt`/AVX2 or NEON; it is $O(\text{codes})$ per candidate, not a table lookup. (A multi-index-hash path exists for payloads above 36 bits; no shipped family uses it.)
 
-**Acceptance.** A match stands when its distance is within the family budget (`decoder.max_hamming_error`, else the family default) and the marker's dark border ring passes its error budget (see [Pipeline §4d](pipeline.md#4d-border-ring-evidence)). Near misses within the family's recovery window — the largest distance random bits reach with probability ≤ 0.1 — get a refinement retry when the seed shows a dark ring.
+**Acceptance.** A match stands when its distance is within the family budget (`decoder.max_hamming_error`, else the family default) and the marker's dark border ring passes its error budget (see [Pipeline §4d](pipeline.md#4d-border-ring-evidence)). A match past that budget but within half the family's minimum distance stands when its contradicting evidence is under 2 % of the marker's total (soft acceptance, [Pipeline §4e](pipeline.md#4e-soft-acceptance-within-unique-decoding)). Near misses within the family's recovery window — the largest distance random bits reach with probability ≤ 0.1 — get a refinement retry when the seed shows a dark ring.
 
 ---
 

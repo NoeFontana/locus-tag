@@ -206,6 +206,26 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **Decoding accepts a codeword past the Hamming budget when the marker's evidence supports
+  it.** Hard bits discard how sure each one is. On small or blurred markers blur flips the bits
+  next to a bright neighbour, but those sit near their thresholds, while a non-marker
+  contradicts a codeword with confident bits or a bright border. A match within half the
+  family's minimum distance (5 bits for 36h11, where the nearest codeword is unique) now stands
+  when the confidence of the disagreeing bits plus the bright border cells is at most 2 % of
+  the marker's total; decode-first matches are verified on the refined quad by the same rule.
+  The 2 % comes from rendered Kalibr AprilGrids against 102 595 candidates from tag16h5 and
+  ChArUco renders: negatives never fell below 3.3 %, true tags' median is 0.5-1.4 %. An
+  explicit `decoder.max_hamming_error` still caps it. Measured:
+  - Rendered Kalibr AprilGrid recall (`grid`): blur 0.8 px 63.8 → 75.2 %, 12 px tags
+    31.9 → 45.6 %, 50° incidence 67.4 → 71.2 %, ink 0.4 mm 95.6 → 97.0 %, baseline
+    97.2 → 97.8 %; no wrong ids.
+  - ICRA `forward` recall +1.0 pp (`grid`), +0.7 pp (`standard`), no extra detections;
+    AprilGrid board tag coverage 0.9917 → 0.9924. The tag16h5, ChArUco and render-tag
+    suites are byte-identical.
+  - EuRoC `cam_april`: false positives unchanged (`grid` 1, `standard` 0).
+  - Latency, 1 thread: EuRoC −0.5 %, rendered blur 0.8 −7 % (an accepted candidate skips the
+    remaining scales and recovery).
+
 - **AprilGrid X-junctions are located by a model fit (`decoder.corner_subpix`).** A marker whose
   four corners are X-junctions (connector squares touching them) is re-placed by a weighted
   Levenberg–Marquardt fit of `A + B·erf(n₁·(p − c)/s)·erf(n₂·(p − c)/s)` to the raw pixels of an
