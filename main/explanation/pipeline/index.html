@@ -2221,16 +2221,6 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
     
     
     
@@ -2344,62 +2334,6 @@
     
   
     Micro-Benchmarking Guide
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/release_performance_20260418/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Locus Release Performance Report (2026-04-18)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/render_tag_sota_20260425/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Render-tag 1080p SOTA pursuit (2026-04-25)
   
 
     
@@ -2588,62 +2522,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/sota_scoreboard_20261003/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    SOTA scoreboard checkpoint (2026-10-03)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/sota_scoreboard_20261002/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    SOTA scoreboard baseline (2026-10-02)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../engineering/benchmarking/refine_variants_20260714/" class="md-nav__link">
         
   
@@ -2680,34 +2558,6 @@
     
   
     Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    2160p render_tag_hub recall lift (2026-04-25)
   
 
     
@@ -3470,12 +3320,8 @@
 <li><strong>Sharpening</strong> <em>(<code>standard</code>)</em> — an optional Laplacian sharpening pass into an arena buffer (<code>filter.rs</code>).</li>
 <li><strong>Tile statistics</strong> — a single <span class="arithmatex">\(O(N)\)</span> pass reduces each <code>tile_size × tile_size</code> tile to its min and max.</li>
 <li><strong>Threshold map</strong> — <code>threshold.mode</code> selects the rule. Segmentation reads the per-pixel threshold map: a pixel is foreground when <code>pixel &lt; threshold_map[pixel]</code>, so a threshold of <code>0</code> means "never foreground".<ul>
-<li>
-<p><code>TileMidExtreme</code> <em>(every shipped profile)</em> — <code>min + 179/400 · (max − min)</code> over the tile's 3×3 tile neighbourhood, rounded; <code>threshold::CUT_NUM</code>/<code>CUT_DEN</code> carry the fraction and the measurement behind it. Cheap and well suited to rectified, well-lit scenes.</p>
-<p>The cut sits <strong>below</strong> the midpoint, which is where this mode used to cut and what its name records. The midpoint is the unbiased cut for an edge the optics resolved, but this map answers a question about <em>topology</em>, not geometry: segmentation reads it to decide which pixels are one marker, while corners come from the grey-scale refinement, which never reads it. A bright separation narrower than the point-spread function never reaches the bright level, so at the midpoint it falls on the dark side and the markers either side arrive as one connected component — which is traced once and reduced to one quadrilateral, losing both. Cutting at 179/400 (0.4475) shrinks every dark region by a fraction of the blur width and holds those separations open (EuRoC <code>cam_april</code> recall 86.0 → 92.1 %, Liu4K 37.2 → 44.6 %, 2026-10-06). The odd-looking denominator is load-bearing: the frontier was swept with a <em>truncated</em> cut, whose realized fraction sits about half a grey level under its nominal one, so the sweep's 0.45 has to be re-stated as 0.4475 to mean the same cut once the arithmetic is unbiased. A denominator of 20 cannot write that number down.</p>
-<p>The two failure modes are symmetric and a single scalar must choose between them: cut too high and thin bright separations are swallowed (markers fuse), cut too low and thin dark strokes erode (markers shatter, costing small markers their one-module borders below about 0.42). Because it follows the local <em>extremes</em>, a flat tile also gets <code>t</code> at or just above its own grey level, so sensor noise speckles uniform regions (see the <a href="../../engineering/lessons/recall-quad-icra/">recall lessons</a>).
-    - <code>LocalMean</code> <em>(opt-in)</em> — a per-pixel local mean over a <code>(2·local_mean_radius + 1)²</code> window minus an offset. It tracks the local <em>background level</em> instead of the local extremes. Computed with a sliding column-sum accumulator (one <code>u32</code> row per row-strip), not an integral image, so the result is independent of the strip size and of the rayon worker count.</p>
-</li>
+<li><code>TileMidExtreme</code> <em>(every shipped profile)</em> — <code>min + 179/400 · (max − min)</code> over the tile's 3×3 neighbourhood. Cutting slightly below the midpoint (0.4475) shrinks dark regions by a fraction of the blur width, preventing diagonally adjacent markers from fusing into single components while preserving thin borders.</li>
+<li><code>LocalMean</code> <em>(opt-in)</em> — a per-pixel local mean over a <code>(2·local_mean_radius + 1)²</code> window minus an offset. It tracks the local <em>background level</em> instead of the local extremes. Computed with a sliding column-sum accumulator, not an integral image.</li>
 </ul>
 </li>
 </ol>
@@ -3657,11 +3503,7 @@
     Det--&gt;&gt;App: DetectionBatch
     deactivate Det</code></pre>
 <h2 id="latency">Latency</h2>
-<p>Per-stage latency depends on the image, the marker count and the profile; current end-to-end numbers per benchmark (1 thread, verified hardware) are in the <a href="../../engineering/benchmarking/euroc_sota_20261004/#latency">2026-10-04 EuRoC report</a> and the <a href="../../engineering/benchmarking/sota_scoreboard_20261004/">2026-10-04 scoreboard</a>. For per-stage timing, use the <code>tracing</code> spans (see <a href="../../engineering/benchmarking/">Benchmarking</a>).</p>
-<div class="admonition note">
-<p class="admonition-title">Historical per-stage budget (April 2026)</p>
-<p>An April 2026 estimate for 50 tags at 720p on a desktop CPU put preprocessing at ~0.9 ms, segmentation ~0.5 ms, quad extraction ~1.5 ms, decoding ~10 ms and pose ~0.2 ms (~14.5 ms total). It predates decode-first ordering, 4-connectivity and the corner stage, and is kept only for context.</p>
-</div>
+<p>Per-stage latency depends on image resolution, marker count, and configuration profile. For methodology and end-to-end benchmark comparisons, see <a href="../../engineering/benchmarking/">Benchmarking</a>. Use <code>tracing</code> spans for microsecond-level per-stage instrumentation.</p>
 
 
 

@@ -1972,16 +1972,6 @@
       
         
       
-        
-      
-        
-      
-        
-      
-        
-      
-        
-      
     
     
     
@@ -2095,62 +2085,6 @@
     
   
     Micro-Benchmarking Guide
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/release_performance_20260418/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Locus Release Performance Report (2026-04-18)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/render_tag_sota_20260425/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Render-tag 1080p SOTA pursuit (2026-04-25)
   
 
     
@@ -2339,62 +2273,6 @@
   
   
     <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/sota_scoreboard_20261003/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    SOTA scoreboard checkpoint (2026-10-03)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/sota_scoreboard_20261002/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    SOTA scoreboard baseline (2026-10-02)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
       <a href="../../engineering/benchmarking/refine_variants_20260714/" class="md-nav__link">
         
   
@@ -2431,34 +2309,6 @@
     
   
     Model-based edge pose refinement — beating the rotation gap (2026-07-15, tuned 2026-07-17)
-  
-
-    
-  </span>
-  
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../../engineering/benchmarking/render_tag_2160p_20260425/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    2160p render_tag_hub recall lift (2026-04-25)
   
 
     
@@ -3064,15 +2914,6 @@ better translation and +~1 ms/frame. It requires camera intrinsics +
 <code>tag_size</code> (a no-op without them). <code>standard</code> and <code>grid</code> leave it off. See
 <a href="../../engineering/benchmarking/model_edge_refinement_20260715/"><code>model_edge_refinement_20260715.md</code></a>.</p>
 </blockquote>
-<div class="admonition note">
-<p class="admonition-title">Retired: ICRA 2020 table (April 2026)</p>
-<p>Earlier versions of this page reported ICRA 2020 forward recall of 96.2 % at
-0.315 px RMSE for <code>standard</code>. Those numbers come from the
-<a href="../../engineering/benchmarking/release_performance_20260418/">2026-04-18 release report</a>,
-measured on v0.3.1 with a soft-decision decoding mode that has since been
-removed, through the Python bench CLI rather than <code>cargo xtask sota</code>. The
-current ICRA comparison is the <code>cargo xtask sota</code> row above.</p>
-</div>
 <h2 id="how-to-read-these-numbers">How to read these numbers</h2>
 <ul>
 <li><strong>Recall</strong> — fraction of ground-truth tags whose ID was correctly
