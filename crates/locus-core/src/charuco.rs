@@ -707,17 +707,7 @@ mod tests {
     /// Singular-`Σ_c` rejection contract: every saddle that survives the
     /// extraction pass must carry a finite, non-NaN information matrix.
     ///
-    /// In practice the `compute_corner_covariance` Tikhonov-regularised
-    /// kernel returns positive-definite Σ_c by construction, so the
-    /// `try_inverse() → None` branch added in PR-C is defensive. This test
-    /// verifies the invariant the branch upholds (no NaN/infinite info
-    /// matrix reaches the LM), and is the appropriate observable since
-    /// the rejection helper is `pub(crate)`-inlined in `estimate_impl`.
-    ///
-    /// A uniform mid-grey image is the harshest realistic stress case: zero
-    /// Sobel gradient → minimal anisotropy → Tikhonov holds Σ_c at
-    /// `2.0 · I` (well-conditioned). Any accepted saddle must have a
-    /// finite `info`.
+    /// Verifies that admitted saddle information matrices are always finite.
     #[test]
     fn admitted_saddle_info_matrices_are_finite() {
         let config = CharucoTopology::new(4, 4, 0.04, 0.03, usize::MAX).unwrap();
@@ -745,9 +735,6 @@ mod tests {
         refiner.estimate(&view, &img, &intrinsics, &mut out, 0.0);
 
         // Whatever the count, every admitted info matrix must be finite.
-        // A singular Σ_c would have produced NaN entries in the inverse
-        // before PR-C's reject-and-skip policy; that path now bumps the
-        // skip counter without growing `num_accepted`.
         for i in 0..out.count {
             let info = refiner.scratch_info[i];
             for r in 0..2 {

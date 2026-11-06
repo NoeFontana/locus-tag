@@ -78,7 +78,7 @@ components survive). On dense scenes the candidate count exceeds
 1. *Pre-filter truncation by raster order* dropped tag-bearing
    candidates with high label indices when noise filled the first
    1024 slots (2160p recall stuck at 47/50). Fix: sort by
-   `pixel_count` descending. (`render_tag_2160p_20260425.md`)
+   `pixel_count` descending.
 2. *Pre-filter truncation by pixel-count* kept giant background blobs
    that geometric gates would have rejected anyway, and starved the
    downstream survivor set of true tag candidates (Brown–Conrady
@@ -257,9 +257,8 @@ not `high_accuracy`.**
   larger threshold tile sizes, opt-in 2× decimation** were tried as
   fixes for the 2160p recall gap. None moved the needle on detector
   recall — the gap was the SoA truncation bug, not segmentation.
-  Documented in `render_tag_2160p_20260425.md` §2.
-- **Latency negatives on the decode-first front end (2026-10-03,
-  [scoreboard checkpoint](sota_scoreboard_20261003.md)).**
+- **Latency negatives on the decode-first front end (2026-10-04,
+  [scoreboard checkpoint](sota_scoreboard_20261004.md)).**
   - **Area-averaged decimation 2** keeps decode and refinement at full
     resolution. It still loses recall to aruco_nano (Liu4K 66.6 →
     61.6 %, ICRA forward 73.4 → 44.5 %) and makes corners 30–100 %

@@ -87,12 +87,8 @@ At the start of each `detect()` call, the bump arena is reset in $O(1)$ time, fr
 1. **Sharpening** *(`standard`)* — an optional Laplacian sharpening pass into an arena buffer (`filter.rs`).
 2. **Tile statistics** — a single $O(N)$ pass reduces each `tile_size × tile_size` tile to its min and max.
 3. **Threshold map** — `threshold.mode` selects the rule. Segmentation reads the per-pixel threshold map: a pixel is foreground when `pixel < threshold_map[pixel]`, so a threshold of `0` means "never foreground".
-    - `TileMidExtreme` *(every shipped profile)* — `min + 179/400 · (max − min)` over the tile's 3×3 tile neighbourhood, rounded; `threshold::CUT_NUM`/`CUT_DEN` carry the fraction and the measurement behind it. Cheap and well suited to rectified, well-lit scenes.
-
-        The cut sits **below** the midpoint, which is where this mode used to cut and what its name records. The midpoint is the unbiased cut for an edge the optics resolved, but this map answers a question about *topology*, not geometry: segmentation reads it to decide which pixels are one marker, while corners come from the grey-scale refinement, which never reads it. A bright separation narrower than the point-spread function never reaches the bright level, so at the midpoint it falls on the dark side and the markers either side arrive as one connected component — which is traced once and reduced to one quadrilateral, losing both. Cutting at 179/400 (0.4475) shrinks every dark region by a fraction of the blur width and holds those separations open (EuRoC `cam_april` recall 86.0 → 92.1 %, Liu4K 37.2 → 44.6 %, 2026-10-06). The odd-looking denominator is load-bearing: the frontier was swept with a *truncated* cut, whose realized fraction sits about half a grey level under its nominal one, so the sweep's 0.45 has to be re-stated as 0.4475 to mean the same cut once the arithmetic is unbiased. A denominator of 20 cannot write that number down.
-
-        The two failure modes are symmetric and a single scalar must choose between them: cut too high and thin bright separations are swallowed (markers fuse), cut too low and thin dark strokes erode (markers shatter, costing small markers their one-module borders below about 0.42). Because it follows the local *extremes*, a flat tile also gets `t` at or just above its own grey level, so sensor noise speckles uniform regions (see the [recall lessons](../engineering/lessons/recall-quad-icra.md)).
-    - `LocalMean` *(opt-in)* — a per-pixel local mean over a `(2·local_mean_radius + 1)²` window minus an offset. It tracks the local *background level* instead of the local extremes. Computed with a sliding column-sum accumulator (one `u32` row per row-strip), not an integral image, so the result is independent of the strip size and of the rayon worker count.
+    - `TileMidExtreme` *(every shipped profile)* — `min + 179/400 · (max − min)` over the tile's 3×3 neighbourhood. Cutting slightly below the midpoint (0.4475) shrinks dark regions by a fraction of the blur width, preventing diagonally adjacent markers from fusing into single components while preserving thin borders.
+    - `LocalMean` *(opt-in)* — a per-pixel local mean over a `(2·local_mean_radius + 1)²` window minus an offset. It tracks the local *background level* instead of the local extremes. Computed with a sliding column-sum accumulator, not an integral image.
 
 **Module:** `threshold.rs`, `filter.rs` | **Complexity:** $O(N)$
 
@@ -315,7 +311,4 @@ sequenceDiagram
 
 ## Latency
 
-Per-stage latency depends on the image, the marker count and the profile; current end-to-end numbers per benchmark (1 thread, verified hardware) are in the [2026-10-04 EuRoC report](../engineering/benchmarking/euroc_sota_20261004.md#latency) and the [2026-10-04 scoreboard](../engineering/benchmarking/sota_scoreboard_20261004.md). For per-stage timing, use the `tracing` spans (see [Benchmarking](../engineering/benchmarking.md)).
-
-!!! note "Historical per-stage budget (April 2026)"
-    An April 2026 estimate for 50 tags at 720p on a desktop CPU put preprocessing at ~0.9 ms, segmentation ~0.5 ms, quad extraction ~1.5 ms, decoding ~10 ms and pose ~0.2 ms (~14.5 ms total). It predates decode-first ordering, 4-connectivity and the corner stage, and is kept only for context.
+Per-stage latency depends on image resolution, marker count, and configuration profile. For methodology and end-to-end benchmark comparisons, see [Benchmarking](../engineering/benchmarking.md). Use `tracing` spans for microsecond-level per-stage instrumentation.

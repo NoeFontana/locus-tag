@@ -2,141 +2,98 @@
 
 use thiserror::Error;
 
-/// Errors that can occur during detector configuration validation.
+/// Configuration validation errors.
 #[derive(Debug, Clone, Error)]
 pub enum ConfigError {
-    /// Threshold tile size must be >= 2.
+    /// Tile size below minimum of 2.
     #[error("threshold_tile_size must be >= 2, got {0}")]
     TileSizeTooSmall(usize),
-    /// Local-mean window radius must be in `[1, 127]` (`threshold::MAX_LOCAL_MEAN_RADIUS`).
+    /// Radius outside `[1, 127]`.
     #[error("threshold_local_mean_radius must be in [1, 127], got {0}")]
     InvalidLocalMeanRadius(usize),
-    /// Noise-calibrated threshold offset must be finite and > 0.
+    /// Noise multiplier non-positive or non-finite.
     #[error("threshold_noise_k must be finite and > 0, got {0}")]
     InvalidNoiseK(f32),
-    /// Border-ring error budget must lie in [0, 1].
+    /// Border error budget outside `[0, 1]`.
     #[error("decoder_max_border_error_rate must be in [0, 1], got {0}")]
     InvalidBorderErrorRate(f32),
-    /// Marker border width must lie in `1..=MAX_MARKER_BORDER_BITS`.
+    /// Border bit count outside supported bounds.
     #[error("decoder_marker_border_bits must be in 1..={max}, got {0}", max = crate::config::MAX_MARKER_BORDER_BITS)]
     InvalidMarkerBorderBits(u8),
-    /// Decimation factor must be >= 1.
+    /// Decimation factor below 1.
     #[error("decimation factor must be >= 1, got {0}")]
     InvalidDecimation(usize),
-    /// Upscale factor must be >= 1.
+    /// Upscale factor below 1.
     #[error("upscale_factor must be >= 1, got {0}")]
     InvalidUpscaleFactor(usize),
-    /// Minimum fill ratio must be in [0.0, 1.0].
+    /// Fill ratio range invalid or inverted.
     #[error("fill ratio range invalid: min={min}, max={max} (must be 0.0..=1.0, min < max)")]
     InvalidFillRatio {
-        /// The minimum fill ratio that was set.
+        /// Lower fill ratio bound.
         min: f32,
-        /// The maximum fill ratio that was set.
+        /// Upper fill ratio bound.
         max: f32,
     },
-    /// Minimum edge length must be positive.
+    /// Minimum edge length non-positive.
     #[error("quad_min_edge_length must be positive, got {0}")]
     InvalidEdgeLength(f64),
-    /// Structure tensor radius must be in `[1, 8]` (a non-empty window within the
-    /// supported kernel bound).
+    /// Structure tensor radius outside `[1, 8]`.
     #[error("structure_tensor_radius must be in [1, 8], got {0}")]
     InvalidStructureTensorRadius(u8),
-    /// Pose consistency FPR must be in `[0.0, 1.0)`.
-    ///
-    /// `0.0` disables the gate; positive values are interpreted as a target
-    /// false-positive rate from which the chi-squared critical value is
-    /// derived. Values >= 1.0 would accept everything (degenerate gate)
-    /// and are explicitly rejected to surface configuration mistakes.
+    /// Pose consistency FPR outside `[0.0, 1.0)`.
     #[error("pose_consistency_fpr must be in [0.0, 1.0), got {0}")]
     InvalidPoseConsistencyFpr(f64),
-    /// Outlier-drop d² threshold must be `>= 0.0` and finite.
-    ///
-    /// `0.0` disables the mechanism. Positive finite values are interpreted
-    /// as the squared-Mahalanobis trigger above which the worst corner is
-    /// masked and the LM is re-run. Negative or non-finite values are
-    /// rejected to surface configuration mistakes.
+    /// Outlier-drop d² threshold negative or non-finite.
     #[error("outlier_drop_d2_threshold must be finite and >= 0.0, got {0}")]
     InvalidOutlierDropD2Threshold(f64),
-    /// EdLines is geometrically incompatible with Erf corner refinement.
-    ///
-    /// Erf performs an independent 1-D search per corner which destroys the
-    /// planarity constraint established by the joint Gauss-Newton solver in
-    /// the EdLines pipeline, degrading corner RMSE from ~0.17 px to ~0.59 px.
+    /// EdLines joint Gauss-Newton solver is incompatible with 1D ERF corner refinement.
     #[error(
         "EdLines + Erf refinement are incompatible: use CornerRefinementMode::None with EdLines"
     )]
     EdLinesIncompatibleWithErf,
-    /// EdLines is geometrically incompatible with distorted cameras.
-    ///
-    /// EdLines' Huber IRLS line fit, micro-ray parabola, and GN refinement all
-    /// assume Euclidean pixel geometry. A Brown-Conrady or Kannala-Brandt
-    /// intrinsic bends marker edges into curves, invalidating that assumption.
-    /// Use `QuadExtractionMode::ContourRdp` when passing distortion coefficients.
+    /// EdLines line fitting assumes Euclidean pixel geometry and does not support lens distortion.
     #[error(
         "EdLines is geometrically incompatible with distorted cameras (BrownConrady / \
          KannalaBrandt): use QuadExtractionMode::ContourRdp"
     )]
     EdLinesUnsupportedWithDistortion,
-    /// `upscale_factor > 1` combined with a declared lens model.
-    ///
-    /// Straight-space extraction runs on the upscaled grid but is handed the **original**
-    /// intrinsics, so every normalized radius it computes is inflated by `upscale_factor` and
-    /// the lens is applied in a frame the camera never produced — silently, with every bit
-    /// sample and every unprojection wrong by that factor. Decimation has no such problem
-    /// because `ScaledIntrinsics` rescales the focals and principal point to match.
-    ///
-    /// Rejected rather than fixed because the fix is a coordinate-frame change through the
-    /// whole straight-space path, and nothing has yet needed the combination; the pipeline
-    /// already rejects the analogous distortion + static-EdLines pairing.
+    /// Straight-space extraction on an upscaled grid cannot apply unscaled lens intrinsics.
     #[error(
         "upscale_factor > 1 is not supported with a declared lens model (BrownConrady / \
          KannalaBrandt): straight-space extraction would apply the lens on the upscaled grid \
          using un-upscaled intrinsics"
     )]
     UpscaleUnsupportedWithDistortion,
-    /// `AdaptivePpb` policy had `low_extraction == high_extraction`.
-    ///
-    /// A degenerate adaptive policy is a configuration mistake — both
-    /// branches would produce identical behavior. Use `Static` instead.
+    /// Degenerate adaptive policy where low and high modes are identical.
     #[error(
         "AdaptivePpb policy has identical low/high extraction modes; \
          use QuadExtractionPolicy::Static for single-mode operation"
     )]
     AdaptivePolicyDegenerate,
-    /// `AdaptivePpb` policy combined with a static `refinement_mode` other than `None`.
-    ///
-    /// The adaptive routes carry their own refinement modes; a static mode alongside them
-    /// would be silently read by the stages that are not route-aware, so it must be `None`.
+    /// Non-None static refinement passed alongside route-carrying adaptive policy.
     #[error(
         "AdaptivePpb policy requires refinement_mode = None (the routes carry their own \
          refinement modes), got {0:?}"
     )]
     AdaptivePolicyStaticRefinement(crate::config::CornerRefinementMode),
-    /// `AdaptivePpb` policy threshold fell outside the valid open interval.
-    ///
-    /// The PPB threshold must lie strictly inside `(1.0, 5.0)`. Values at or
-    /// outside the endpoints are degenerate: `<=1.0` always routes to the
-    /// high branch, `>=5.0` effectively never does.
+    /// Adaptive PPB threshold outside `(1.0, 5.0)`.
     #[error("AdaptivePpb threshold must be in (1.0, 5.0), got {0}")]
     AdaptivePolicyThresholdOutOfRange(f32),
-    /// Profile JSON failed to parse (malformed syntax or unknown fields).
-    ///
-    /// `serde_json::Error` is not `Clone`, so its `Display` form is captured
-    /// at construction time. The wrapping `ConfigError` stays `Clone`.
+    /// Profile JSON syntax error.
     #[error("profile JSON parse error: {0}")]
     ProfileParse(String),
 }
 
-/// Errors that can occur during tag detection.
+/// Pipeline runtime errors.
 #[derive(Debug, Clone, Error)]
 pub enum DetectorError {
-    /// Image preprocessing (decimation or upscaling) failed.
+    /// Preprocessing failure.
     #[error("preprocessing failed: {0}")]
     Preprocessing(String),
-    /// Image view construction failed (invalid dimensions/stride).
+    /// Invalid image dimensions or layout.
     #[error("invalid image: {0}")]
     InvalidImage(String),
-    /// Configuration validation failed.
+    /// Configuration validation error.
     #[error("config error: {0}")]
     Config(#[from] ConfigError),
 }

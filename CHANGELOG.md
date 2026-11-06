@@ -5,6 +5,10 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Changed
+
+- **Codebase and documentation conciseness overhaul.** Trimmed over 1,500 lines across the codebase and documentation. Replaced verbose narrative comments with concise invariants ("why, not what") across `locus-core` and `locus-py`. Pruned superseded development memos, obsolete plans, and dated snapshot scoreboards in favor of a single source of truth across docs and configuration profiles.
+
 ### Fixed
 
 - **Split pieces get their corners back.** The seeded split's opening cuts the neck where a

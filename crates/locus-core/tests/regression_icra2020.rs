@@ -390,10 +390,7 @@ impl DatasetProvider for FixtureProvider {
     fn iter(&self) -> Box<dyn Iterator<Item = DatasetItem> + '_> {
         // Find pairs of .png and .json
         let walker = walkdir::WalkDir::new(&self.fixtures_dir).sort_by_file_name();
-        // When LOCUS_STRICT_FIXTURE_CHECK=1, a .png without a sibling .json is
-        // a fail-fast condition (closes the same silent-skip footgun as
-        // PR #252). Unset: warn + skip per file so ad-hoc `cargo test` runs on
-        // partially-populated fixture trees still work.
+        // Strict check fails fast if a .png lacks a corresponding .json annotation.
         let strict_check = std::env::var("LOCUS_STRICT_FIXTURE_CHECK")
             .map(|v| v == "1")
             .unwrap_or(false);

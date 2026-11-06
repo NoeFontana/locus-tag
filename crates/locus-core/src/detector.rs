@@ -182,13 +182,7 @@ impl Detector {
     }
 }
 
-/// The frame's tabulated radial inverse, as built by the quad-extraction dispatch.
-///
-/// Stage 3 builds the table in the same dispatch that reaches the decode stage below, so
-/// `built` is always `Some` here. It is rebuilt rather than defaulted if that ever stops being
-/// true: silently continuing without a camera model is exactly how the distortion path
-/// disappeared from measurement in #443, and a rebuild costs tens of microseconds where a
-/// silent pinhole fallback costs correctness.
+/// Resolves the frame's tabulated radial inverse, rebuilding in arena if not already initialized.
 #[cfg(feature = "non_rectified")]
 fn resolve_radial_table<'a, C: crate::camera::CameraModel>(
     built: Option<crate::camera::RadialInverseTable<'a>>,

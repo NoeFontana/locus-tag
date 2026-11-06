@@ -515,23 +515,8 @@ impl Pose {
         intrinsics.distort_normalized(p_cam.x / z, p_cam.y / z)
     }
 
-    /// Apply the **right** (body-frame) perturbation `δ = [ω; v]` (rotation-first, matching
-    /// the LM Jacobian column layout and `helicoid`'s tangents): `R' = R · Exp(ω)`,
-    /// `t' = t + R · v`. That is `helicoid`'s `Decoupled` chart, not `T · Exp(δ)`: the
-    /// increment is expressed in the tag's *own* frame and rotated into the camera by the
-    /// current `R`, with no `V(ω)`.
-    ///
-    /// This is the single manifold update shared by **all** pose LMs (the corner
-    /// unweighted/weighted solvers and `board.rs`). The body frame is used
-    /// deliberately: because the object points are symmetric about the body origin,
-    /// it decouples rotation from translation in the normal equations (`JᵀWJ`
-    /// condition number ~3.4× better, rot↔trans coupling ~0.999→0.06), yielding
-    /// faster convergence and a body-frame pose covariance — see
-    /// `docs/explanation/coordinates.md` and the `right_perturbation` study.
-    ///
-    /// The rotation is a product of unit quaternions, which keeps its norm to a few
-    /// ulps per step; over the ≤20 LM iterations the drift stays far inside
-    /// `helicoid`'s unit tolerance and needs no renormalization.
+    /// Apply right (body-frame) perturbation `δ = [ω; v]`: `R' = R · Exp(ω)`, `t' = t + R · v`.
+    /// Decouples rotation from translation in normal equations for symmetric object points.
     #[inline]
     #[must_use]
     pub(crate) fn retract(&self, delta: &Vector6<f64>) -> Self {
@@ -2653,9 +2638,7 @@ mod tests {
         sorted[((q * (sorted.len() - 1) as f64).round()) as usize]
     }
 
-    // EXPERIMENT 1 — unit-rescale invariance. The identical pixel-space problem
-    // is posed at translation scales spanning 1e4×. A *unit-sound* gate must give
-    // scale-independent iterations and accuracy; the mixed-unit L2 gate cannot.
+    // Unit-rescale invariance across translation scales spanning 1e4x.
     #[test]
     #[allow(
         clippy::cast_precision_loss,
@@ -2833,14 +2816,7 @@ mod tests {
         (jtj, jtr, cost)
     }
 
-    // EXPERIMENT 3 — board/wide-baseline regime (where #338's ChArUco rotation-p99
-    // win lives). Confirms the function-tolerance gate is accuracy-neutral on a
-    // 36-point coplanar board, INCLUDING gross outliers — the high-residual regime a
-    // relative-cost gate is most at risk of exiting early on (large cost → a real
-    // step's relative reduction can dip below func_tol while the gradient is still
-    // large). Two points per trial are corrupted by ±40 px; the Huber kernel
-    // down-weights them and the gate must still reach the converged (robust) pose.
-    // Unlike Exp 1 this ASSERTS neutrality (a real regression guard), not just prints.
+    // Confirms function-tolerance convergence is robust on a coplanar board with gross outliers.
     #[test]
     #[allow(
         clippy::cast_precision_loss,

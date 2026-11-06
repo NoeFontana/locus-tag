@@ -112,16 +112,8 @@ fn high_accuracy_profile_shares_standard_geometry() {
     let cfg = DetectorConfig::from_profile("high_accuracy");
     let std_cfg = DetectorConfig::from_profile("standard");
 
-    // What makes this the accuracy profile is its pose layer and its stricter detection
-    // gates, not a separate corner estimator. It had one until 2026-10-07 -- EdLines
-    // whole-edge corners under an `AdaptivePpb` router -- and that was worse on every
-    // axis measured, including EuRoC, the only real imagery here: recall 38.4 -> 53.7 %,
-    // false positives 32 -> 0, LOO corner median 0.4138 -> 0.2825 px. See
-    // `profiles/README.md`.
-    //
-    // Asserted against `standard` rather than against literals, so the two cannot drift
-    // apart silently: that drift is exactly what made the tile cut look like a geometry
-    // regression, since EdLines was the only cut-sensitive corner path in the tree.
+    // `high_accuracy` shares `standard`'s corner geometry; accuracy gains come from pose refinement.
+    // Asserted against `standard` to prevent silent drift between the two profiles.
     assert_eq!(cfg.quad_extraction_mode, std_cfg.quad_extraction_mode);
     assert_eq!(cfg.quad_extraction_policy, std_cfg.quad_extraction_policy);
     assert_eq!(cfg.refinement_mode, std_cfg.refinement_mode);

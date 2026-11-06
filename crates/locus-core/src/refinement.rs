@@ -127,28 +127,17 @@ const SUBPIX_MAX_HALF: u32 = 4;
 pub(crate) const MIN_CORNER_SUPPORT_PX: f32 = (SUBPIX_MIN_HALF + 1) as f32;
 /// Candidate window half-widths as fractions of the marker cell.
 const SUBPIX_CELL_FRACTIONS: [f64; 3] = [0.3, 0.5, 0.75];
-/// Largest fraction of a cell the smallest (2 px) window may cover: markers with cells under
-/// 2 / 0.6 ≈ 3.3 px keep their seed corners. Measured on ChArUco boards of 2.3–2.9 px cells,
-/// where the 2 px window degraded board rotation (0.07° → 0.21° on 2.9 px cells); neutral on
-/// the ICRA, render-tag, AprilGrid, Liu4K and EuRoC benchmarks.
+/// Maximum cell fraction covered by the minimum window (2 px) to prevent window overfill.
 const SUBPIX_MIN_WINDOW_CELL_FRACTION: f64 = 0.6;
-/// The window of a marker under that floor: only a point-symmetric junction can be refined
-/// there ([`subpix_marker_corners`]).
+/// Window size for point-symmetric junctions under the cell floor.
 const SUBPIX_SYMMETRIC_WINDOWS: [u32; 1] = [SUBPIX_MIN_HALF];
-/// Largest [`Subpix::asymmetry`] of a junction refined under the cell floor. An ideal
-/// X-junction reads 0, an L-corner 4/3 and a straight edge 2. Measured on AprilGrid renders
-/// against the truth (see `subpix_marker_corners`).
+/// Maximum window asymmetry for point-symmetric junctions under the cell floor.
 const SUBPIX_MAX_ASYMMETRY: f64 = 0.1;
-/// The narrowest border (px) [`corner_subpix_half_windows`] gives a window: `2 / 0.6 ≈ 3.3`.
-/// One cell under the default 1-bit border.
+/// Minimum border width in pixels to attempt subpixel refinement (`2 / 0.6 ≈ 3.3 px`).
 pub(crate) const SUBPIX_MIN_CELL_PX: f64 = SUBPIX_MIN_HALF as f64 / SUBPIX_MIN_WINDOW_CELL_FRACTION;
-/// Uncertainty ratio past which a smaller window is preferred over a larger one. Both
-/// uncertainties are residual-variance estimates from a few dozen effective samples, whose
-/// ratio is F-distributed; a factor of 2 is about where a difference stops being noise. Taking
-/// the plain minimum instead picks small windows on noise and costs EuRoC LOO 0.30 → 0.39 px.
+/// Uncertainty ratio threshold above which a smaller window is preferred.
 const SUBPIX_SIGNIFICANT_RATIO: f64 = 2.0;
-/// Patch side for the largest window: `2·(MAX + 1) + 1` samples, one ring beyond the window
-/// for the central-difference gradients.
+/// Patch dimension for maximum window plus 1-pixel gradient ring.
 const SUBPIX_PATCH_MAX: usize = 2 * (SUBPIX_MAX_HALF as usize + 1) + 1;
 
 /// Candidate window half-widths of [`corner_subpix`] for a marker whose black border is
@@ -184,17 +173,9 @@ pub(crate) fn corner_subpix_half_windows(border_px: f64) -> ([u32; 3], usize) {
     }
     (out, n)
 }
-/// Reach (px) of the X-junction fit's disk past the border's width: the blur of the border's
-/// inner edge and the connector's far edges. Measured on noiseless rendered AprilGrids (2-bit
-/// border, 15-25 px tags): median error 0.026 px at −0.5 px, 0.023 at 0, 0.021 at 0.5, 0.020
-/// at 1.0, 0.022 at 1.5 and 0.034 at 2.5.
+/// Margin added to border width for X-junction disk fitting.
 const XJ_RADIUS_MARGIN_PX: f64 = 0.75;
-/// Extra reach (px) of the X-junction test's probes past the half-border: under the cell floor
-/// a corner can sit at its quad seed, up to about 1 px inside the junction, and the outward
-/// probe must still reach the connector. Measured on the hub AprilGrid (24 px tags): +0.5 px
-/// lets the fit place 24 px markers whose corners sat 0.8 px inward (`standard` board p95
-/// translation 0.76 → 0.42 mm); +0.25 px is not enough, and a full border width reaches the
-/// bits on large tags.
+/// Outward probe margin for detecting touching connector squares.
 const XJ_SEED_MARGIN_PX: f64 = 0.5;
 /// Iteration cap and step tolerance (px) of [`corner_subpix`] (the `cv::cornerSubPix` values
 /// aruco_nano uses).

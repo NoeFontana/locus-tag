@@ -94,14 +94,6 @@ changes on `standard` is analysed in the
 > `tag_size` (a no-op without them). `standard` and `grid` leave it off. See
 > [`model_edge_refinement_20260715.md`](../engineering/benchmarking/model_edge_refinement_20260715.md).
 
-!!! note "Retired: ICRA 2020 table (April 2026)"
-    Earlier versions of this page reported ICRA 2020 forward recall of 96.2 % at
-    0.315 px RMSE for `standard`. Those numbers come from the
-    [2026-04-18 release report](../engineering/benchmarking/release_performance_20260418.md),
-    measured on v0.3.1 with a soft-decision decoding mode that has since been
-    removed, through the Python bench CLI rather than `cargo xtask sota`. The
-    current ICRA comparison is the `cargo xtask sota` row above.
-
 ## How to read these numbers
 
 - **Recall** — fraction of ground-truth tags whose ID was correctly

@@ -53,16 +53,7 @@ pub(crate) type ExtractionResult = ([Point; 4], [Point; 4], CornerCovariances, u
 pub use crate::Point;
 
 /// Component label indices sorted by pixel-count descending.
-///
-/// Iteration order is load-bearing for snapshot stability on noisy
-/// renders (ICRA forward): funnel/decoder dedup is processing-order-
-/// sensitive, and large-blob-first ordering lifts ICRA `standard`
-/// recall by ~2.8 pp vs natural-label order. The previous (5a2f438)
-/// implementation also truncated to `MAX_CANDIDATES` *before* per-
-/// component geometric filtering, which on dense distortion scenes
-/// dropped tag-sized candidates in favour of large background blobs
-/// the gates would have rejected anyway. Truncation now lives after
-/// `extract_single_quad` (caller-side), driven by survivor count.
+/// Processing largest blobs first stabilizes decoder deduplication on noisy frames.
 #[inline]
 fn pixel_count_descending_order(stats: &[crate::segmentation::ComponentStats]) -> Vec<u32> {
     let mut order: Vec<u32> = (0..stats.len() as u32).collect();
@@ -74,17 +65,8 @@ fn pixel_count_descending_order(stats: &[crate::segmentation::ComponentStats]) -
     order
 }
 
-/// Resolves the per-candidate (extraction_mode, refinement_mode, route_label,
-/// ppb_estimate) tuple from the policy. Under `Static` the PPB div is skipped
-/// (returned as `0.0`); under `AdaptivePpb` the strict `<` tie-break at the
-/// threshold protects snapshot stability against floating-point drift.
-///
-/// `force_low_route` collapses `AdaptivePpb` to its low-PPB branch
-/// (`ContourRdp` + the low-route refinement). Used on the distortion
-/// path where EdLines is geometrically incompatible — without forcing
-/// the low route, high-PPB candidates would otherwise be paired with
-/// the high-route refinement (`None`), losing
-/// the Erf sub-pixel pass and dropping aprilgrid recall ~5 pp.
+/// Resolves per-candidate extraction and refinement routes from configuration policy.
+/// `force_low_route` enforces ContourRdp when lens distortion is present.
 #[inline]
 fn resolve_route(
     config: &crate::config::DetectorConfig,
