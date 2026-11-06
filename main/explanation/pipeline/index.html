@@ -942,10 +942,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4e-decode-first-verification" class="md-nav__link">
+  <a href="#4e-soft-acceptance-within-unique-decoding" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4e. Decode-first verification
+        4e. Soft acceptance within unique decoding
       
     </span>
   </a>
@@ -953,10 +953,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4f-near-miss-recovery" class="md-nav__link">
+  <a href="#4f-decode-first-verification" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4f. Near-miss recovery
+        4f. Decode-first verification
       
     </span>
   </a>
@@ -964,10 +964,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4g-seeded-split-of-fused-components-quadsplit_fused-grid" class="md-nav__link">
+  <a href="#4g-near-miss-recovery" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4g. Seeded split of fused components (quad.split_fused, grid)
+        4g. Near-miss recovery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4h-seeded-split-of-fused-components-quadsplit_fused-grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4h. Seeded split of fused components (quad.split_fused, grid)
       
     </span>
   </a>
@@ -3161,10 +3172,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4e-decode-first-verification" class="md-nav__link">
+  <a href="#4e-soft-acceptance-within-unique-decoding" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4e. Decode-first verification
+        4e. Soft acceptance within unique decoding
       
     </span>
   </a>
@@ -3172,10 +3183,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4f-near-miss-recovery" class="md-nav__link">
+  <a href="#4f-decode-first-verification" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4f. Near-miss recovery
+        4f. Decode-first verification
       
     </span>
   </a>
@@ -3183,10 +3194,21 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#4g-seeded-split-of-fused-components-quadsplit_fused-grid" class="md-nav__link">
+  <a href="#4g-near-miss-recovery" class="md-nav__link">
     <span class="md-ellipsis">
       
-        4g. Seeded split of fused components (quad.split_fused, grid)
+        4g. Near-miss recovery
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#4h-seeded-split-of-fused-components-quadsplit_fused-grid" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4h. Seeded split of fused components (quad.split_fused, grid)
       
     </span>
   </a>
@@ -3517,12 +3539,14 @@
 <p><strong>Module:</strong> <code>decoder.rs</code>, <code>dictionaries.rs</code>, <code>strategy.rs</code></p>
 <h3 id="4d-border-ring-evidence">4d. Border-ring evidence</h3>
 <p>A match within the family's Hamming budget must also show the marker's <strong>dark border ring</strong>: the <code>4·(d + 1)</code> ring cells around a <code>d × d</code> payload are sampled through the homography of the reported (unscaled) quad, and at most <code>decoder.max_border_error_rate</code> of them may read bright. The default (<code>None</code>) is the family's own error density, <code>max_hamming / bit_count</code> (for 36h11: 2/36, i.e. one ring cell in 28). <code>high_accuracy</code> disables the check (rate 1.0). Texture that happens to land near a codeword rarely has a uniformly dark ring.</p>
-<h3 id="4e-decode-first-verification">4e. Decode-first verification</h3>
-<p>Under decode-first ordering a match from seed corners is provisional. The candidate gets the refinement Stage 3 skipped — quad-stage corner refinement, the edge-contrast gate, then the decoder's ERF pass — and is re-decoded at the scale that matched. It is accepted only if the refined quad decodes the <strong>same id</strong> within the budget and passes the ring check with the full budget (the seed itself is checked with the looser recovery tolerance, since seed ring samples can land in the white surround). Otherwise the match is discarded. Refine-first ordering instead re-decodes the ERF-refined finalist and keeps the refined corners if the id holds and the distance is not worse.</p>
-<h3 id="4f-near-miss-recovery">4f. Near-miss recovery</h3>
+<h3 id="4e-soft-acceptance-within-unique-decoding">4e. Soft acceptance within unique decoding</h3>
+<p>Hard bits discard how sure each one is. On small or blurred markers (about 1.2-1.5 px per cell) blur flips the bits next to a bright neighbour, but those sit near their thresholds; a candidate that is no marker contradicts a codeword with confident bits or shows a bright border. So a match past the hard budget but within half the family's minimum distance (5 for 36h11 and ArUcoMip36h12), where the nearest codeword is unique, stands if the marker's evidence supports it: the summed confidence (distance from threshold) of the payload bits that disagree with the codeword, plus that of the border cells on the bright side, is at most 2 % of the summed confidence of every bit and border cell. The rule never rescues an in-budget match whose ring failed. Decode-first matches are verified on the refined quad by the same rule. It applies only where random bits rarely reach that radius at all (it lies within the recovery window, §4g), so the evidence is a second, independent guard: not tag16h5, whose radius 2 exceeds its window of 1. An explicit <code>decoder.max_hamming_error</code> is a hard cap and disables it.</p>
+<h3 id="4f-decode-first-verification">4f. Decode-first verification</h3>
+<p>Under decode-first ordering a match from seed corners is provisional. The candidate gets the refinement Stage 3 skipped — quad-stage corner refinement, the edge-contrast gate, then the decoder's ERF pass — and is re-decoded at the scale that matched. It is accepted only if the refined quad decodes the <strong>same id</strong> and passes the acceptance rule again: within the budget the ring check with the full budget, past it the soft rule of §4e (the seed itself is checked with the looser recovery tolerance, since seed ring samples can land in the white surround). Otherwise the match is discarded. Refine-first ordering instead re-decodes the ERF-refined finalist and keeps the refined corners if the id holds and the distance is not worse.</p>
+<h3 id="4g-near-miss-recovery">4g. Near-miss recovery</h3>
 <p>A candidate whose best distance exceeds the budget but lies within the family's <strong>recovery window</strong> gets a second chance. The window is the largest Hamming distance that uniformly random bits reach with probability at most 0.1 (union bound over every rotated code): 6 for 36h11 and ArUcoMip36h12, 1 for 16h5, 0 for ArUco 4x4_100. Recovery also requires the seed to show a dark ring (at most 20 % bright cells), which skips most texture near-misses. It runs the decode-first refinement with the scale retries, then a coarse corner-nudge search (±0.2 px, two passes); any acceptance still needs the full ring budget.</p>
 <p><strong>Module:</strong> <code>decoder.rs</code> | <strong>Complexity:</strong> <span class="arithmatex">\(O(Q)\)</span></p>
-<h3 id="4g-seeded-split-of-fused-components-quadsplit_fused-grid">4g. Seeded split of fused components (<code>quad.split_fused</code>, <code>grid</code>)</h3>
+<h3 id="4h-seeded-split-of-fused-components-quadsplit_fused-grid">4h. Seeded split of fused components (<code>quad.split_fused</code>, <code>grid</code>)</h3>
 <p>Ink spread and blur close the diagonal contact where two dark squares meet corner to corner. On Kalibr's AprilGrid every tag touches its neighbours' connector squares that way, so one component can hold a tag and its connectors, or several tags. Its outline is then no single marker's: it either traces no quad or traces one that does not decode.</p>
 <p>After the decode pass, each such component that can hold two markers (a failed candidate's, or one that traced no quad) is eroded by a 2 × 2 square. That opens strokes one pixel wide and the diagonal pinch where ink spread joins two squares at an X-junction (the cores are labelled 4-connected), while a marker keeps a core provided its border is at least 2 px wide. A 3 × 3 square also opened 2 px borders, which fisheye compression leaves at the rim, and broke rim tags into fragments. Each core of at least a marker's size, <code>4·(2·cells/border − 2)</code> px, is dilated back (a morphological opening, labelled per core). The result is the marker without its connectors and neck stubs, which is exactly what its outer contour needs.</p>
 <p>The pieces go through Stage 3's gates and tracing, and then through the decode pass, as candidates appended after every first-pass candidate. They therefore never displace one, and the slots already settled are not re-decoded. The erosion, labelling and opening all run on the component's runs, so their cost follows its run count rather than its bounding box.</p>
