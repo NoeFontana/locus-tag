@@ -598,12 +598,12 @@ fn extract_single_quad(
     None
 }
 
-/// Shortest side (px) whose middle supports a line fit: about eight contour points. Shorter
-/// sides' staircase fits move sound corners (measured: 12 px rendered tags −2.9 pp recall).
+/// Shortest side, in contour px, whose middle supports a line fit (about eight points).
+/// Shorter sides' staircase fits move sound corners (measured: 12 px rendered tags −2.9 pp).
 const CHAMFER_MIN_SIDE_PX: f64 = 14.0;
 
 /// A vertex moves to its sides' intersection only if that is farther than the contour's own
-/// quantisation (px).
+/// quantisation, one contour px.
 const CHAMFER_MIN_MOVE_PX: f64 = 1.0;
 
 /// Moves each chamfered vertex of the four `corners` to the intersection of its two sides'
@@ -614,57 +614,61 @@ const CHAMFER_MIN_MOVE_PX: f64 = 1.0;
 /// the corner is chamfered and the vertex lands at one end of the chamfer, up to ~3 px along
 /// a side: on TUM-VI calibration frames that, not blur, is why tags fail to decode. The sides
 /// are intact, so their intersection is the corner. A chamfer only ever truncates, so only an
-/// outward move of more than `CHAMFER_MIN_MOVE_PX`, and at most a quarter side, is taken.
+/// outward move of more than `CHAMFER_MIN_MOVE_PX`, and at most a quarter of either side, is
+/// taken. A side too short, too sparse, or whose fit turns away from it fixes neither of its
+/// corners.
 fn restore_chamfered_corners(contour: &[Point], corners: &mut [Point]) {
     if corners.len() != 4 {
         return;
     }
-    // Each side's line through its middle: (centroid, unit direction).
-    let mut lines = [([0.0f64; 2], [0.0f64; 2]); 4];
-    let mut min_side = f64::INFINITY;
+    // Each side's line through its middle: (point, unit direction, side length).
+    let mut lines = [None::<([f64; 2], [f64; 2], f64)>; 4];
     for (side, line) in lines.iter_mut().enumerate() {
         let (start, end) = (corners[side], corners[(side + 1) % 4]);
         let length = (end.x - start.x).hypot(end.y - start.y);
-        min_side = min_side.min(length);
         if length < CHAMFER_MIN_SIDE_PX {
-            return;
+            continue;
         }
         let along = [(end.x - start.x) / length, (end.y - start.y) / length];
-        let mut moments = [0.0f64; 6]; // n, Σx, Σy, Σxx, Σyy, Σxy
+        // Moments relative to `start`: raw image coordinates (up to ~4e3) would cancel in
+        // Σxx/n − x̄² against a sub-pixel perpendicular variance.
+        let mut moments = crate::moments::MomentAccumulator::new();
         for p in contour {
             let rel = [p.x - start.x, p.y - start.y];
             let t = (rel[0] * along[0] + rel[1] * along[1]) / length;
             let off = rel[0] * along[1] - rel[1] * along[0];
             if (0.2..=0.8).contains(&t) && off.abs() <= 1.5 {
-                for (m, v) in
-                    moments
-                        .iter_mut()
-                        .zip([1.0, p.x, p.y, p.x * p.x, p.y * p.y, p.x * p.y])
-                {
-                    *m += v;
-                }
+                moments.add(rel[0], rel[1], 1.0);
             }
         }
-        let count = moments[0];
-        if count < 3.0 {
-            return;
+        let (Some(mean), Some(cov)) = (moments.centroid(), moments.covariance()) else {
+            continue;
+        };
+        // A chamfer tilts the neighbouring side's chord, so its band can keep only a few points
+        // at the far end of the side: a spread or count floor costs real recall (TUM-VI
+        // −0.1 to −0.35 pp). The direction check below is what guards a sparse fit.
+        if moments.sum_w < 3.0 {
+            continue;
         }
-        let mean = [moments[1] / count, moments[2] / count];
-        let cov_xx = moments[3] / count - mean[0] * mean[0];
-        let cov_yy = moments[4] / count - mean[1] * mean[1];
-        let cov_xy = moments[5] / count - mean[0] * mean[1];
-        // Principal direction of the scatter.
-        let angle = 0.5 * (2.0 * cov_xy).atan2(cov_xx - cov_yy);
-        *line = (mean, [angle.cos(), angle.sin()]);
+        // Principal direction of the scatter; within 30° of the side, or it fitted something
+        // else.
+        let angle = 0.5 * (2.0 * cov[(0, 1)]).atan2(cov[(0, 0)] - cov[(1, 1)]);
+        let dir = [angle.cos(), angle.sin()];
+        if (dir[0] * along[0] + dir[1] * along[1]).abs() < 0.866 {
+            continue;
+        }
+        *line = Some(([start.x + mean.x, start.y + mean.y], dir, length));
     }
-    let max_move = 0.25 * min_side;
     let centre = [
         0.25 * (corners[0].x + corners[1].x + corners[2].x + corners[3].x),
         0.25 * (corners[0].y + corners[1].y + corners[2].y + corners[3].y),
     ];
     for (k, corner) in corners.iter_mut().enumerate() {
-        let (before_at, before_dir) = lines[(k + 3) % 4];
-        let (after_at, after_dir) = lines[k];
+        let (Some((before_at, before_dir, before_len)), Some((after_at, after_dir, after_len))) =
+            (lines[(k + 3) % 4], lines[k])
+        else {
+            continue;
+        };
         let det = before_dir[0] * after_dir[1] - before_dir[1] * after_dir[0];
         if det.abs() < 0.2 {
             continue;
@@ -680,7 +684,7 @@ fn restore_chamfered_corners(contour: &[Point], corners: &mut [Point]) {
         let step = [meet[0] - corner.x, meet[1] - corner.y];
         let moved = step[0].hypot(step[1]);
         let outward = step[0] * (corner.x - centre[0]) + step[1] * (corner.y - centre[1]) > 0.0;
-        if outward && moved > CHAMFER_MIN_MOVE_PX && moved <= max_move {
+        if outward && moved > CHAMFER_MIN_MOVE_PX && moved <= 0.25 * before_len.min(after_len) {
             *corner = Point {
                 x: meet[0],
                 y: meet[1],
@@ -2628,6 +2632,42 @@ mod tests {
                 .zip(&square)
                 .all(|(a, b)| a.x == b.x && a.y == b.y)
         );
+    }
+
+    /// The gates the recall measurements rest on: an inward intersection, a move under a
+    /// contour px, and sides under `CHAMFER_MIN_SIDE_PX` leave the vertices alone (dropping
+    /// the outward test or the 1 px floor cost 12 px rendered tags up to 18 pp).
+    #[test]
+    fn restore_chamfered_corners_keeps_sound_or_unfittable_vertices() {
+        let square = |side: f64| {
+            [
+                Point { x: 0.0, y: 0.0 },
+                Point { x: side, y: 0.0 },
+                Point { x: side, y: side },
+                Point { x: 0.0, y: side },
+            ]
+        };
+        let contour = chamfered_square(0.0);
+        // A vertex 2 px outside the square's corner: its sides meet inward of it.
+        let mut corners = square(20.0);
+        corners[0] = Point { x: -2.0, y: -2.0 };
+        restore_chamfered_corners(&contour, &mut corners);
+        assert_eq!((corners[0].x, corners[0].y), (-2.0, -2.0));
+        // A vertex 0.5 px inside the corner: under the contour's quantisation.
+        let mut corners = square(20.0);
+        corners[0] = Point { x: 0.5, y: 0.0 };
+        restore_chamfered_corners(&contour, &mut corners);
+        assert_eq!((corners[0].x, corners[0].y), (0.5, 0.0));
+        // A 12 px square with a 3 px chamfer: too short to fit.
+        let small: Vec<Point> = contour
+            .iter()
+            .filter(|p| p.x <= 12.0 && p.y <= 12.0 && p.x + p.y >= 3.0)
+            .copied()
+            .collect();
+        let mut corners = square(12.0);
+        corners[0] = Point { x: 3.0, y: 0.0 };
+        restore_chamfered_corners(&small, &mut corners);
+        assert_eq!((corners[0].x, corners[0].y), (3.0, 0.0));
     }
 
     /// A real quad's true corners must be selected regardless of scale, with
