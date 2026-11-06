@@ -126,6 +126,32 @@ mod tests {
         TagFamily::ArUcoMip36h12,
     ];
 
+    /// Soft acceptance trusts any decode within `(min_hamming − 1) / 2` to be the unique nearest
+    /// codeword, so a declared distance above the table's true one (over every rotation) would
+    /// accept wrong ids. Understating it is safe, only conservative.
+    #[test]
+    fn declared_min_hamming_never_exceeds_true_distance() {
+        for family in FAMILIES {
+            let dict = get_dictionary(family);
+            let true_min = dict
+                .codes
+                .iter()
+                .enumerate()
+                .flat_map(|(i, &a)| {
+                    dict.codes[i + 1..]
+                        .iter()
+                        .map(move |&b| (a ^ b).count_ones())
+                })
+                .min()
+                .unwrap_or(u32::MAX);
+            assert!(
+                dict.min_hamming <= true_min,
+                "{family:?}: declared {} > true {true_min}",
+                dict.min_hamming
+            );
+        }
+    }
+
     proptest! {
         #[test]
         fn decode_matches_exhaustive_search(fam in 0usize..6, bits: u64, max_hamming in 0u32..40) {

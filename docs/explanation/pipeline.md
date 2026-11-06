@@ -166,17 +166,21 @@ Each candidate's region is copied into a contiguous ROI cache (stack buffer for 
 
 A match within the family's Hamming budget must also show the marker's **dark border ring**: the `4·(d + 1)` ring cells around a `d × d` payload are sampled through the homography of the reported (unscaled) quad, and at most `decoder.max_border_error_rate` of them may read bright. The default (`None`) is the family's own error density, `max_hamming / bit_count` (for 36h11: 2/36, i.e. one ring cell in 28). `high_accuracy` disables the check (rate 1.0). Texture that happens to land near a codeword rarely has a uniformly dark ring.
 
-### 4e. Decode-first verification
+### 4e. Soft acceptance within unique decoding
 
-Under decode-first ordering a match from seed corners is provisional. The candidate gets the refinement Stage 3 skipped — quad-stage corner refinement, the edge-contrast gate, then the decoder's ERF pass — and is re-decoded at the scale that matched. It is accepted only if the refined quad decodes the **same id** within the budget and passes the ring check with the full budget (the seed itself is checked with the looser recovery tolerance, since seed ring samples can land in the white surround). Otherwise the match is discarded. Refine-first ordering instead re-decodes the ERF-refined finalist and keeps the refined corners if the id holds and the distance is not worse.
+Hard bits discard how sure each one is. On small or blurred markers (about 1.2-1.5 px per cell) blur flips the bits next to a bright neighbour, but those sit near their thresholds; a candidate that is no marker contradicts a codeword with confident bits or shows a bright border. So a match past the hard budget but within half the family's minimum distance (5 for 36h11 and ArUcoMip36h12), where the nearest codeword is unique, stands if the marker's evidence supports it: the summed confidence (distance from threshold) of the payload bits that disagree with the codeword, plus that of the border cells on the bright side, is at most 2 % of the summed confidence of every bit and border cell. The rule never rescues an in-budget match whose ring failed. Decode-first matches are verified on the refined quad by the same rule. It applies only where random bits rarely reach that radius at all (it lies within the recovery window, §4g), so the evidence is a second, independent guard: not tag16h5, whose radius 2 exceeds its window of 1. An explicit `decoder.max_hamming_error` is a hard cap and disables it.
 
-### 4f. Near-miss recovery
+### 4f. Decode-first verification
+
+Under decode-first ordering a match from seed corners is provisional. The candidate gets the refinement Stage 3 skipped — quad-stage corner refinement, the edge-contrast gate, then the decoder's ERF pass — and is re-decoded at the scale that matched. It is accepted only if the refined quad decodes the **same id** and passes the acceptance rule again: within the budget the ring check with the full budget, past it the soft rule of §4e (the seed itself is checked with the looser recovery tolerance, since seed ring samples can land in the white surround). Otherwise the match is discarded. Refine-first ordering instead re-decodes the ERF-refined finalist and keeps the refined corners if the id holds and the distance is not worse.
+
+### 4g. Near-miss recovery
 
 A candidate whose best distance exceeds the budget but lies within the family's **recovery window** gets a second chance. The window is the largest Hamming distance that uniformly random bits reach with probability at most 0.1 (union bound over every rotated code): 6 for 36h11 and ArUcoMip36h12, 1 for 16h5, 0 for ArUco 4x4_100. Recovery also requires the seed to show a dark ring (at most 20 % bright cells), which skips most texture near-misses. It runs the decode-first refinement with the scale retries, then a coarse corner-nudge search (±0.2 px, two passes); any acceptance still needs the full ring budget.
 
 **Module:** `decoder.rs` | **Complexity:** $O(Q)$
 
-### 4g. Seeded split of fused components (`quad.split_fused`, `grid`)
+### 4h. Seeded split of fused components (`quad.split_fused`, `grid`)
 
 Ink spread and blur close the diagonal contact where two dark squares meet corner to corner. On Kalibr's AprilGrid every tag touches its neighbours' connector squares that way, so one component can hold a tag and its connectors, or several tags. Its outline is then no single marker's: it either traces no quad or traces one that does not decode.
 

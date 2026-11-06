@@ -535,67 +535,153 @@ const RING_BRIGHT_FRACTION: f64 = 0.9;
 fn ring_evidence(
     decoder: &(impl TagDecoder + ?Sized),
     border: usize,
-    mut sample: impl FnMut(&[(f64, f64)], &mut [f64]) -> bool,
+    sample: impl FnMut(&[(f64, f64)], &mut [f64]) -> bool,
 ) -> Option<(u32, u32)> {
-    let d = decoder.dimension();
-    let side = d + 2 * border;
-    let n_ring = side * side - d * d;
-    if n_ring > MAX_RING_CELLS {
-        return None;
+    let m = MarkerSamples::read(decoder, border, sample)?;
+    let (dark_mean, bright_mean) = m.class_means()?;
+    let bright_cut = dark_mean + RING_BRIGHT_FRACTION * (bright_mean - dark_mean);
+    let errors = m.ring().iter().filter(|&&v| v > bright_cut).count() as u32;
+    Some((errors, m.n_ring as u32))
+}
+
+/// Largest share of a marker's evidence that may contradict a codeword decoded beyond the hard
+/// budget ([`unreliable_fraction`]). Measured on rendered Kalibr AprilGrids (36h11, 2-bit
+/// border) against 102 595 candidates from tag16h5 and ChArUco (`DICT_6X6_250`) renders, the
+/// negatives' fraction never fell below 0.033 at 3-5 bit errors; true tags' median is
+/// 0.005-0.014, p90 0.014-0.037.
+const MAX_UNRELIABLE_FRACTION: f64 = 0.02;
+
+/// How strongly the marker's samples contradict `codeword` (the payload bits in sampled
+/// order): the summed confidence of the payload bits that disagree with it, plus that of the
+/// border cells on the bright side, over the summed confidence of every bit and border cell.
+/// A bit's confidence is its distance from its decision threshold.
+///
+/// This is the soft decision a hard Hamming count throws away. Bits flipped by blur on a small
+/// or blurred marker sit near their threshold and weigh little; a candidate that is no marker
+/// contradicts the codeword with confident bits, or has a bright border. `None` when the
+/// evidence cannot be evaluated.
+fn unreliable_fraction(
+    decoder: &(impl TagDecoder + ?Sized),
+    border: usize,
+    sample: impl FnMut(&[(f64, f64)], &mut [f64]) -> bool,
+    codeword: u64,
+) -> Option<f64> {
+    let m = MarkerSamples::read(decoder, border, sample)?;
+    let (dark_mean, bright_mean) = m.class_means()?;
+    let mid = 0.5 * (dark_mean + bright_mean);
+    let (mut against, mut total) = (0.0, 0.0);
+    for (i, (&v, &t)) in m.data().iter().zip(m.thresholds()).enumerate() {
+        let confidence = (v - t).abs();
+        total += confidence;
+        // Branch-free: the disagreement mask scales the confidence.
+        let disagrees = ((codeword >> i) & 1 == 1) != (v > t);
+        against += confidence * f64::from(u8::from(disagrees));
     }
-    let pitch = 2.0 / side as f64;
-    let centre = |k: usize| -1.0 + pitch * (k as f64 + 0.5);
-    let in_border = |k: usize| k < border || k >= side - border;
-    let mut ring_pts = [(0.0f64, 0.0f64); MAX_RING_CELLS];
-    let mut m = 0;
-    for k in 0..side {
-        for l in 0..side {
-            if in_border(k) || in_border(l) {
-                ring_pts[m] = (centre(l), centre(k));
-                m += 1;
+    for &v in m.ring() {
+        total += (v - mid).abs();
+        against += (v - mid).max(0.0);
+    }
+    (total > 0.0).then(|| against / total)
+}
+
+/// One marker's samples on its declared layout: the border ring and the payload on its
+/// lattice, with the payload's per-bit decision thresholds (as decoding computes them).
+struct MarkerSamples {
+    ring: [f64; MAX_RING_CELLS],
+    n_ring: usize,
+    data: [f64; MAX_BIT_COUNT],
+    thresholds: [f64; MAX_BIT_COUNT],
+    n: usize,
+}
+
+impl MarkerSamples {
+    /// `sample` maps canonical points (the square `[-1, 1]²` spanning the payload and its
+    /// `border`-cell border) to image intensities. `None` when a sample falls outside the
+    /// image or the grid is larger than the buffers.
+    fn read(
+        decoder: &(impl TagDecoder + ?Sized),
+        border: usize,
+        mut sample: impl FnMut(&[(f64, f64)], &mut [f64]) -> bool,
+    ) -> Option<Self> {
+        let d = decoder.dimension();
+        let side = d + 2 * border;
+        let n_ring = side * side - d * d;
+        if n_ring > MAX_RING_CELLS {
+            return None;
+        }
+        let pitch = 2.0 / side as f64;
+        let centre = |k: usize| -1.0 + pitch * (k as f64 + 0.5);
+        let in_border = |k: usize| k < border || k >= side - border;
+        let mut ring_pts = [(0.0f64, 0.0f64); MAX_RING_CELLS];
+        let mut m = 0;
+        for k in 0..side {
+            for l in 0..side {
+                if in_border(k) || in_border(l) {
+                    ring_pts[m] = (centre(l), centre(k));
+                    m += 1;
+                }
             }
         }
-    }
-    debug_assert_eq!(m, n_ring);
-    let mut ring = [0.0f64; MAX_RING_CELLS];
-    if !sample(&ring_pts[..n_ring], &mut ring[..n_ring]) {
-        return None;
+        debug_assert_eq!(m, n_ring);
+        let mut ring = [0.0f64; MAX_RING_CELLS];
+        if !sample(&ring_pts[..n_ring], &mut ring[..n_ring]) {
+            return None;
+        }
+
+        let points = decoder.sample_points();
+        let n = points.len().min(MAX_BIT_COUNT);
+        let mut lattice = [(0.0f64, 0.0f64); MAX_BIT_COUNT];
+        let points = if border > 1 {
+            let scale = lattice_scale(d, border);
+            for (q, &(u, v)) in lattice.iter_mut().zip(&points[..n]) {
+                *q = (u * scale, v * scale);
+            }
+            &lattice[..n]
+        } else {
+            &points[..n]
+        };
+        let mut data = [0.0f64; MAX_BIT_COUNT];
+        if !sample(points, &mut data[..n]) {
+            return None;
+        }
+        let thresholds = compute_adaptive_thresholds(&data[..n], &points[..n]);
+        Some(Self {
+            ring,
+            n_ring,
+            data,
+            thresholds,
+            n,
+        })
     }
 
-    let points = decoder.sample_points();
-    let n = points.len().min(MAX_BIT_COUNT);
-    let mut lattice = [(0.0f64, 0.0f64); MAX_BIT_COUNT];
-    let points = if border > 1 {
-        let scale = lattice_scale(d, border);
-        for (q, &(u, v)) in lattice.iter_mut().zip(&points[..n]) {
-            *q = (u * scale, v * scale);
+    fn ring(&self) -> &[f64] {
+        &self.ring[..self.n_ring]
+    }
+
+    fn data(&self) -> &[f64] {
+        &self.data[..self.n]
+    }
+
+    fn thresholds(&self) -> &[f64] {
+        &self.thresholds[..self.n]
+    }
+
+    /// Mean of the payload samples on each side of their thresholds; `None` for a
+    /// single-class payload.
+    fn class_means(&self) -> Option<(f64, f64)> {
+        let (mut dark, mut n_dark, mut bright, mut n_bright) = (0.0, 0u32, 0.0, 0u32);
+        for (&v, &t) in self.data().iter().zip(self.thresholds()) {
+            if v > t {
+                bright += v;
+                n_bright += 1;
+            } else {
+                dark += v;
+                n_dark += 1;
+            }
         }
-        &lattice[..n]
-    } else {
-        &points[..n]
-    };
-    let mut data = [0.0f64; MAX_BIT_COUNT];
-    if !sample(points, &mut data[..n]) {
-        return None;
+        (n_dark > 0 && n_bright > 0)
+            .then(|| (dark / f64::from(n_dark), bright / f64::from(n_bright)))
     }
-    let thresholds = compute_adaptive_thresholds(&data[..n], &points[..n]);
-    let (mut dark, mut n_dark, mut bright, mut n_bright) = (0.0, 0u32, 0.0, 0u32);
-    for (&v, &t) in data[..n].iter().zip(&thresholds[..n]) {
-        if v > t {
-            bright += v;
-            n_bright += 1;
-        } else {
-            dark += v;
-            n_dark += 1;
-        }
-    }
-    if n_dark == 0 || n_bright == 0 {
-        return None;
-    }
-    let (dark_mean, bright_mean) = (dark / f64::from(n_dark), bright / f64::from(n_bright));
-    let bright_cut = dark_mean + RING_BRIGHT_FRACTION * (bright_mean - dark_mean);
-    let errors = ring[..n_ring].iter().filter(|&&v| v > bright_cut).count() as u32;
-    Some((errors, n_ring as u32))
 }
 
 /// Fraction of the outline the canonical 1-bit layout of a `d×d` payload occupies when the
@@ -655,27 +741,64 @@ fn grid_dda(h: &Homography, points: &[(f64, f64)], dim: usize) -> HomographyDda 
     h.to_dda(points[0].0, points[0].1, du, dv)
 }
 
-/// Per-decoder Hamming budget (`max_hamming_error`, else the family default) and border-ring
-/// error rate ([`ring_error_rate`]), resolved once per batch so the per-candidate loops read
-/// plain values. The arrays stay on the stack; the detector registers at most one decoder per
-/// family.
+/// Whether a match `hamming` bits from its codeword stands. Within the hard budget `max_h` the
+/// border ring decides; past it, up to the unique-decoding radius `soft_h`, the codeword's soft
+/// evidence does ([`unreliable_fraction`]). The soft rule never rescues an in-budget match the
+/// ring rejected: that would bypass the configured ring budget.
+#[inline]
+fn accepts_match(
+    hamming: u32,
+    max_h: u32,
+    soft_h: u32,
+    ring_ok: impl FnOnce() -> bool,
+    reliable: impl FnOnce() -> bool,
+) -> bool {
+    if hamming <= max_h {
+        ring_ok()
+    } else {
+        hamming <= soft_h && reliable()
+    }
+}
+
+/// Per-decoder Hamming budget (`max_hamming_error`, else the family default), border-ring
+/// error rate ([`ring_error_rate`]) and soft budget ([`accepts_match`]), resolved once per batch
+/// so the per-candidate loops read plain values. The arrays stay on the stack; the detector
+/// registers at most one decoder per family.
 fn decoder_budgets(
     decoders: &[Box<dyn TagDecoder + Send + Sync>],
     config: &crate::config::DetectorConfig,
-) -> ([u32; MAX_DECODERS], [f32; MAX_DECODERS]) {
+) -> (
+    [u32; MAX_DECODERS],
+    [f32; MAX_DECODERS],
+    [u32; MAX_DECODERS],
+) {
     debug_assert!(
         decoders.len() <= MAX_DECODERS,
         "more decoders than tag families"
     );
     let mut max_h = [0u32; MAX_DECODERS];
     let mut ring_rate = [0.0f32; MAX_DECODERS];
+    let mut soft_h = [0u32; MAX_DECODERS];
     for (idx, d) in decoders.iter().enumerate() {
         max_h[idx] = config
             .max_hamming_error
             .unwrap_or_else(|| d.default_max_hamming());
         ring_rate[idx] = ring_error_rate(config, max_h[idx], d.bit_count());
+        // Within half the minimum distance the nearest codeword is unique, so a decode there
+        // can be wrong only if the evidence is: `unreliable_fraction` judges that. Only where
+        // random bits rarely reach that radius at all (it lies within the recovery window), so
+        // the evidence is a second, independent guard: 36h11 and ArUcoMip36h12 (radius 5,
+        // window 6), not tag16h5 (radius 2, window 1). An explicit budget is a hard cap.
+        if config.max_hamming_error.is_none() {
+            let unique = d
+                .dictionary()
+                .map_or(0, |t| t.min_hamming.saturating_sub(1) / 2);
+            if unique <= recovery_window(d.bit_count(), d.num_codes()) {
+                soft_h[idx] = unique;
+            }
+        }
     }
-    (max_h, ring_rate)
+    (max_h, ring_rate, soft_h)
 }
 
 /// Sample values from the image using DDA-based coordinate generation and SIMD bilinear sampling.
@@ -1445,6 +1568,48 @@ impl<W: Warp> CandidateSampler<'_, W> {
         })
     }
 
+    /// Whether the marker's evidence through `h` supports codeword `id` at `rotation`
+    /// ([`unreliable_fraction`] within [`MAX_UNRELIABLE_FRACTION`]).
+    fn codeword_reliable(
+        &self,
+        h: &Matrix3x3,
+        decoder: &(impl TagDecoder + ?Sized),
+        id: u32,
+        rotation: u8,
+    ) -> bool {
+        decoder
+            .dictionary()
+            .and_then(|t| t.codes.get(4 * id as usize + usize::from(rotation)))
+            .and_then(|&codeword| self.unreliable_fraction(h, decoder, codeword))
+            .is_some_and(|f| f <= MAX_UNRELIABLE_FRACTION)
+    }
+
+    /// [`unreliable_fraction`] of `codeword` through a working-plane homography.
+    fn unreliable_fraction(
+        &self,
+        h: &Matrix3x3,
+        decoder: &(impl TagDecoder + ?Sized),
+        codeword: u64,
+    ) -> Option<f64> {
+        let h = Homography::from_matrix3x3(h);
+        if W::IS_IDENTITY {
+            return unreliable_fraction(
+                decoder,
+                self.border,
+                |pts, out| {
+                    sample_grid_values_optimized(self.img, &h, &self.roi, pts, out, pts.len())
+                },
+                codeword,
+            );
+        }
+        unreliable_fraction(
+            decoder,
+            self.border,
+            |pts, out| sample_points_warped(self.img, &h, pts, self.warp, out),
+            codeword,
+        )
+    }
+
     /// [`ring_ok`] for one working-plane homography.
     #[inline]
     fn ring_ok(
@@ -1716,8 +1881,10 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
 
     // `None` for `max_hamming_error` means "use family defaults"; an explicit `Some(n)`
     // overrides every family uniformly.
-    let (decoder_max_h_buf, decoder_ring_rate_buf) = decoder_budgets(decoders, config);
+    let (decoder_max_h_buf, decoder_ring_rate_buf, decoder_soft_h_buf) =
+        decoder_budgets(decoders, config);
     let decoder_max_h = &decoder_max_h_buf[..decoders.len()];
+    let decoder_soft_h = &decoder_soft_h_buf[..decoders.len()];
     let decoder_ring_rate = &decoder_ring_rate_buf[..decoders.len()];
     // Decode-first ordering applies on every route: both extractors hand the decoder unrefined
     // contour corners under it, and the decoder refines only the candidates that decode or
@@ -1866,6 +2033,9 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                         // Ring evidence is evaluated on the reported (unscaled) quad, so it
                         // depends only on the decoder: compute it at most once per decoder.
                         let mut ring_cache = [None::<bool>; MAX_DECODERS];
+                        // The soft verdict is likewise taken on the reported quad: cache it per
+                        // decoder for the codeword (id, rotation) it judged.
+                        let mut soft_cache = [None::<(u32, u8, bool)>; MAX_DECODERS];
                         // The quad-stage refinement of a decode-first seed depends only on the
                         // seed corners: run it at most once per candidate.
                         let seed_corners = quad_to_f64(corners);
@@ -1930,15 +2100,34 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                 // (`homography`), not the scaled one that happened to decode.
                                 // A quiet zone's outer contour decodes at scale 0.9 but its
                                 // ring is white.
-                                if hamming <= decoder_max_h[decoder_idx]
-                                    && hamming < best_h_in_scale
-                                    && *ring_cache[decoder_idx].get_or_insert_with(|| {
-                                        sampler.ring_ok(
-                                            seed_ring_rate[decoder_idx],
-                                            homography,
-                                            decoder.as_ref(),
-                                        )
-                                    })
+                                if hamming < best_h_in_scale
+                                    && accepts_match(
+                                        hamming,
+                                        decoder_max_h[decoder_idx],
+                                        decoder_soft_h[decoder_idx],
+                                        || {
+                                            *ring_cache[decoder_idx].get_or_insert_with(|| {
+                                                sampler.ring_ok(
+                                                    seed_ring_rate[decoder_idx],
+                                                    homography,
+                                                    decoder.as_ref(),
+                                                )
+                                            })
+                                        },
+                                        || match soft_cache[decoder_idx] {
+                                            Some((i, r, ok)) if (i, r) == (id, rot) => ok,
+                                            _ => {
+                                                let ok = sampler.codeword_reliable(
+                                                    homography,
+                                                    decoder.as_ref(),
+                                                    id,
+                                                    rot,
+                                                );
+                                                soft_cache[decoder_idx] = Some((id, rot, ok));
+                                                ok
+                                            },
+                                        },
+                                    )
                                 {
                                     best_h_in_scale = hamming;
                                     best_match_in_scale =
@@ -2005,13 +2194,24 @@ fn decode_batch_soa_generic<W: Warp + Sync>(
                                                 },
                                             )
                                         })
-                                        .filter(|&(_, id_ref, hamming_ref, _)| {
+                                        .filter(|&(_, id_ref, hamming_ref, rot_ref)| {
                                             id_ref == id
-                                                && hamming_ref <= decoder_max_h[decoder_idx]
-                                                && sampler.ring_ok(
-                                                    decoder_ring_rate[decoder_idx],
-                                                    &ref_h_mat,
-                                                    decoder,
+                                                && accepts_match(
+                                                    hamming_ref,
+                                                    decoder_max_h[decoder_idx],
+                                                    decoder_soft_h[decoder_idx],
+                                                    || {
+                                                        sampler.ring_ok(
+                                                            decoder_ring_rate[decoder_idx],
+                                                            &ref_h_mat,
+                                                            decoder,
+                                                        )
+                                                    },
+                                                    || {
+                                                        sampler.codeword_reliable(
+                                                            &ref_h_mat, decoder, id_ref, rot_ref,
+                                                        )
+                                                    },
                                                 )
                                         });
                                         if let Some((code_ref, _, hamming_ref, rot_ref)) = verified
@@ -2272,6 +2472,11 @@ pub trait TagDecoder: Send + Sync {
     fn decode(&self, bits: u64) -> Option<(u32, u32, u8)>; // (id, hamming, rotation)
     /// Decodes with custom maximum hamming distance.
     fn decode_full(&self, bits: u64, max_hamming: u32) -> Option<(u32, u32, u8)>;
+    /// The family's code table, for decoders backed by one: the rotated codewords
+    /// (`codes[4·id + rotation]`) and the minimum distance that bounds unique decoding.
+    fn dictionary(&self) -> Option<&'static crate::dictionaries::TagDictionary> {
+        None
+    }
     /// Get the original code for a given ID (useful for testing/simulation).
     fn get_code(&self, id: u16) -> Option<u64>;
     /// Returns the total number of codes in the dictionary.
@@ -2318,6 +2523,12 @@ impl TagDecoder for AprilTag36h11 {
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
+    fn dictionary(&self) -> Option<&'static crate::dictionaries::TagDictionary> {
+        Some(crate::dictionaries::get_dictionary(
+            crate::config::TagFamily::AprilTag36h11,
+        ))
+    }
+
     fn get_code(&self, id: u16) -> Option<u64> {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag36h11).get_code(id)
     }
@@ -2359,6 +2570,12 @@ impl TagDecoder for AprilTag16h5 {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5)
             .decode(bits, max_hamming)
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn dictionary(&self) -> Option<&'static crate::dictionaries::TagDictionary> {
+        Some(crate::dictionaries::get_dictionary(
+            crate::config::TagFamily::AprilTag16h5,
+        ))
     }
     fn get_code(&self, id: u16) -> Option<u64> {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::AprilTag16h5).get_code(id)
@@ -2402,6 +2619,12 @@ impl TagDecoder for ArUco4x4_50 {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco4x4_50)
             .decode(bits, max_hamming)
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn dictionary(&self) -> Option<&'static crate::dictionaries::TagDictionary> {
+        Some(crate::dictionaries::get_dictionary(
+            crate::config::TagFamily::ArUco4x4_50,
+        ))
     }
 
     fn get_code(&self, id: u16) -> Option<u64> {
@@ -2450,6 +2673,12 @@ impl TagDecoder for ArUco4x4_100 {
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
+    fn dictionary(&self) -> Option<&'static crate::dictionaries::TagDictionary> {
+        Some(crate::dictionaries::get_dictionary(
+            crate::config::TagFamily::ArUco4x4_100,
+        ))
+    }
+
     fn get_code(&self, id: u16) -> Option<u64> {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco4x4_100).get_code(id)
     }
@@ -2496,6 +2725,12 @@ impl TagDecoder for ArUco6x6_250 {
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
     }
 
+    fn dictionary(&self) -> Option<&'static crate::dictionaries::TagDictionary> {
+        Some(crate::dictionaries::get_dictionary(
+            crate::config::TagFamily::ArUco6x6_250,
+        ))
+    }
+
     fn get_code(&self, id: u16) -> Option<u64> {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUco6x6_250).get_code(id)
     }
@@ -2540,6 +2775,12 @@ impl TagDecoder for ArUcoMip36h12 {
         crate::dictionaries::get_dictionary(crate::config::TagFamily::ArUcoMip36h12)
             .decode(bits, max_hamming)
             .map(|(id, hamming, rot)| (u32::from(id), hamming, rot))
+    }
+
+    fn dictionary(&self) -> Option<&'static crate::dictionaries::TagDictionary> {
+        Some(crate::dictionaries::get_dictionary(
+            crate::config::TagFamily::ArUcoMip36h12,
+        ))
     }
 
     fn get_code(&self, id: u16) -> Option<u64> {
@@ -2908,6 +3149,79 @@ mod tests {
             });
             assert_eq!(got, Some((0, cells)), "border {border}");
         }
+    }
+
+    /// 36h11 code 0's payload (200 bright, 40 dark) blurred on its 6 × 6 grid: each cell
+    /// keeps `1 − 4k` of itself and takes `k` from each 4-neighbour (the dark border beyond).
+    fn blurred_code0(k: f64) -> (u64, Vec<f64>) {
+        let codeword = crate::dictionaries::get_dictionary(TagFamily::AprilTag36h11).codes[0];
+        let level = |r: i32, c: i32| {
+            if (0..6).contains(&r) && (0..6).contains(&c) && (codeword >> (r * 6 + c)) & 1 == 1 {
+                200.0
+            } else {
+                40.0
+            }
+        };
+        let v = (0..36)
+            .map(|i| {
+                let (r, c) = (i / 6, i % 6);
+                (1.0 - 4.0 * k) * level(r, c)
+                    + k * (level(r - 1, c) + level(r + 1, c) + level(r, c - 1) + level(r, c + 1))
+            })
+            .collect();
+        (codeword, v)
+    }
+
+    /// [`unreliable_fraction`] of `codeword` for a 1-bit-border marker whose payload samples
+    /// are `payload` and whose border cells all read `ring`.
+    fn unreliable(codeword: u64, payload: &[f64], ring: f64) -> f64 {
+        unreliable_fraction(
+            &AprilTag36h11,
+            1,
+            |pts, out| {
+                if pts.len() == payload.len() {
+                    out.copy_from_slice(payload);
+                } else {
+                    out.fill(ring);
+                }
+                true
+            },
+            codeword,
+        )
+        .expect("evidence")
+    }
+
+    /// Blur flips the bits that disagree with their neighbours, but leaves them near their
+    /// threshold: they barely count against the codeword. The same bits flipped confidently,
+    /// or a bright border, do.
+    #[test]
+    fn unreliable_fraction_weighs_disagreement_by_confidence() {
+        // 0.14 flips 3 bits (0.17 flips 5, 0.19 flips 13).
+        let (codeword, blurred) = blurred_code0(0.14);
+        let points = AprilTag36h11.sample_points();
+        let hard = crate::strategy::bits_from_intensities(
+            &blurred,
+            &compute_adaptive_thresholds(&blurred, points),
+        );
+        let flipped = (hard ^ codeword) & ((1 << 36) - 1);
+        // The premise: blur alone pushes the decode past the hard budget of 2.
+        assert!(
+            (3..=5).contains(&flipped.count_ones()),
+            "{} flips",
+            flipped.count_ones()
+        );
+
+        let soft = unreliable(codeword, &blurred, 40.0);
+        assert!(soft <= MAX_UNRELIABLE_FRACTION, "{soft}");
+        let confident: Vec<f64> = (0..36)
+            .map(|i| match ((flipped >> i) & 1, (codeword >> i) & 1) {
+                (1, 1) => 40.0,
+                (1, _) => 200.0,
+                _ => blurred[i],
+            })
+            .collect();
+        assert!(unreliable(codeword, &confident, 40.0) > MAX_UNRELIABLE_FRACTION);
+        assert!(unreliable(codeword, &blurred, 200.0) > MAX_UNRELIABLE_FRACTION);
     }
 
     #[test]
