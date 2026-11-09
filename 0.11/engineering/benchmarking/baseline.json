@@ -1,0 +1,23 @@
+{
+  "forward/pure_tags_images": {
+    "Locus": {
+      "recall": 72.72727272727273,
+      "rmse": 0.28462027646748544,
+      "latency": 17.45657425999525
+    }
+  },
+  "circle/pure_tags_images": {
+    "Locus": {
+      "recall": 85.34922116143852,
+      "rmse": 0.2482520175728996,
+      "latency": 19.60829918784613
+    }
+  },
+  "random/pure_tags_images": {
+    "Locus": {
+      "recall": 99.99738903394257,
+      "rmse": 0.32338994969919077,
+      "latency": 18.174292264988026
+    }
+  }
+}

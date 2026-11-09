@@ -1,0 +1,110 @@
+{
+  "bench_quad_extraction": {
+    "(640, 480)": {
+      "fastest": 0.9238,
+      "slowest": 1.088,
+      "median": 0.9420000000000001,
+      "mean": 0.9470000000000001
+    },
+    "(1280, 720)": {
+      "fastest": 2.449,
+      "slowest": 2.951,
+      "median": 2.481,
+      "mean": 2.502
+    },
+    "(1920, 1080)": {
+      "fastest": 4.551,
+      "slowest": 5.203,
+      "median": 4.623,
+      "mean": 4.68
+    },
+    "(3840, 2160)": {
+      "fastest": 20.06,
+      "slowest": 21.85,
+      "median": 20.93,
+      "mean": 20.94
+    }
+  },
+  "bench_segmentation": {
+    "(640, 480)": {
+      "fastest": 0.4384,
+      "slowest": 0.6924,
+      "median": 0.45130000000000003,
+      "mean": 0.4622
+    },
+    "(1280, 720)": {
+      "fastest": 1.347,
+      "slowest": 1.522,
+      "median": 1.366,
+      "mean": 1.37
+    },
+    "(1920, 1080)": {
+      "fastest": 2.677,
+      "slowest": 2.966,
+      "median": 2.705,
+      "mean": 2.714
+    },
+    "(3840, 2160)": {
+      "fastest": 8.246,
+      "slowest": 20.7,
+      "median": 8.414,
+      "mean": 8.559
+    }
+  },
+  "bench_thresholding": {
+    "(640, 480)": {
+      "fastest": 0.1433,
+      "slowest": 0.2373,
+      "median": 0.1507,
+      "mean": 0.15330000000000002
+    },
+    "(1280, 720)": {
+      "fastest": 0.33380000000000004,
+      "slowest": 0.44980000000000003,
+      "median": 0.3504,
+      "mean": 0.354
+    },
+    "(1920, 1080)": {
+      "fastest": 0.6956,
+      "slowest": 1.039,
+      "median": 0.7195,
+      "mean": 0.7318
+    },
+    "(3840, 2160)": {
+      "fastest": 2.762,
+      "slowest": 3.856,
+      "median": 2.904,
+      "mean": 2.929
+    }
+  },
+  "bench_dense_scene_20_tags": {
+    "fastest": 15.34,
+    "slowest": 19.99,
+    "median": 15.65,
+    "mean": 15.75
+  },
+  "bench_icra_decoding_soa": {
+    "fastest": 0.0056879999999999995,
+    "slowest": 1.317,
+    "median": 0.007892,
+    "mean": 0.021410000000000002
+  },
+  "bench_icra_full_pipeline": {
+    "fastest": 45.55,
+    "slowest": 56.19,
+    "median": 46.09,
+    "mean": 46.33
+  },
+  "bench_mixed_scene_multiple_tags": {
+    "fastest": 7.694,
+    "slowest": 8.059,
+    "median": 7.76,
+    "mean": 7.779
+  },
+  "bench_noisy_scene": {
+    "fastest": 2.985,
+    "slowest": 3.444,
+    "median": 3.015,
+    "mean": 3.059
+  }
+}
