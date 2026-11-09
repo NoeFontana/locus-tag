@@ -5,9 +5,12 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+## [0.11.0] - 2026-11-09
+
 ### Changed
 
 - **Codebase and documentation conciseness overhaul.** Trimmed over 1,500 lines across the codebase and documentation. Replaced verbose narrative comments with concise invariants ("why, not what") across `locus-core` and `locus-py`. Pruned superseded development memos, obsolete plans, and dated snapshot scoreboards in favor of a single source of truth across docs and configuration profiles.
+- **Benchmark baselines and distortion regression snapshots refreshed.** Updated `baseline.json` with current ICRA scenario metrics and `divan_baseline.json` with single-threaded kernel timings. Re-blessed Brown-Conrady and Kannala-Brandt distortion snapshots reflecting improved AprilGrid X-junction fitting accuracy (RMSE 0.28 → 0.08 px).
 
 ### Fixed
 
