@@ -29,12 +29,12 @@ PyO3 (abi3).
 - **6-DOF pose recovery** — IPPE-Square seed refined by weighted
   Levenberg-Marquardt with per-corner uncertainty.
 - **Validated on real and rendered data** — against pinned OpenCV
-  4.10 and aruco_nano (`cargo xtask sota`, 2026-10-04): on the EuRoC
+  4.10 and aruco_nano (`cargo xtask sota`, 2026-11-09): on the EuRoC
   `cam_april` real-camera AprilGrid sequence, `standard` decodes
-  86.0 % of markers (best reference 57.1 %) at 99.996 % precision,
-  with a leave-one-out corner error of 0.283 px (reference 0.516 px);
+  92.1 % of markers (best reference 57.2 %) at 100.0 % precision,
+  with a leave-one-out corner error of 0.258 px (reference 0.520 px);
   on the render-tag suites its debiased corner error is ≈ 0.06 px
-  (references ≈ 0.22 px). Liu4K recall (37 % vs aruco_nano's 66 %) is
+  (references ≈ 0.23 px). Liu4K recall (45 % vs aruco_nano's 66 %) is
   an open gap. See [Performance](explanation/performance.md).
 - **Cross-platform wheels** — Linux (manylinux + musllinux × x86_64
   + aarch64), macOS (x86_64 + aarch64), Windows x64.

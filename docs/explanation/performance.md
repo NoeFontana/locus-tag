@@ -16,7 +16,7 @@ for the `DetectorConfig` API and what each profile runs.
 
 --8<-- "README.md:performance-profiles"
 
-## Current results (2026-10-04)
+## Current results (2026-11-09)
 
 Measured with `cargo xtask sota` against **pinned** references —
 OpenCV `aruco` 4.10.0 with its three corner refiners (`NONE`, `SUBPIX`,
@@ -26,15 +26,15 @@ metric. 1 thread for latency; AMD EPYC-Milan, `--release`.
 
 | Benchmark | Data | Metric | Locus `standard` | Best reference |
 | :--- | :--- | :--- | :---: | :---: |
-| EuRoC `cam_april` | Real camera, Kalibr AprilGrid (2-bit border), strong lens distortion | Recall | **86.0 %** | 57.1 % (OpenCV) |
-| | | Precision | **99.996 %** | 99.993 % (OpenCV `APRILTAG`) |
-| | | Leave-one-out corner error, median / p90 | **0.283 / 0.575 px** | 0.516 / 0.996 px |
-| | | Latency per image | 9.5 ms | 8.3 ms |
-| Liu4K | Real 4K photos, ArUco MIP 36h12 | Recall | 37.2 % | **66.3 %** (aruco_nano) |
-| render-tag 1080p | Blender, single tag36h11 | Corner error, debiased mean / p90 | **0.062 / 0.109 px** | 0.230 / 0.323 px |
+| EuRoC `cam_april` | Real camera, Kalibr AprilGrid (2-bit border), strong lens distortion | Recall | **92.1 %** | 57.2 % (OpenCV) |
+| | | Precision | **100.0 %** | 99.993 % (OpenCV `APRILTAG`) |
+| | | Leave-one-out corner error, median / p90 | **0.258 / 0.483 px** | 0.520 / 1.009 px |
+| | | Latency per image | 8.9 ms | 8.4 ms |
+| Liu4K | Real 4K photos, ArUco MIP 36h12 | Recall | 44.7 % | **66.3 %** (aruco_nano) |
+| render-tag 1080p | Blender, single tag36h11 | Corner error, debiased mean / p90 | **0.062 / 0.109 px** | 0.230 / 0.326 px |
 | render-tag 4K | | Corner error, debiased mean / p90 | **0.050 / 0.083 px** | 0.221 / 0.314 px |
 | ChArUco render | Board, ArUco 6x6_250 | Corner error, debiased mean / p90 | **0.032 / 0.052 px** | 0.170 / 0.233 px |
-| ICRA 2020 forward | Rendered, dense tag36h11 | Recall | **73.8 %** | 53.7 % (aruco_nano) |
+| ICRA 2020 forward | Rendered, dense tag36h11 | Recall | **72.7 %** | 53.7 % (aruco_nano) |
 
 - **EuRoC** is the real-camera benchmark with a verifiable board model:
   presence and precision come from a board homography fitted after
@@ -51,10 +51,9 @@ metric. 1 thread for latency; AMD EPYC-Milan, `--release`.
   within 0.03 px after its [photometric inset calibration](algorithms.md#26-marker-photometric-inset-calibration)).
 
 Sources: the [EuRoC report](../engineering/benchmarking/euroc_sota_20261004.md)
-(EuRoC and Liu4K rows, current `standard`) and the
+(EuRoC and Liu4K rows, refreshed 2026-11-09) and the
 [2026-10-04 scoreboard](../engineering/benchmarking/sota_scoreboard_20261004.md)
-(render-tag, ChArUco and ICRA rows, measured on the #434 build that
-preceded the EuRoC changes). Both list the full win tables, latency per
+(render-tag, ChArUco and ICRA rows). Both list the full win tables, latency per
 benchmark, and verified hardware.
 
 ## Single-tag pose on render-tag (2026-07 snapshot)
@@ -119,7 +118,7 @@ changes on `standard` is analysed in the
 
 | Workload | Recommended profile | Why |
 |---|---|---|
-| General detection, real cameras | `"standard"` | Highest real-data recall and the best debiased corner accuracy in the 2026-10-04 comparison. |
+| General detection, real cameras | `"standard"` | Highest real-data recall and the best debiased corner accuracy in the SOTA benchmark comparison. |
 | Calibration boards with low-contrast prints | `"grid"` | `standard`'s pipeline with the blob-shape gates kept, sharpening off and lower contrast gates. |
 | Single-tag metrology, high-resolution near-field, AV pose | `"high_accuracy"` | EdLines + adaptive PPB + model-edge pose refinement: the lowest single-tag rotation tail in the 2026-07 render-tag snapshot. Needs intrinsics + `tag_size`. |
 

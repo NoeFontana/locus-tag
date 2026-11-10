@@ -81,17 +81,17 @@ Profiles are selected by name and embedded in the wheel:
 | `"high_accuracy"` | Metrology, AV pose | EdLines quads and model-edge pose refinement for single-tag rotation tails. Needs camera intrinsics + `tag_size`. |
 <!-- --8<-- [end:performance-profiles] -->
 
-`standard` is benchmarked against pinned OpenCV `aruco` 4.10 (three corner refiners) and aruco_nano on real and rendered data with `cargo xtask sota` (2026-10-04, 1 thread, AMD EPYC-Milan):
+`standard` is benchmarked against pinned OpenCV `aruco` 4.10 (three corner refiners) and aruco_nano on real and rendered data with `cargo xtask sota` (2026-11-09, 1 thread, AMD EPYC-Milan):
 
 | Benchmark | Metric | Locus `standard` | Best reference |
 | :--- | :--- | :---: | :---: |
-| EuRoC `cam_april` (real camera, Kalibr AprilGrid) | Recall | **86.0 %** | 57.1 % |
-| | Precision | **99.996 %** | 99.993 % |
-| | Leave-one-out corner error, median / p90 | **0.283 / 0.575 px** | 0.516 / 0.996 px |
+| EuRoC `cam_april` (real camera, Kalibr AprilGrid) | Recall | **92.1 %** | 57.2 % |
+| | Precision | **100.0 %** | 99.99 % |
+| | Leave-one-out corner error, median / p90 | **0.258 / 0.483 px** | 0.520 / 1.009 px |
 | render-tag 1080p (Blender) | Corner error, debiased mean | **0.062 px** | 0.230 px |
-| Liu4K (real 4K photos, ArUco MIP 36h12) | Recall | 37.2 % | **66.3 %** |
+| Liu4K (real 4K photos, ArUco MIP 36h12) | Recall | 44.7 % | **66.3 %** |
 
-Liu4K recall is an open gap (threshold model; see the [recall lessons](https://noefontana.github.io/locus-tag/latest/engineering/lessons/recall-quad-icra/)). Sources: the [EuRoC report](https://noefontana.github.io/locus-tag/latest/engineering/benchmarking/euroc_sota_20261004/) and the [SOTA scoreboard](https://noefontana.github.io/locus-tag/latest/engineering/benchmarking/sota_scoreboard_20261004/) (2026-10-04).
+Liu4K recall is an open gap (threshold model; see the [recall lessons](https://noefontana.github.io/locus-tag/latest/engineering/lessons/recall-quad-icra/)). Sources: the [EuRoC report](https://noefontana.github.io/locus-tag/latest/engineering/benchmarking/euroc_sota_20261004/) and the [SOTA scoreboard](https://noefontana.github.io/locus-tag/latest/engineering/benchmarking/sota_scoreboard_20261004/).
 
 For single-tag pose, `high_accuracy` had the lowest rotation and translation tails on the 1080p render-tag suite in the 2026-07 snapshot (rotation p99 0.249° vs 0.376° for OpenCV's `apriltag` refiner). Details, methodology and hardware are in the [performance docs](https://noefontana.github.io/locus-tag/latest/explanation/performance/).
 
