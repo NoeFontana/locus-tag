@@ -893,10 +893,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#current-results-2026-10-04" class="md-nav__link">
+  <a href="#current-results-2026-11-09" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Current results (2026-10-04)
+        Current results (2026-11-09)
       
     </span>
   </a>
@@ -2642,10 +2642,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#current-results-2026-10-04" class="md-nav__link">
+  <a href="#current-results-2026-11-09" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Current results (2026-10-04)
+        Current results (2026-11-09)
       
     </span>
   </a>
@@ -2754,7 +2754,7 @@ for the <code>DetectorConfig</code> API and what each profile runs.</p>
 </tr>
 </tbody>
 </table>
-<h2 id="current-results-2026-10-04">Current results (2026-10-04)</h2>
+<h2 id="current-results-2026-11-09">Current results (2026-11-09)</h2>
 <p>Measured with <code>cargo xtask sota</code> against <strong>pinned</strong> references —
 OpenCV <code>aruco</code> 4.10.0 with its three corner refiners (<code>NONE</code>, <code>SUBPIX</code>,
 <code>APRILTAG</code>) and aruco_nano <code>961b18b</code> — run as published. Each cell
@@ -2775,35 +2775,35 @@ metric. 1 thread for latency; AMD EPYC-Milan, <code>--release</code>.</p>
 <td style="text-align: left;">EuRoC <code>cam_april</code></td>
 <td style="text-align: left;">Real camera, Kalibr AprilGrid (2-bit border), strong lens distortion</td>
 <td style="text-align: left;">Recall</td>
-<td style="text-align: center;"><strong>86.0 %</strong></td>
-<td style="text-align: center;">57.1 % (OpenCV)</td>
+<td style="text-align: center;"><strong>92.1 %</strong></td>
+<td style="text-align: center;">57.2 % (OpenCV)</td>
 </tr>
 <tr>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;">Precision</td>
-<td style="text-align: center;"><strong>99.996 %</strong></td>
+<td style="text-align: center;"><strong>100.0 %</strong></td>
 <td style="text-align: center;">99.993 % (OpenCV <code>APRILTAG</code>)</td>
 </tr>
 <tr>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;">Leave-one-out corner error, median / p90</td>
-<td style="text-align: center;"><strong>0.283 / 0.575 px</strong></td>
-<td style="text-align: center;">0.516 / 0.996 px</td>
+<td style="text-align: center;"><strong>0.258 / 0.483 px</strong></td>
+<td style="text-align: center;">0.520 / 1.009 px</td>
 </tr>
 <tr>
 <td style="text-align: left;"></td>
 <td style="text-align: left;"></td>
 <td style="text-align: left;">Latency per image</td>
-<td style="text-align: center;">9.5 ms</td>
-<td style="text-align: center;">8.3 ms</td>
+<td style="text-align: center;">8.9 ms</td>
+<td style="text-align: center;">8.4 ms</td>
 </tr>
 <tr>
 <td style="text-align: left;">Liu4K</td>
 <td style="text-align: left;">Real 4K photos, ArUco MIP 36h12</td>
 <td style="text-align: left;">Recall</td>
-<td style="text-align: center;">37.2 %</td>
+<td style="text-align: center;">44.7 %</td>
 <td style="text-align: center;"><strong>66.3 %</strong> (aruco_nano)</td>
 </tr>
 <tr>
@@ -2811,7 +2811,7 @@ metric. 1 thread for latency; AMD EPYC-Milan, <code>--release</code>.</p>
 <td style="text-align: left;">Blender, single tag36h11</td>
 <td style="text-align: left;">Corner error, debiased mean / p90</td>
 <td style="text-align: center;"><strong>0.062 / 0.109 px</strong></td>
-<td style="text-align: center;">0.230 / 0.323 px</td>
+<td style="text-align: center;">0.230 / 0.326 px</td>
 </tr>
 <tr>
 <td style="text-align: left;">render-tag 4K</td>
@@ -2831,7 +2831,7 @@ metric. 1 thread for latency; AMD EPYC-Milan, <code>--release</code>.</p>
 <td style="text-align: left;">ICRA 2020 forward</td>
 <td style="text-align: left;">Rendered, dense tag36h11</td>
 <td style="text-align: left;">Recall</td>
-<td style="text-align: center;"><strong>73.8 %</strong></td>
+<td style="text-align: center;"><strong>72.7 %</strong></td>
 <td style="text-align: center;">53.7 % (aruco_nano)</td>
 </tr>
 </tbody>
@@ -2852,10 +2852,9 @@ metric. 1 thread for latency; AMD EPYC-Milan, <code>--release</code>.</p>
   within 0.03 px after its <a href="../algorithms/#26-marker-photometric-inset-calibration">photometric inset calibration</a>).</li>
 </ul>
 <p>Sources: the <a href="../../engineering/benchmarking/euroc_sota_20261004/">EuRoC report</a>
-(EuRoC and Liu4K rows, current <code>standard</code>) and the
+(EuRoC and Liu4K rows, refreshed 2026-11-09) and the
 <a href="../../engineering/benchmarking/sota_scoreboard_20261004/">2026-10-04 scoreboard</a>
-(render-tag, ChArUco and ICRA rows, measured on the #434 build that
-preceded the EuRoC changes). Both list the full win tables, latency per
+(render-tag, ChArUco and ICRA rows). Both list the full win tables, latency per
 benchmark, and verified hardware.</p>
 <h2 id="single-tag-pose-on-render-tag-2026-07-snapshot">Single-tag pose on render-tag (2026-07 snapshot)</h2>
 <p><code>render-tag</code> is our in-house render suite — Blender with calibrated PSF,
@@ -2978,7 +2977,7 @@ better translation and +~1 ms/frame. It requires camera intrinsics +
 <tr>
 <td>General detection, real cameras</td>
 <td><code>"standard"</code></td>
-<td>Highest real-data recall and the best debiased corner accuracy in the 2026-10-04 comparison.</td>
+<td>Highest real-data recall and the best debiased corner accuracy in the SOTA benchmark comparison.</td>
 </tr>
 <tr>
 <td>Calibration boards with low-contrast prints</td>
