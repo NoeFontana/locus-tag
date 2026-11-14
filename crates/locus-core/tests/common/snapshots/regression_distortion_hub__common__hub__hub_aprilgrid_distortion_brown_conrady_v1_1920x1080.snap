@@ -6,13 +6,13 @@ summary:
   dataset_size: 50
   mean_recall: 0.9169713261648745
   mean_precision: 0.9982510822510821
-  mean_rmse: 0.154
-  mean_reprojection_rmse: 0.1455
+  mean_rmse: 0.1521
+  mean_reprojection_rmse: 0.1438
   p50_translation_error: 0.0002
-  p90_translation_error: 0.0014
+  p90_translation_error: 0.0011
   p99_translation_error: 0.3902
-  p50_rotation_error: 0.0198
-  p90_rotation_error: 0.1127
+  p50_rotation_error: 0.0183
+  p90_rotation_error: 0.0993
   p99_rotation_error: 96.9517
   mean_hamming: 0.1283
   mean_total_ms: "[DURATION]"
@@ -24,16 +24,16 @@ summary:
     - filename: scene_0023_cam_0000.png
       missed: 24
       extra: 0
-      rmse: 1.1984
+      rmse: 1.196
     - filename: scene_0036_cam_0000.png
       missed: 22
       extra: 0
-      rmse: 0.7141
+      rmse: 0.6976
     - filename: scene_0005_cam_0000.png
       missed: 19
       extra: 0
-      rmse: 1.2833
+      rmse: 1.279
     - filename: scene_0013_cam_0000.png
       missed: 19
       extra: 0
-      rmse: 0.188
+      rmse: 0.1782
