@@ -11,9 +11,13 @@ inputs:
     required: false
     default: 'true'
   enable-uv-cache:
-    description: 'Whether to enable the uv cache'
+    description: >-
+      Whether to enable the uv cache: 'true', 'false', or 'auto'. 'auto' is
+      setup-uv's own default, which turns the cache off on self-hosted runners
+      and on cache-poisoning-prone events (pull_request_target, workflow_run,
+      release).
     required: false
-    default: 'true'
+    default: 'auto'
   cache-key:
     description: 'Optional job-scoped suffix appended to the Rust cache key to prevent cross-job poisoning'
     required: false
@@ -23,9 +27,9 @@ runs:
   using: "composite"
   steps:
     - name: Install uv
-      uses: astral-sh/setup-uv@v8.2.0
+      uses: astral-sh/setup-uv@v10.3.3
       with:
-        enable-cache: ${{ inputs.enable-uv-cache == 'true' }}
+        enable-cache: ${{ inputs.enable-uv-cache }}
         python-version: ${{ inputs.python-version }}
 
     # Channel / components / profile come from rust-toolchain.toml — single

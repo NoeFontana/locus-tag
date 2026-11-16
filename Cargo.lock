@@ -3086,9 +3086,9 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 
 [[package]]
 name = "helicoid"
-version = "0.0.8"
+version = "0.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68d3e6f823f69c11b14286c59ee3698170a218711467a61f631a2da3832cb53b"
+checksum = "ca4d3e5c8a500a80b5636759f0addc428881e94d8a9375dd1ea5d17010af865f"
 dependencies = [
  "helicoid-linalg",
  "libm",
@@ -3096,9 +3096,9 @@ dependencies = [
 
 [[package]]
 name = "helicoid-linalg"
-version = "0.0.8"
+version = "0.0.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3051a1df1a20b3b512b8dcc46c3e0971eeda5ea1fc2e0c110a0f121c3c80301"
+checksum = "2c25b8a90c9d26652d4089a5deaec3cd140fa377c8ca1ff44be3aee45d9a6548"
 dependencies = [
  "libm",
 ]
@@ -5451,9 +5451,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-stub-gen"
-version = "0.23.1"
+version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f0a0f9bd0305226d63aa45a5e7d51e54a6648eb1cba47d38ec0aca6a8fd6f6c"
+checksum = "f1ad39dbdf4d65a7b4f5cf5d02c0d6fb5d72a1110df4715ebb74634d379ef2ce"
 dependencies = [
  "anyhow",
  "chrono",
@@ -5468,7 +5468,6 @@ dependencies = [
  "ordered-float 5.3.0",
  "pyo3",
  "pyo3-stub-gen-derive",
- "rustpython-parser",
  "serde",
  "serde_json",
  "time",
@@ -5477,9 +5476,9 @@ dependencies = [
 
 [[package]]
 name = "pyo3-stub-gen-derive"
-version = "0.23.1"
+version = "0.23.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b4b8aba4df490324d0e2fee5e32034dccf65ebd97940f588bfc1d0800b1ee63"
+checksum = "c9d511131ec1f75fbaba63d70016de31e969273659e4e71ea8fadd339822eb71"
 dependencies = [
  "heck",
  "indexmap",
