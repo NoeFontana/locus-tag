@@ -18,6 +18,9 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **CI**: `astral-sh/setup-uv` 10.3.3 everywhere. The `setup-toolchain` composite action was still
   on v8.2.0 because dependabot only scanned `.github/workflows`; it now also scans
   `.github/actions/*`, and the composite's `enable-uv-cache` defaults to setup-uv's `auto`.
+- **Hub downloads use `HF_XET_HIGH_PERFORMANCE`.** `cargo xtask data` and the SOTA `fetch` set it
+  to `1` for their Python child unless it is already set. It replaces `HF_HUB_ENABLE_HF_TRANSFER`,
+  which `huggingface_hub` 2.x no longer uses and warns about.
 
 ## Released versions
 
