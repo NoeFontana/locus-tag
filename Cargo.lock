@@ -3090,7 +3090,7 @@ version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68d3e6f823f69c11b14286c59ee3698170a218711467a61f631a2da3832cb53b"
 dependencies = [
- "helicoid-linalg",
+ "helicoid-linalg 0.0.8",
  "libm",
 ]
 
@@ -3099,6 +3099,15 @@ name = "helicoid-linalg"
 version = "0.0.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3051a1df1a20b3b512b8dcc46c3e0971eeda5ea1fc2e0c110a0f121c3c80301"
+dependencies = [
+ "libm",
+]
+
+[[package]]
+name = "helicoid-linalg"
+version = "0.0.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1096d0964445c69ae5501082abe0c4e89e3b1e1750c07a741a255c4442f52363"
 dependencies = [
  "libm",
 ]
@@ -3907,7 +3916,7 @@ dependencies = [
  "csv",
  "divan",
  "helicoid",
- "helicoid-linalg",
+ "helicoid-linalg 0.0.9",
  "image",
  "insta",
  "libm",
