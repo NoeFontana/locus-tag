@@ -5,6 +5,21 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Performance
+
+- **Pose LM stops when its model predicts no reduction.** `nielsen_lm` rejected every step whose
+  predicted reduction was ≤ 1e-12 and kept going to `max_iters`; since rejections only shrink
+  that prediction, the pose could no longer move. It now stops there, returning the same pose
+  and `JᵀJ` bit for bit. Normal-equation builds per LM call: 7.52 → 5.04 (board suites),
+  5.59 → 4.15 (render-tag); calls reaching `max_iters`: 15.8 % → 0.3 %.
+- **Board RANSAC seed by an 8×8 solve.** The sample homography fixes `h33 = 1` (it is the depth
+  of the sample centroid, so it is positive for any visible board) and solves 8×8 normal
+  equations instead of a 9×9 eigenproblem. Board metrics move by at most 1.06e-7 relative; every
+  count is unchanged, and the 7 board snapshots are re-baselined.
+- Together, instructions per call (callgrind, `--release`, run-to-run spread about ±3 %):
+  board `estimate()` −15.9 %, tag pose weighted −29.6 % / unweighted −49.8 %,
+  `refine_soa` standard −28.1 %, high_accuracy −0.2 %.
+
 ### Fixed
 
 - **A non-finite homography no longer yields a NaN pose.** `solve_ippe_square` returned `Some`

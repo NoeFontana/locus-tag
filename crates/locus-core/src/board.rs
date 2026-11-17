@@ -715,8 +715,8 @@ fn gn_step_on_sample(
 }
 
 /// Fit a planar homography from board-frame `(X, Y, 1)` to normalised image
-/// `(x_n, y_n, 1)` over ALL `4 × group_size` sample correspondences via
-/// totals-least-squares (the smallest-eigenvalue eigenvector of the symmetric
+/// `(x_n, y_n, 1)` over ALL `4 × group_size` sample correspondences by linear
+/// least squares with `h33 = 1` (the 8 × 8 normal equations taken from the symmetric
 /// 9 × 9 `A^T A`), then decompose into both Necker pose branches using
 /// `solve_ippe_square`.
 ///
@@ -814,19 +814,17 @@ fn ippe_branches_from_sample_homography(
         }
     }
 
-    let eig = ata.symmetric_eigen();
-    let mut min_idx = 0usize;
-    let mut min_val = eig.eigenvalues[0];
-    for i in 1..9 {
-        if eig.eigenvalues[i] < min_val {
-            min_val = eig.eigenvalues[i];
-            min_idx = i;
-        }
-    }
-    let h_vec = eig.eigenvectors.column(min_idx);
-    let h_n = Matrix3::new(
-        h_vec[0], h_vec[1], h_vec[2], h_vec[3], h_vec[4], h_vec[5], h_vec[6], h_vec[7], h_vec[8],
-    );
+    // `h33` is the image of the centred board origin, i.e. the depth of the sample
+    // centroid, so it is positive for any board in front of the camera and fixing it
+    // to 1 only picks the homography's scale. That turns the 9 × 9 eigenproblem (the
+    // seed's former cost: ~3 µs per RANSAC sample, of which there are at least
+    // `k_min` per estimate) into an 8 × 8 Cholesky solve on blocks of the same `AᵀA`.
+    // The seed is polished by Gauss–Newton and the final pose by the AW-LM, which
+    // land on the same optimum: the board metrics move by at most 1.1e-7 relative.
+    let m8 = ata.fixed_view::<8, 8>(0, 0).into_owned();
+    let b8 = -ata.fixed_view::<8, 1>(0, 8).into_owned();
+    let h8 = m8.cholesky()?.solve(&b8);
+    let h_n = Matrix3::new(h8[0], h8[1], h8[2], h8[3], h8[4], h8[5], h8[6], h8[7], 1.0);
 
     // Un-normalise the object-side scaling: the homography we want maps
     // *centred-but-unscaled* board coords (X - cx_o, Y - cy_o, 1) → normalised
@@ -836,11 +834,8 @@ fn ippe_branches_from_sample_homography(
     h_metric.column_mut(0).scale_mut(scale_o);
     h_metric.column_mut(1).scale_mut(scale_o);
 
-    // Sign convention: ensure positive depth at the (now-centred) origin.
-    // The centred origin maps to `h_metric * [0, 0, 1]^T = h_metric.col(2)`.
-    if h_metric[(2, 2)] < 0.0 {
-        h_metric *= -1.0;
-    }
+    // Positive depth at the centred origin (`h_metric.col(2)`) holds by construction:
+    // `h33 = 1`, and the column scaling above leaves it alone.
 
     let [pose_a, pose_b] = solve_ippe_square(&h_metric)?;
     if !pose_a
