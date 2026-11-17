@@ -170,6 +170,8 @@ IPPE-Square produces **two** candidate poses from the SVD, corresponding to the 
 
 **Frontal degeneracy:** When $|\sigma_1 - \sigma_2| < 10^{-4} \sigma_1$, the two solutions collapse. In this case, Gram-Schmidt orthonormalization of $[\mathbf{h}_1, \mathbf{h}_2, \mathbf{h}_1 \times \mathbf{h}_2]$ produces the rotation, and the translation scale $\gamma = (\sigma_1 + \sigma_2)/2$.
 
+A non-finite homography is rejected before any of this; it has no pose.
+
 ### 3.4 Orthogonalization
 
 The raw rotation estimate from the SVD is projected onto $SO(3)$ via polar decomposition:
