@@ -60,7 +60,12 @@ updates:
   # 3. GitHub Actions Configuration
   # -------------------------------------------------------------------
   - package-ecosystem: "github-actions"
-    directory: "/"
+    # "/" alone scans only .github/workflows; the composite actions under
+    # .github/actions pin their own `uses:` (setup-toolchain sat on
+    # setup-uv v8.2.0 while the workflows reached v10.3.x).
+    directories:
+      - "/"
+      - "/.github/actions/*"
     schedule:
       interval: "weekly"
       day: "monday"

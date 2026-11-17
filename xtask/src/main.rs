@@ -377,13 +377,27 @@ fn data(args: &[&str]) -> Result<()> {
         eprintln!("{USAGE}");
         return Err("missing data command".into());
     }
-    sh(python()
+    sh(hub_python()
         .args(["-m", "tools.bench.dataset_registry"])
         .args(args))
 }
 
 fn spec_cmd(args: &[&str]) -> Result<()> {
-    sh(python().args(["-m", "tools.bench.sota.spec"]).args(args))
+    sh(hub_python()
+        .args(["-m", "tools.bench.sota.spec"])
+        .args(args))
+}
+
+/// [`python`] for a command that may download from the Hugging Face Hub: Xet's
+/// high-performance transfer mode (`HF_XET_HIGH_PERFORMANCE`, which replaces the
+/// deprecated `HF_HUB_ENABLE_HF_TRANSFER`) is on unless the caller set it either way.
+/// `huggingface_hub` reads it once at import, so it has to be in the child's environment.
+fn hub_python() -> Command {
+    let mut cmd = python();
+    if env::var_os("HF_XET_HIGH_PERFORMANCE").is_none() {
+        cmd.env("HF_XET_HIGH_PERFORMANCE", "1");
+    }
+    cmd
 }
 
 fn fetch(d: &Dataset) -> Result<()> {
@@ -656,6 +670,20 @@ fn scoreboard(root: &Path, args: &[&str]) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hub_downloads_run_in_xet_high_performance_mode() {
+        let cmd = hub_python();
+        let set = cmd
+            .get_envs()
+            .find(|(k, _)| *k == "HF_XET_HIGH_PERFORMANCE")
+            .and_then(|(_, v)| v);
+        match env::var_os("HF_XET_HIGH_PERFORMANCE") {
+            // An explicit choice in the caller's environment is inherited, never overridden.
+            Some(_) => assert!(set.is_none()),
+            None => assert_eq!(set, Some(std::ffi::OsStr::new("1"))),
+        }
+    }
 
     #[test]
     fn override_file_is_resolved_against_the_invocation_dir() {

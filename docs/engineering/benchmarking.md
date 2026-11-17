@@ -44,6 +44,8 @@ cargo xtask data fetch hub --subsets all
 cargo xtask data verify                                # missing or stale-pin copies -> exit 1
 ```
 
+`cargo xtask data` (and the SOTA `fetch`) download in Xet's high-performance mode by setting `HF_XET_HIGH_PERFORMANCE=1` for the Python child; export it as `0` to opt out. It replaces `HF_HUB_ENABLE_HF_TRANSFER`, which `huggingface_hub` 2.x ignores and warns about.
+
 Rust tests and Python loaders read the same `tests/data/` paths. `LOCUS_ICRA_DATASET_DIR`, `LOCUS_EUROC_DATASET_DIR` and `LOCUS_HUB_DATASET_DIR` only relocate a dataset — except that the render-tag and distortion Hub suites still require `LOCUS_HUB_DATASET_DIR` to be set (they skip otherwise).
 
 ### Regression Suite (ICRA 2020)
