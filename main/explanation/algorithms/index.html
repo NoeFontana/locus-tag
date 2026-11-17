@@ -3693,6 +3693,7 @@
 <h3 id="33-dual-pose-solutions">3.3 Dual Pose Solutions</h3>
 <p>IPPE-Square produces <strong>two</strong> candidate poses from the SVD, corresponding to the two minima of the planar PnP error surface (the "Necker reversal" ambiguity). The candidate with the lower reprojection error is selected.</p>
 <p><strong>Frontal degeneracy:</strong> When <span class="arithmatex">\(|\sigma_1 - \sigma_2| &lt; 10^{-4} \sigma_1\)</span>, the two solutions collapse. In this case, Gram-Schmidt orthonormalization of <span class="arithmatex">\([\mathbf{h}_1, \mathbf{h}_2, \mathbf{h}_1 \times \mathbf{h}_2]\)</span> produces the rotation, and the translation scale <span class="arithmatex">\(\gamma = (\sigma_1 + \sigma_2)/2\)</span>.</p>
+<p>A non-finite homography is rejected before any of this; it has no pose.</p>
 <h3 id="34-orthogonalization">3.4 Orthogonalization</h3>
 <p>The raw rotation estimate from the SVD is projected onto <span class="arithmatex">\(SO(3)\)</span> via polar decomposition:</p>
 <div class="arithmatex">\[\mathbf{R} = \mathbf{U} \mathbf{V}^T, \quad \text{from SVD}(\mathbf{R}_\text{raw}) = \mathbf{U} \boldsymbol{\Sigma} \mathbf{V}^T\]</div>
