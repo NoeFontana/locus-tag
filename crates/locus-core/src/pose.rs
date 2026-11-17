@@ -1507,6 +1507,12 @@ fn disabled_branch_diagnostics(
 /// (tag plane at z=0, centred at origin, +x right / +y down for typical AprilTag /
 /// ArUco corner orderings `[TL, TR, BR, BL]`).
 pub(crate) fn solve_ippe_square(h: &Matrix3<f64>) -> Option<[PoseMatrix; 2]> {
+    // A non-finite homography has no pose. Without this, NaN propagates through every
+    // comparison below as `false` and comes back as `Some` NaN-filled poses.
+    if !h.iter().all(|v| v.is_finite()) {
+        return None;
+    }
+
     // Analytical SVD of the 3x2 Jacobian J = [h1, h2] via the 2x2 Gram matrix
     // B = J^T J = [[a, c], [c, b]].
     let h1 = h.column(0);
@@ -3615,5 +3621,62 @@ mod tests {
             err < 1e-3,
             "masked LM should ignore corner 0 outlier; translation error {err}",
         );
+    }
+
+    fn assert_so3(r: &Matrix3<f64>, what: &str) {
+        let ortho = (r.transpose() * r - Matrix3::identity()).norm();
+        assert!(ortho < 1e-12, "{what}: ‖RᵀR − I‖ = {ortho:e}");
+        assert!(
+            (r.determinant() - 1.0).abs() < 1e-12,
+            "{what}: det R = {}",
+            r.determinant()
+        );
+    }
+
+    /// The metric homography of a camera-from-tag pose: `h = [r1 r2 t] / t_z`.
+    fn ippe_homography(rot: &Matrix3<f64>, t: &Vector3<f64>) -> Matrix3<f64> {
+        Matrix3::from_columns(&[rot.column(0).into_owned(), rot.column(1).into_owned(), *t]) / t.z
+    }
+
+    proptest! {
+        /// Both IPPE branches are rotations, and one of them is the pose that made `h`,
+        /// frontal (the single-solution path) and oblique alike.
+        #[test]
+        fn ippe_square_recovers_the_pose(
+            roll in -1.2f64..1.2,
+            pitch in -1.2f64..1.2,
+            yaw in -3.1f64..3.1,
+            frontal in proptest::bool::ANY,
+            tx in -0.5f64..0.5,
+            ty in -0.5f64..0.5,
+            tz in 0.2f64..5.0,
+        ) {
+            let rot = if frontal {
+                *Rotation3::from_euler_angles(0.0, 0.0, yaw).matrix()
+            } else {
+                *Rotation3::from_euler_angles(roll, pitch, yaw).matrix()
+            };
+            let t = Vector3::new(tx, ty, tz);
+            let [a, b] = solve_ippe_square(&ippe_homography(&rot, &t))
+                .expect("a pose homography decomposes");
+            assert_so3(&a.r, "branch A");
+            assert_so3(&b.r, "branch B");
+            let err = (a.r - rot).norm().min((b.r - rot).norm());
+            prop_assert!(err < 1e-9, "neither branch is the true rotation: {err:e}");
+            prop_assert!((a.t - t).norm() < 1e-9 * t.norm());
+        }
+    }
+
+    #[test]
+    fn ippe_square_rejects_non_finite_and_degenerate_homographies() {
+        let mut h = ippe_homography(&Matrix3::identity(), &Vector3::new(0.0, 0.0, 1.0));
+        h[(1, 2)] = f64::NAN;
+        assert!(
+            solve_ippe_square(&h).is_none(),
+            "NaN must not become a pose"
+        );
+        h[(1, 2)] = f64::INFINITY;
+        assert!(solve_ippe_square(&h).is_none(), "∞ must not become a pose");
+        assert!(solve_ippe_square(&Matrix3::zeros()).is_none());
     }
 }

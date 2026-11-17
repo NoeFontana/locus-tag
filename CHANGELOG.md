@@ -5,6 +5,13 @@ loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## Unreleased
 
+### Fixed
+
+- **A non-finite homography no longer yields a NaN pose.** `solve_ippe_square` returned `Some`
+  NaN-filled poses for a NaN/∞ homography, since NaN fails every comparison guard as `false`; it
+  now returns `None`, as for every other degenerate input. Finite inputs are untouched: every
+  dataset suite is byte-identical.
+
 ### Dependencies
 
 - **`helicoid` 0.0.11** (from 0.0.8, incorporating 0.0.9 and 0.0.10). No output changes:
