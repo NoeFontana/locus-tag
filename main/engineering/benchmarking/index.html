@@ -3245,6 +3245,7 @@ cargo<span class="w"> </span>xtask<span class="w"> </span>data<span class="w"> <
 cargo<span class="w"> </span>xtask<span class="w"> </span>data<span class="w"> </span>fetch<span class="w"> </span>hub<span class="w"> </span>--subsets<span class="w"> </span>all
 cargo<span class="w"> </span>xtask<span class="w"> </span>data<span class="w"> </span>verify<span class="w">                                </span><span class="c1"># missing or stale-pin copies -&gt; exit 1</span>
 </code></pre></div>
+<p><code>cargo xtask data</code> (and the SOTA <code>fetch</code>) download in Xet's high-performance mode by setting <code>HF_XET_HIGH_PERFORMANCE=1</code> for the Python child; export it as <code>0</code> to opt out. It replaces <code>HF_HUB_ENABLE_HF_TRANSFER</code>, which <code>huggingface_hub</code> 2.x ignores and warns about.</p>
 <p>Rust tests and Python loaders read the same <code>tests/data/</code> paths. <code>LOCUS_ICRA_DATASET_DIR</code>, <code>LOCUS_EUROC_DATASET_DIR</code> and <code>LOCUS_HUB_DATASET_DIR</code> only relocate a dataset — except that the render-tag and distortion Hub suites still require <code>LOCUS_HUB_DATASET_DIR</code> to be set (they skip otherwise).</p>
 <h3 id="regression-suite-icra-2020">Regression Suite (ICRA 2020)</h3>
 <ol>
