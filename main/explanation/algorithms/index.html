@@ -3667,7 +3667,76 @@
 <p><strong>Whole-edge fusion</strong> <em>(undistorted images)</em>. The junction sees only the corner's neighbourhood; each edge carries information along its whole length. Each side is fitted as a straight line through gradient-weighted edge stations over its middle 70 %, with <span class="arithmatex">\(\operatorname{Var}(\text{offset}) = s^2/N\)</span> and <span class="arithmatex">\(\operatorname{Var}(\text{angle}) = s^2/\sum t^2\)</span> from the stations' own scatter, so bit edges or clutter in the band inflate the line's uncertainty. Two adjacent lines give a line corner and its covariance. At an L-corner the junction and line corners are fused by inverse covariance when they agree (Mahalanobis <span class="arithmatex">\(d^2 \le 9.21\)</span>, the <span class="arithmatex">\(\chi^2_2\)</span> 99 % point). Fusion is all-or-nothing per marker: mixing estimators with different apex biases would turn the square into rotation error. At an X-junction (an AprilGrid connector touching the corner) the edge lines carry the photometric edge offset and the junction point does not, so the edges are not used; such a marker is placed by the model fit below.</p>
 <p><strong>X-junction model fit.</strong> Module <code>xjunction.rs</code>. Gradient orthogonality reads its window from a bilinearly resampled patch, and on edges blurred by less than a pixel the resampling error depends on where the corner falls within its pixel: measured against rendered truth, its median error is 13x the Cramér–Rao bound whatever the noise. A marker whose four corners are X-junctions is therefore re-placed by fitting</p>
 <div class="arithmatex">\[\mu(\mathbf{p}) = A + B\,\operatorname{erf}\!\big(\mathbf{n}_1\cdot(\mathbf{p}-\mathbf{c})/s\big)\,\operatorname{erf}\!\big(\mathbf{n}_2\cdot(\mathbf{p}-\mathbf{c})/s\big)\]</div>
-<p>(junction <span class="arithmatex">\(\mathbf{c}\)</span>, line normals <span class="arithmatex">\(\mathbf{n}_i(t_i)\)</span>, blur scale <span class="arithmatex">\(s\)</span>, levels <span class="arithmatex">\(A \pm B\)</span>) to the raw pixel values by weighted Levenberg–Marquardt. The model is point-symmetric about <span class="arithmatex">\(\mathbf{c}\)</span>, and so is any X-junction under any point-symmetric PSF and any per-pixel tone curve, so the cost is even in the corner offset and a wrong edge profile does not move its minimum. The product form drops the correlation a blur puts between two non-orthogonal lines; it is point-symmetric too, and measured equal to the exact bivariate-normal model up to 70° incidence. The window is the ellipse spanned by the black border along each edge (the image of a disk on the board, so it narrows with foreshortening) plus 0.75 px of blur, clipped to the frame (a clipped window loses only the robustness to a wrong edge profile, not consistency); pixels more than 2 px from both lines inform only <span class="arithmatex">\(A\)</span> and <span class="arithmatex">\(B\)</span> and are left out. A fit refused only by the move limit or the residual gate, after landing more than 0.5 px from its start, is refitted once over a window centred where it landed, and only the refit is judged: a window half a pixel or more off-centre holds the junction but describes it badly, so its fit fails the residual gate or the move limit. A fit is rejected if it moves more than 1 px (or half the window's shorter reach), leaves the image, turns a line more than 0.35 rad, makes the wedge between the edges bright, or leaves a residual RMS above 0.35 <span class="arithmatex">\(|B|\)</span> (an L-corner). All four corners or none, as for fusion. Under the cell floor a corner can still sit at its quad seed, up to about 1 px inside the junction, so the X-junction test reaches 0.5 px further than the half-border and the move limit scales with the window. The board pose gives fitted corners their own estimator class with no inset (<code>corner_refined</code> bits 4–7). Against rendered truth the median error falls to about 3x the bound. Two extensions were measured and dropped: a curvature term per line for lens bow (median error up 60 %, the bow trading off with <span class="arithmatex">\(\mathbf{c}\)</span>) and box-integrating the model over each pixel (no change: the fitted <span class="arithmatex">\(s\)</span> absorbs the pixel aperture).</p>
+<p>(junction <span class="arithmatex">\(\mathbf{c}\)</span>, line normals <span class="arithmatex">\(\mathbf{n}_i(t_i)\)</span>, blur scale <span class="arithmatex">\(s\)</span>, levels <span class="arithmatex">\(A \pm B\)</span>) to the raw pixel values by weighted Levenberg–Marquardt. The model is point-symmetric about <span class="arithmatex">\(\mathbf{c}\)</span>, and so is any X-junction under any point-symmetric PSF and any per-pixel tone curve, so the cost is even in the corner offset and a wrong edge profile does not move its minimum. The product form drops the correlation a blur puts between two non-orthogonal lines; it is point-symmetric too, and measured equal to the exact bivariate-normal model up to 70° incidence. The window is the ellipse spanned by the black border along each edge (the image of a disk on the board, so it narrows with foreshortening) plus 0.75 px of blur, clipped to the frame (a clipped window loses only the robustness to a wrong edge profile, not consistency); pixels more than 2 px from both lines inform only <span class="arithmatex">\(A\)</span> and <span class="arithmatex">\(B\)</span> and are left out. A fit refused only by the move limit or the residual gate, after landing more than 0.5 px from its start, is refitted once over a window centred where it landed, and only the refit is judged: a window half a pixel or more off-centre holds the junction but describes it badly, so its fit fails the residual gate or the move limit. A fit is rejected if it moves more than 1 px (or half the window's shorter reach), leaves the image, turns a line more than 0.35 rad, makes the wedge between the edges bright, or leaves a residual RMS above 0.35 <span class="arithmatex">\(|B|\)</span> (an L-corner). All four corners or none, as for fusion. Under the cell floor a corner can still sit at its quad seed, up to about 1 px inside the junction, so the X-junction test reaches 0.5 px further than the half-border and the move limit scales with the window. The board pose gives fitted corners their own estimator class with no inset (<code>corner_refined</code> bits 4–7). Against rendered truth the median error falls to about 3x the bound.</p>
+<p><strong>Polish: the pixel's aperture and the lens's bend.</strong> The fit above samples the model at each pixel's centre and draws straight lines. Both are approximations that cost more than the noise does, so the four accepted fits of a marker are polished together by one Gauss–Newton step each, of the model</p>
+<div class="arithmatex">\[\mu(\mathbf{p}) = A + B\,\big(E_1 E_2 + \rho\,E_1' E_2'\big), \qquad h_i = \big(\mathbf{n}_i\cdot\mathbf{e} - \tfrac12\kappa_i\,(\mathbf{u}_i\cdot\mathbf{e})^2\big)/s .\]</div>
+<ul>
+<li><strong>Aperture.</strong> A pixel integrates the light over its square. Along a line's normal the square projects to the convolution of two boxes of widths <span class="arithmatex">\(|n_x|\)</span> and <span class="arithmatex">\(|n_y|\)</span>, so the profile averaged over the pixel is <span class="arithmatex">\(E(h) = \big(F_2(h{+}a{+}b) - F_2(h{+}a{-}b) - F_2(h{-}a{+}b) + F_2(h{-}a{-}b)\big)/4ab\)</span> with <span class="arithmatex">\(a = |n_x|/2s\)</span>, <span class="arithmatex">\(b = |n_y|/2s\)</span> and <span class="arithmatex">\(F_2\)</span> the second antiderivative of <span class="arithmatex">\(\operatorname{erf}\)</span>: exact at any blur, at four <span class="arithmatex">\(\operatorname{erf}\)</span> per line. The two profiles vary together over the pixel with covariance <span class="arithmatex">\(\rho = \mathbf{n}_1\cdot\mathbf{n}_2/12s^2\)</span>, kept to first order. A quadrature over the pixel is not exact once <span class="arithmatex">\(s\)</span> is under the spacing of its points: 3 × 3 Gauss–Legendre points leave 2.11x the bound at a 0.2 px PSF, against 1.51x, at more than twice the cost.</li>
+<li><strong>Curvature.</strong> A lens images a marker's side as an arc. A straight line fitted to it over a window is parallel to the arc's tangent abreast of the window's centre, so the turn between the tangents that the two end fits report, over the distance between their windows, is the side's curvature <span class="arithmatex">\(\kappa\)</span>: no pixel is read for it. Only half the difference between opposite sides is used. A lens bends parallel sides alike, which along the contour is opposite turns; what the sides share is mostly ink spread, which staggers each line at the junction and reads as every side bowing the same way. Fitting <span class="arithmatex">\(\kappa\)</span> per line inside the window was measured and dropped (it trades off with <span class="arithmatex">\(\mathbf{c}\)</span>: median error up 60 %).</li>
+<li><strong>One step.</strong> The centre-sampled <span class="arithmatex">\(s^2\)</span> holds the box's variance, <span class="arithmatex">\(1/6\)</span> in these units, so the step starts from <span class="arithmatex">\(s^2 - 1/6\)</span> on a window re-centred on the fit, and from there is as accurate as iterating. It is one pass over the window, about half of a fit's time. All four corners or none, as for the fit: a polish that does not factor, moves a corner more than 0.5 px or off the image, or lands where the marker model no longer accepts it, is dropped for the whole marker, whose four fits then stand.</li>
+</ul>
+<p>Measured on AprilGrids rendered through a 195° fisheye with exact image formation (box ⊗ Gaussian PSF per pixel, sensor noise; 24 frames of 36 tags per case), as the median corner error over the Cramér–Rao bound, at identical recall:</p>
+<table>
+<thead>
+<tr>
+<th>Case</th>
+<th>centre-sampled fit</th>
+<th>aperture only</th>
+<th>aperture and curvature</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20 px tags, image centre</td>
+<td>1.80</td>
+<td>1.47</td>
+<td>1.20</td>
+</tr>
+<tr>
+<td>0.2 px PSF</td>
+<td>4.81</td>
+<td>1.73</td>
+<td>1.51</td>
+</tr>
+<tr>
+<td>12 px tags</td>
+<td>1.71</td>
+<td>1.16</td>
+<td>1.16</td>
+</tr>
+<tr>
+<td>32 px tags</td>
+<td>3.51</td>
+<td>3.23</td>
+<td>1.74</td>
+</tr>
+<tr>
+<td>50° incidence</td>
+<td>1.93</td>
+<td>1.64</td>
+<td>1.31</td>
+</tr>
+<tr>
+<td>40° / 70° off axis</td>
+<td>2.79 / 4.12</td>
+<td>2.56 / 4.02</td>
+<td>1.52 / 1.86</td>
+</tr>
+<tr>
+<td>without noise</td>
+<td>1.53</td>
+<td>1.07</td>
+<td>0.71</td>
+</tr>
+<tr>
+<td>geometric mean, 13 cases</td>
+<td>2.30</td>
+<td>1.79</td>
+<td>1.32</td>
+</tr>
+</tbody>
+</table>
+<p>On the pinhole hub AprilGrid the median corner error goes from 0.0085 to 0.0079 px and its 95th percentile from 0.063 to 0.046 px. Real images have no corner truth. On EuRoC and TUM-VI calibration sequences the decoded tags are unchanged, and the residual of each tag against a homography through its 8 nearest tags falls 1–3.5 %, all from the aperture: a lens's bend shifts neighbouring tags alike, which no consistency measure sees. What they do show is that the bend the fits measure is the lens's: the curvature correction applied on TUM-VI's 195° fisheye correlates at r = 0.996 with the bend computed from the published lens model. An earlier finding that box-integration changes nothing came from renders whose blur was a Gaussian sampled at whole pixels, which is not a box aperture.</p>
 <h3 id="26-marker-photometric-inset-calibration">2.6 Marker photometric inset calibration</h3>
 <p><strong>Module:</strong> <code>marker_inset.rs</code></p>
 <p><strong>Why.</strong> A camera blurs in linear light and then applies its tone curve. On the recorded intensities every blurred edge is therefore shifted by some <span class="arithmatex">\(\delta\)</span> toward its <strong>dark side</strong> — 0.3–0.5 px on sRGB images, growing with blur. Every gradient corner estimator (Locus's, OpenCV's, aruco_nano's) reports a marker's corners 0.4–0.7 px inside the printed ones. On a single tag that inset reads as depth (centimetres of translation), and under perspective it is not even the image of a smaller square, so it becomes rotation error too. Since <span class="arithmatex">\(\delta\)</span> depends on blur, which varies with depth along an oblique edge, it cannot be a detector constant.</p>
