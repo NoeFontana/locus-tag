@@ -182,6 +182,41 @@ const XJ_SEED_MARGIN_PX: f64 = 0.5;
 const SUBPIX_MAX_ITER: u32 = 12;
 const SUBPIX_EPS: f64 = 0.005;
 
+/// The four corners of a marker whose corners `seed` are all X-junctions, each placed by the
+/// model fit of [`crate::xjunction`] over a window spanning the border along each edge
+/// (`cell_fraction` of the edge's length) plus `XJ_RADIUS_MARGIN_PX`, then polished together.
+/// `None` unless all four fits are accepted and consistent with the marker
+/// ([`marker_corner_consistent`], probing `probe` px from the corner).
+fn fit_marker_junctions(
+    img: &ImageView,
+    seed: &[[f64; 2]; 4],
+    cell_fraction: f64,
+    probe: f64,
+) -> Option<[[f64; 2]; 4]> {
+    let window = &mut crate::xjunction::Window::empty();
+    let mut fit = |j: usize| {
+        let (prev, next) = (seed[(j + 3) % 4], seed[(j + 1) % 4]);
+        let toward = [
+            [prev[0] - seed[j][0], prev[1] - seed[j][1]],
+            [next[0] - seed[j][0], next[1] - seed[j][1]],
+        ];
+        // Along each edge the border spans `cell_fraction` of that edge's length.
+        let reach = toward.map(|d| d[0].hypot(d[1]) * cell_fraction + XJ_RADIUS_MARGIN_PX);
+        crate::xjunction::fit_x_junction(img, seed[j], toward, reach, window)
+            .filter(|fit| marker_corner_consistent(img, fit.corner, prev, next, seed[j], probe))
+    };
+    let junctions = [fit(0)?, fit(1)?, fit(2)?, fit(3)?];
+    // The four fits together measure how the lens bends each side, which the polish needs.
+    // A polish the marker model does not accept at every corner is dropped whole.
+    let polished = crate::xjunction::polish_marker(img, &junctions, window).filter(|polished| {
+        (0..4).all(|j| {
+            let (prev, next) = (seed[(j + 3) % 4], seed[(j + 1) % 4]);
+            marker_corner_consistent(img, polished[j], prev, next, seed[j], probe)
+        })
+    });
+    Some(polished.unwrap_or_else(|| junctions.map(|junction| junction.corner)))
+}
+
 /// Gradient-orthogonality refinement of a decoded marker's four corners (the
 /// `decoder.corner_subpix` pass), keeping only moves the marker model accepts.
 ///
@@ -194,7 +229,9 @@ const SUBPIX_EPS: f64 = 0.005;
 /// refined corner is therefore kept only if the image around it still shows the corner of this
 /// marker's black border, as checked by [`marker_corner_consistent`]. A rejected corner keeps
 /// its seed. Also returns which corners moved (bit `j` = corner `j`) and whether the
-/// X-junction fit placed all four (such corners carry no photometric inset).
+/// X-junction fit placed all four (such corners carry no photometric inset). Those four are
+/// then polished together ([`crate::xjunction::polish_marker`]): over each pixel's aperture,
+/// along sides bent as the lens bends them.
 ///
 /// **Fusion with the whole-edge corner.** The junction estimate sees only the corner's
 /// neighbourhood. Each edge also carries information along its whole length:
@@ -286,25 +323,11 @@ pub(crate) fn subpix_marker_corners(
         let (prev, next) = (out[(j + 3) % 4], out[(j + 1) % 4]);
         junction_is_x(img, out[j], prev, next, out[j], probe + XJ_SEED_MARGIN_PX)
     });
-    if is_x.iter().all(|&x| x) {
-        let cell_fraction = border as f64 / cells.max(1) as f64;
-        let mut fitted = out;
-        let all_fitted = (0..4).all(|j| {
-            let (prev, next) = (out[(j + 3) % 4], out[(j + 1) % 4]);
-            let toward = [
-                [prev[0] - out[j][0], prev[1] - out[j][1]],
-                [next[0] - out[j][0], next[1] - out[j][1]],
-            ];
-            // Along each edge the border spans `border / cells` of that edge's length.
-            let reach = toward.map(|d| d[0].hypot(d[1]) * cell_fraction + XJ_RADIUS_MARGIN_PX);
-            crate::xjunction::fit_x_junction(img, out[j], toward, reach)
-                .filter(|&fit| marker_corner_consistent(img, fit, prev, next, out[j], probe))
-                .inspect(|&fit| fitted[j] = fit)
-                .is_some()
-        });
-        if all_fitted {
-            return (fitted, 0b1111, true);
-        }
+    if is_x.iter().all(|&x| x)
+        && let Some(fitted) =
+            fit_marker_junctions(img, &out, border as f64 / cells.max(1) as f64, probe)
+    {
+        return (fitted, 0b1111, true);
     }
     // Fuse each L-corner with the intersection of its two whole-edge lines. All four corners
     // or none: a marker whose corners mix the two estimators (they differ by the junction
