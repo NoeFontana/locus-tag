@@ -6,7 +6,7 @@ summary:
   dataset_size: 50
   mean_recall: 0.9413966845721979
   mean_precision: 0.9923431357891722
-  mean_rmse: 0.069
+  mean_rmse: 0.0691
   mean_reprojection_rmse: 0.0629
   p50_translation_error: 0
   p90_translation_error: 0.0003
@@ -28,7 +28,7 @@ summary:
     - filename: scene_0011_cam_0000.png
       missed: 8
       extra: 0
-      rmse: 0.06
+      rmse: 0.0603
     - filename: scene_0021_cam_0000.png
       missed: 8
       extra: 0
@@ -36,4 +36,4 @@ summary:
     - filename: scene_0013_cam_0000.png
       missed: 7
       extra: 1
-      rmse: 0.1267
+      rmse: 0.1268

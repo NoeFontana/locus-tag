@@ -206,17 +206,15 @@ fn fit_marker_junctions(
             .filter(|fit| marker_corner_consistent(img, fit.corner, prev, next, seed[j], probe))
     };
     let junctions = [fit(0)?, fit(1)?, fit(2)?, fit(3)?];
-    // The four fits together measure how the lens bends each side, which the polish needs; a
-    // polished corner the marker model no longer accepts keeps its fit.
-    let polished = crate::xjunction::polish_marker(img, &junctions, window);
-    Some(core::array::from_fn(|j| {
-        let (prev, next) = (seed[(j + 3) % 4], seed[(j + 1) % 4]);
-        if marker_corner_consistent(img, polished[j], prev, next, seed[j], probe) {
-            polished[j]
-        } else {
-            junctions[j].corner
-        }
-    }))
+    // The four fits together measure how the lens bends each side, which the polish needs.
+    // A polish the marker model does not accept at every corner is dropped whole.
+    let polished = crate::xjunction::polish_marker(img, &junctions, window).filter(|polished| {
+        (0..4).all(|j| {
+            let (prev, next) = (seed[(j + 3) % 4], seed[(j + 1) % 4]);
+            marker_corner_consistent(img, polished[j], prev, next, seed[j], probe)
+        })
+    });
+    Some(polished.unwrap_or_else(|| junctions.map(|junction| junction.corner)))
 }
 
 /// Gradient-orthogonality refinement of a decoded marker's four corners (the

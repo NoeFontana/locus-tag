@@ -11,8 +11,8 @@ summary:
   p50_translation_error: 0.0002
   p90_translation_error: 0.0011
   p99_translation_error: 0.3902
-  p50_rotation_error: 0.0183
-  p90_rotation_error: 0.0993
+  p50_rotation_error: 0.0182
+  p90_rotation_error: 0.0996
   p99_rotation_error: 96.9517
   mean_hamming: 0.1283
   mean_total_ms: "[DURATION]"
@@ -32,7 +32,7 @@ summary:
     - filename: scene_0005_cam_0000.png
       missed: 19
       extra: 0
-      rmse: 1.279
+      rmse: 1.2789
     - filename: scene_0013_cam_0000.png
       missed: 19
       extra: 0

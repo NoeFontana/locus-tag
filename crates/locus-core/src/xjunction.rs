@@ -30,31 +30,14 @@
 //! Fitting a curvature per line instead was measured and dropped: it trades off with `c`, and
 //! the median error rose 60 %.
 //!
-//! **Measured.** AprilGrids rendered through a 195° fisheye with exact image formation (each
-//! pixel the box ⊗ Gaussian-PSF integral of the board, with sensor noise), as the median
-//! corner error over the Cramér–Rao bound, for the centre-sampled fit, the polish with
-//! straight lines, and the polish:
-//!
-//! | 24 frames per case | centre | aperture | aperture and curvature |
-//! |---|---|---|---|
-//! | 20 px tags at the image centre | 1.80 | 1.47 | 1.20 |
-//! | 0.2 px PSF | 4.81 | 1.73 | 1.51 |
-//! | 12 px tags | 1.71 | 1.16 | 1.17 |
-//! | 32 px tags | 3.51 | 3.23 | 1.73 |
-//! | 50° incidence | 1.93 | 1.64 | 1.32 |
-//! | 40° off axis | 2.79 | 2.56 | 1.52 |
-//! | 70° off axis | 4.12 | 4.02 | 1.86 |
-//! | without noise | 1.53 | 1.07 | 0.71 |
-//! | geometric mean of 13 cases | 2.30 | 1.79 | 1.32 |
-//!
-//! Recall is the same in every case, since the fit that the gates judge is unchanged. On
-//! pinhole renders (the hub AprilGrid, 5 128 tags) the median corner error falls from 0.0085
-//! to 0.0079 px and its 95th percentile from 0.063 to 0.046 px, all of it from the aperture:
-//! there is no curvature to find, and looking for it moves the median by 0.0001 px. A
-//! quadrature of the model over the pixel (3 × 3 Gauss–Legendre points) reaches 2.11 at the
-//! 0.2 px PSF, where its points are farther apart than the blur, at 18 `erf` per pixel
-//! against 8. The earlier finding that box-integration changes nothing came from renders whose
-//! blur was a Gaussian sampled at whole pixels, which is not a box aperture.
+//! **Measured.** On AprilGrids rendered through a 195° fisheye with exact image formation
+//! (each pixel the box ⊗ Gaussian-PSF integral of the board, with sensor noise), the median
+//! corner error over the Cramér–Rao bound is 2.30 for the centre-sampled fit, 1.79 polished
+//! with straight lines and 1.32 polished (geometric mean of 13 cases, at identical recall:
+//! the fit that the gates judge is unchanged). The per-case table is in
+//! `docs/explanation/algorithms.md`. A quadrature of the model over the pixel (3 × 3
+//! Gauss–Legendre points) reaches 2.11 at a 0.2 px PSF, where its points are farther apart
+//! than the blur, against 1.51, at 18 `erf` per pixel against 8.
 //!
 //! **Why it is unbiased without the true blur.** The product of two odd functions is point
 //! symmetric about `c`, and so is the image of any X-junction under any point-symmetric PSF and
@@ -124,6 +107,11 @@ const MAX_RELATIVE_RMS: f64 = 0.35;
 /// over a window centred where it landed (`fit_x_junction`).
 const RECENTRE_PX: f64 = 0.5;
 
+/// Largest move (px) of a polish ([`Junction::polish`]). It corrects tenths of a pixel at most
+/// (measured: 0.33 px on the smallest hub tags, 0.03 px at the 99th percentile on 20 px tags
+/// through a fisheye), so a larger step is not that correction.
+const MAX_POLISH_MOVE_PX: f64 = 0.5;
+
 /// The window: each pixel's centre relative to the window centre, its value and its weight.
 ///
 /// One window serves every fit and polish of a marker ([`Window::empty`]), each of which
@@ -164,17 +152,111 @@ impl Window {
         reach: [f64; 2],
     ) -> bool {
         self.len = 0;
+        let Some(scan) = Scan::new(img, centre, axes, reach) else {
+            return false;
+        };
+        self.min_reach = scan.min_reach;
+        self.scan(img, &scan);
+        // sin² taper over the rim: the cost stays smooth as pixels cross it.
+        for taper in &mut self.weight[..self.len] {
+            *taper = if *taper < 1.0 {
+                let rise = (0.5 * core::f64::consts::PI * *taper).sin();
+                rise * rise
+            } else {
+                1.0
+            };
+        }
+        // The kernels read whole lanes: the tail past `len` carries weight 0.
+        for k in self.len..self.len.next_multiple_of(LANES) {
+            (self.dx[k], self.dy[k], self.value[k], self.weight[k]) = (0.0, 0.0, 0.0, 0.0);
+        }
+        true
+    }
+
+    /// Appends the pixels of `scan` in row order, each with its distance into the rim in
+    /// `weight`, in rim widths (`gather` turns it into the weight).
+    ///
+    /// The AVX2 scan when the CPU has it, else the portable one: scalar, the scan took 1.5
+    /// passes of the centre-sampled kernel, once per fit and once per polish.
+    fn scan(&mut self, img: &ImageView, scan: &Scan) {
+        #[cfg(target_arch = "x86_64")]
+        if std::arch::is_x86_feature_detected!("avx2") {
+            #[allow(
+                unsafe_code,
+                reason = "a target_feature function needs its feature, detected just above"
+            )]
+            // SAFETY: AVX2 was detected on this CPU just above, which is the only requirement
+            // of the `target_feature` function.
+            unsafe {
+                avx2::scan(self, img, scan);
+            }
+            return;
+        }
+        self.scan_portable(img, scan);
+    }
+
+    /// Portable scan: the reference for the AVX2 one, which matches it bit for bit.
+    fn scan_portable(&mut self, img: &ImageView, scan: &Scan) {
+        let [along_u, along_v] = scan.axes;
+        for y in scan.y.0..=scan.y.1 {
+            let row = &img.data[y * img.stride + scan.x.0..=y * img.stride + scan.x.1];
+            let dy = y as f64 + 0.5 - scan.centre[1];
+            for (x, &value) in (scan.x.0..).zip(row) {
+                let dx = x as f64 + 0.5 - scan.centre[0];
+                // Signed distances to the lines along v and along u.
+                let from_v = dx * along_v[1] - dy * along_v[0];
+                let from_u = along_u[0] * dy - along_u[1] * dx;
+                // Flat there: such a pixel informs only the levels, which the rest already fix.
+                if from_u.abs() > FLAT_PX && from_v.abs() > FLAT_PX {
+                    continue;
+                }
+                let (along_a, along_b) = (from_v * scan.inv_reach[0], from_u * scan.inv_reach[1]);
+                let radius2 = along_a * along_a + along_b * along_b;
+                if radius2 >= 1.0 {
+                    continue;
+                }
+                self.dx[self.len] = dx;
+                self.dy[self.len] = dy;
+                self.value[self.len] = f64::from(value);
+                self.weight[self.len] = (1.0 - radius2.sqrt()) * scan.rim;
+                self.len += 1;
+            }
+        }
+    }
+}
+
+/// A window before its pixels are read: the pixel box to scan (inclusive, on the image), the
+/// centre and unit edge directions, and what normalises the elliptic radius.
+struct Scan {
+    x: (usize, usize),
+    y: (usize, usize),
+    centre: [f64; 2],
+    axes: [[f64; 2]; 2],
+    /// Distances to the two lines times these are the normalised radius's components.
+    inv_reach: [f64; 2],
+    /// Rim width in units of the normalised radius, along the shorter axis.
+    rim: f64,
+    /// Shorter reach (px) after any shrink to the buffers.
+    min_reach: f64,
+}
+
+impl Scan {
+    /// `None` when the edges are nearly parallel or the window lies outside the image.
+    fn new(
+        img: &ImageView,
+        centre: [f64; 2],
+        axes: [[f64; 2]; 2],
+        reach: [f64; 2],
+    ) -> Option<Self> {
         let [along_u, along_v] = axes;
         let skew = along_u[0] * along_v[1] - along_u[1] * along_v[0];
         if skew.abs() < MIN_SKEW_SINE {
-            return false;
+            return None;
         }
         // Bounding-box half-extents; a window wider than the buffers shrinks, keeping its shape.
         let half_x = (reach[0] * along_u[0]).hypot(reach[1] * along_v[0]);
         let half_y = (reach[0] * along_u[1]).hypot(reach[1] * along_v[1]);
         let shrink = (MAX_EXTENT_PX / half_x.max(half_y)).min(1.0);
-        // Distances to the lines over these give the normalised elliptic radius (α/a, β/b).
-        let inv_reach = reach.map(|r| 1.0 / (r * shrink * skew));
         let (x0, x1) = (
             (centre[0] - half_x * shrink).floor(),
             (centre[0] + half_x * shrink).ceil(),
@@ -195,53 +277,27 @@ impl Window {
             y1.clamp(f64::NEG_INFINITY, img.height as f64 - 1.0),
         );
         if !(x0 <= x1 && y0 <= y1) {
-            return false;
+            return None;
         }
         // Non-negative, inside the image and ordered: clamped and checked just above.
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-        let (x0, x1, y0, y1) = (x0 as usize, x1 as usize, y0 as usize, y1 as usize);
-        self.min_reach = reach[0].min(reach[1]) * shrink;
-        // Rim width in units of the normalised radius, along the shorter axis.
-        let rim = self.min_reach / RIM_PX;
-        for y in y0..=y1 {
-            let row = &img.data[y * img.stride + x0..=y * img.stride + x1];
-            let dy = y as f64 + 0.5 - centre[1];
-            for (x, &value) in (x0..).zip(row) {
-                let dx = x as f64 + 0.5 - centre[0];
-                // Signed distances to the lines along v and along u.
-                let from_v = dx * along_v[1] - dy * along_v[0];
-                let from_u = along_u[0] * dy - along_u[1] * dx;
-                // Flat there: such a pixel informs only the levels, which the rest already fix.
-                if from_u.abs().min(from_v.abs()) > FLAT_PX || self.len == MAX_SAMPLES {
-                    continue;
-                }
-                let (along_a, along_b) = (from_v * inv_reach[0], from_u * inv_reach[1]);
-                let radius2 = along_a * along_a + along_b * along_b;
-                if radius2 >= 1.0 {
-                    continue;
-                }
-                // sin² taper over the rim: the cost stays smooth as pixels cross it.
-                let taper = (1.0 - radius2.sqrt()) * rim;
-                let weight = if taper < 1.0 {
-                    let rise = (0.5 * core::f64::consts::PI * taper).sin();
-                    rise * rise
-                } else {
-                    1.0
-                };
-                self.dx[self.len] = dx;
-                self.dy[self.len] = dy;
-                self.value[self.len] = f64::from(value);
-                self.weight[self.len] = weight;
-                self.len += 1;
-            }
-        }
-        // The kernels read whole lanes: the tail past `len` carries weight 0.
-        for k in self.len..self.len.next_multiple_of(LANES) {
-            (self.dx[k], self.dy[k], self.value[k], self.weight[k]) = (0.0, 0.0, 0.0, 0.0);
-        }
-        true
+        let (x, y) = ((x0 as usize, x1 as usize), (y0 as usize, y1 as usize));
+        let min_reach = reach[0].min(reach[1]) * shrink;
+        Some(Self {
+            x,
+            y,
+            centre,
+            axes,
+            inv_reach: reach.map(|r| 1.0 / (r * shrink * skew)),
+            rim: min_reach / RIM_PX,
+            min_reach,
+        })
     }
 }
+
+// The box is at most `MAX_SIDE` pixels a side, so a scan cannot overflow the buffers, and the
+// AVX2 scan's last four-lane store ends within them.
+const _: () = assert!(MAX_SIDE * MAX_SIDE - 1 + LANES <= MAX_SAMPLES);
 
 /// Lanes of the window loop.
 const LANES: usize = F64x4::LANES;
@@ -662,14 +718,109 @@ fn assemble(tri: [f64; TRIANGLE], grad: [f64; PARAMS], cost: f64) -> NormalEquat
 #[cfg(target_arch = "x86_64")]
 mod avx2 {
     use super::{
-        ApertureLine, ApertureModel, CONTRAST, CX, CY, INV_SQRT_PI, LANES, LEVEL, NormalEquations,
-        PARAMS, Params, Profile, SCALE, T1, T2, TRIANGLE, Window, assemble, normal,
+        ApertureLine, ApertureModel, CONTRAST, CX, CY, FLAT_PX, INV_SQRT_PI, LANES, LEVEL,
+        NormalEquations, PARAMS, Params, Profile, SCALE, Scan, T1, T2, TRIANGLE, Window, assemble,
+        normal,
     };
+    use crate::image::ImageView;
     use crate::simd::math::avx2::{erf_and_gauss, sum};
     use core::arch::x86_64::{
-        __m256d, _mm256_add_pd, _mm256_fmadd_pd, _mm256_fmsub_pd, _mm256_fnmadd_pd,
-        _mm256_loadu_pd, _mm256_mul_pd, _mm256_set1_pd, _mm256_setzero_pd, _mm256_sub_pd,
+        __m256d, _CMP_GE_OQ, _CMP_GT_OQ, _mm_cvtepu8_epi32, _mm_cvtsi32_si128, _mm256_add_pd,
+        _mm256_and_pd, _mm256_castpd_ps, _mm256_castps_pd, _mm256_castsi256_pd, _mm256_cmp_pd,
+        _mm256_cvtepi32_pd, _mm256_fmadd_pd, _mm256_fmsub_pd, _mm256_fnmadd_pd, _mm256_loadu_pd,
+        _mm256_loadu_si256, _mm256_movemask_pd, _mm256_mul_pd, _mm256_or_pd,
+        _mm256_permutevar8x32_ps, _mm256_set_pd, _mm256_set1_epi64x, _mm256_set1_pd,
+        _mm256_setzero_pd, _mm256_sqrt_pd, _mm256_storeu_pd, _mm256_sub_pd,
     };
+
+    /// Lane order that packs the lanes kept by a 4-bit mask to the front, as the 32-bit
+    /// indices of `_mm256_permutevar8x32_ps`.
+    const PACK: [[i32; 8]; 16] = {
+        let mut table = [[0i32; 8]; 16];
+        let mut mask = 0;
+        while mask < 16 {
+            let (mut lane, mut at) = (0, 0);
+            while lane < 4 {
+                if mask >> lane & 1 == 1 {
+                    table[mask][2 * at] = 2 * lane;
+                    table[mask][2 * at + 1] = 2 * lane + 1;
+                    at += 1;
+                }
+                lane += 1;
+            }
+            mask += 1;
+        }
+        table
+    };
+
+    /// [`Window::scan_portable`] four pixels at a time, without a branch per pixel: the same
+    /// operations in the same order (no fused multiply-add), so the same window bit for bit.
+    #[target_feature(enable = "avx2")]
+    pub(super) fn scan(win: &mut Window, img: &ImageView, scan: &Scan) {
+        let splat = _mm256_set1_pd;
+        let [along_u, along_v] = scan.axes;
+        let (cx, half) = (splat(scan.centre[0]), splat(0.5));
+        let (u0, u1, v1) = (splat(along_u[0]), splat(along_u[1]), splat(along_v[1]));
+        let (inv_a, inv_b) = (splat(scan.inv_reach[0]), splat(scan.inv_reach[1]));
+        let (flat, one, rim) = (splat(FLAT_PX), splat(1.0), splat(scan.rim));
+        let magnitude = _mm256_castsi256_pd(_mm256_set1_epi64x(i64::MAX));
+        let lanes = _mm256_set_pd(3.0, 2.0, 1.0, 0.0);
+        let mut len = 0;
+        for y in scan.y.0..=scan.y.1 {
+            let row = &img.data[y * img.stride + scan.x.0..=y * img.stride + scan.x.1];
+            let dy = y as f64 + 0.5 - scan.centre[1];
+            let (dy_v0, dy4) = (splat(dy * along_v[0]), splat(dy));
+            for (x, pixels) in (scan.x.0..).step_by(LANES).zip(row.chunks(LANES)) {
+                // A short last chunk is padded here, not read past the row.
+                let bytes = <[u8; LANES]>::try_from(pixels).unwrap_or_else(|_| {
+                    let mut padded = [0u8; LANES];
+                    padded[..pixels.len()].copy_from_slice(pixels);
+                    padded
+                });
+                let value = _mm256_cvtepi32_pd(_mm_cvtepu8_epi32(_mm_cvtsi32_si128(
+                    i32::from_le_bytes(bytes),
+                )));
+                let dx = _mm256_sub_pd(
+                    _mm256_add_pd(_mm256_add_pd(splat(x as f64), lanes), half),
+                    cx,
+                );
+                let from_v = _mm256_sub_pd(_mm256_mul_pd(dx, v1), dy_v0);
+                let from_u = _mm256_sub_pd(_mm256_mul_pd(u0, dy4), _mm256_mul_pd(u1, dx));
+                let is_flat = _mm256_and_pd(
+                    _mm256_cmp_pd::<_CMP_GT_OQ>(_mm256_and_pd(from_u, magnitude), flat),
+                    _mm256_cmp_pd::<_CMP_GT_OQ>(_mm256_and_pd(from_v, magnitude), flat),
+                );
+                let (along_a, along_b) =
+                    (_mm256_mul_pd(from_v, inv_a), _mm256_mul_pd(from_u, inv_b));
+                let radius2 = _mm256_add_pd(
+                    _mm256_mul_pd(along_a, along_a),
+                    _mm256_mul_pd(along_b, along_b),
+                );
+                let outside = _mm256_cmp_pd::<_CMP_GE_OQ>(radius2, one);
+                let taper = _mm256_mul_pd(_mm256_sub_pd(one, _mm256_sqrt_pd(radius2)), rim);
+                // Lanes to keep, less those past the row's end.
+                #[allow(clippy::cast_sign_loss)]
+                let keep = !(_mm256_movemask_pd(_mm256_or_pd(is_flat, outside)) as usize)
+                    & ((1 << pixels.len()) - 1);
+                #[allow(unsafe_code, reason = "std::arch loads and stores take a raw pointer")]
+                // SAFETY: `PACK[keep]` is eight `i32`, which the unaligned load reads, and each
+                // store writes four `f64` to a bounds-checked slice of exactly four.
+                unsafe {
+                    let order = _mm256_loadu_si256(PACK[keep].as_ptr().cast());
+                    let pack = |v: __m256d| {
+                        _mm256_castps_pd(_mm256_permutevar8x32_ps(_mm256_castpd_ps(v), order))
+                    };
+                    let slots = len..len + LANES;
+                    _mm256_storeu_pd(win.dx[slots.clone()].as_mut_ptr(), pack(dx));
+                    _mm256_storeu_pd(win.dy[slots.clone()].as_mut_ptr(), dy4);
+                    _mm256_storeu_pd(win.value[slots.clone()].as_mut_ptr(), pack(value));
+                    _mm256_storeu_pd(win.weight[slots].as_mut_ptr(), pack(taper));
+                }
+                len += keep.count_ones() as usize;
+            }
+        }
+        win.len = len;
+    }
 
     /// [`super::normal_equations_portable`] on AVX2+FMA.
     #[target_feature(enable = "avx2,fma")]
@@ -957,9 +1108,12 @@ fn normal(t: f64) -> [f64; 2] {
 pub(crate) struct Junction {
     /// The junction (Locus convention), from the centre-sampled fit.
     pub(crate) corner: [f64; 2],
-    /// Direction angles (rad) of the two lines, along `toward[0]` and `toward[1]`: each is the
-    /// line's tangent at the junction, since the window is symmetric about it.
+    /// Direction angles (rad) of the two lines, along `toward[0]` and `toward[1]`. Of a bent
+    /// line this is the tangent abreast of `centre`, which the window is symmetric about, not
+    /// the tangent at the junction.
     angles: [f64; 2],
+    /// Centre of the fit's window.
+    centre: [f64; 2],
     /// The fit's window shape and converged parameters.
     axes: [[f64; 2]; 2],
     reach: [f64; 2],
@@ -1117,6 +1271,7 @@ fn fit_once(
     let junction = Junction {
         corner,
         angles: [params[T1], params[T2]],
+        centre: start,
         axes,
         reach,
         params,
@@ -1141,22 +1296,22 @@ impl Junction {
     /// Without the lowered start one step is not enough: `s` must fall by 40 % at a 0.2 px
     /// PSF, which is not a linear change.
     ///
-    /// The centre-sampled corner stands when the window cannot be gathered, the normal
-    /// equations do not factor, or the step moves the corner more than `RECENTRE_PX` or off
-    /// the image. The polish corrects tenths of a pixel at most (measured: 0.33 px on the
-    /// smallest hub tags, 0.03 px at the 99th percentile on 20 px tags through a fisheye), and
-    /// a step of half a pixel is not that correction.
+    /// `None` when the window cannot be gathered or holds too few pixels for the fit itself,
+    /// the normal equations do not factor, or the step moves the corner more than
+    /// `MAX_POLISH_MOVE_PX` or off the image.
     pub(crate) fn polish(
         &self,
         img: &ImageView,
         curvature: [f64; 2],
         win: &mut Window,
-    ) -> [f64; 2] {
+    ) -> Option<[f64; 2]> {
         // A window centred on the fit, not where the fit started: from a window up to a pixel
         // off-centre the same polish leaves 3 % more error (rendered AprilGrids, 1.36 against
         // 1.32 over the bound).
-        if !win.gather(img, self.corner, self.axes, self.reach) {
-            return self.corner;
+        if !win.gather(img, self.corner, self.axes, self.reach)
+            || win.len < MIN_SAMPLES_PER_PARAM * PARAMS
+        {
+            return None;
         }
         let mut params = self.params;
         (params[CX], params[CY]) = (0.0, 0.0);
@@ -1164,16 +1319,11 @@ impl Junction {
             .max(MIN_SCALE_PX * MIN_SCALE_PX)
             .sqrt();
         let (jtj, grad, _) = normal_equations_aperture(win, &params, curvature);
-        let Some(step) = jtj.cholesky().map(|factor| factor.solve(&grad)) else {
-            return self.corner;
-        };
+        let step = jtj.cholesky()?.solve(&grad);
         let corner = [self.corner[0] + step[CX], self.corner[1] + step[CY]];
         // `<=` is false for a NaN step.
-        if step[CX].hypot(step[CY]) <= RECENTRE_PX && inside_image(img, corner) {
-            corner
-        } else {
-            self.corner
-        }
+        (step[CX].hypot(step[CY]) <= MAX_POLISH_MOVE_PX && inside_image(img, corner))
+            .then_some(corner)
     }
 }
 
@@ -1181,10 +1331,12 @@ impl Junction {
 /// `toward = [previous corner, next corner]`: side `j` runs from corner `j` to corner `j + 1`,
 /// and its curvature is positive where it turns toward the left normal of that direction.
 ///
-/// A lens images a straight side as an arc. The junction fits measure its tangent at both
-/// ends (each window is symmetric about its junction, so a straight line fitted to an arc is
-/// parallel to the tangent there), and the turn between the two tangents over the chord is the
-/// side's mean curvature. No pixel is read for it.
+/// A lens images a straight side as an arc. Each junction fit measures the arc's tangent
+/// abreast of its window's centre ([`Junction::angles`]), so the turn between the two fits'
+/// tangents over the distance between their window centres is the side's mean curvature. No
+/// pixel is read for it. Over the distance between the junctions instead, seeds `δ` px inside
+/// both ends of a side would shrink its curvature by `2δ/side`: a tenth on a 12 px tag seeded
+/// under the cell floor.
 ///
 /// Only the part that opposite sides do not share is kept: half the difference of their
 /// curvatures along the contour. A lens bends two parallel sides the same way, which along the
@@ -1196,15 +1348,15 @@ impl Junction {
 ///   with the whole turn and 1.47 with the difference;
 /// - the change of the lens's bend across the marker, which is second order in its size.
 ///
-/// The estimate is calibrated: scaling it by 0.8 or 1.2 is worse than using it as it is
-/// (32 px tags: 1.76 and 1.87 against 1.72).
+/// The estimate is calibrated: scaled by 0.8 or 1.2 it leaves 2 % and 9 % more error on
+/// rendered 32 px tags.
 fn side_curvatures(junctions: &[Junction; 4]) -> [f64; 4] {
     let raw: [f64; 4] = core::array::from_fn(|j| {
         let (from, to) = (&junctions[j], &junctions[(j + 1) % 4]);
-        let chord = (to.corner[0] - from.corner[0]).hypot(to.corner[1] - from.corner[1]);
+        let span = (to.centre[0] - from.centre[0]).hypot(to.centre[1] - from.centre[1]);
         // The side leaves corner `j` along its line 1 and arrives against the next corner's
         // line 0, which points back.
-        wrap_angle(to.angles[0] + core::f64::consts::PI - from.angles[1]) / chord
+        wrap_angle(to.angles[0] + core::f64::consts::PI - from.angles[1]) / span
     });
     core::array::from_fn(|j| 0.5 * (raw[j] - raw[(j + 2) % 4]))
 }
@@ -1212,16 +1364,19 @@ fn side_curvatures(junctions: &[Junction; 4]) -> [f64; 4] {
 /// The four corners of a marker from its `junctions` (each fitted with
 /// `toward = [previous corner, next corner]`), polished over the pixel's aperture along sides
 /// bent as the junctions' own tangents measure ([`side_curvatures`], [`Junction::polish`]).
+///
+/// All four or `None`: the polish moves a corner by the model error it removes, so a marker
+/// with some corners polished would mix two models, as a marker with some corners fitted does.
 pub(crate) fn polish_marker(
     img: &ImageView,
     junctions: &[Junction; 4],
     win: &mut Window,
-) -> [[f64; 2]; 4] {
+) -> Option<[[f64; 2]; 4]> {
     let curvature = side_curvatures(junctions);
-    core::array::from_fn(|j| {
-        // Line 0 runs back along the previous side, so that side's turn is reversed on it.
-        junctions[j].polish(img, [-curvature[(j + 3) % 4], curvature[j]], win)
-    })
+    // Line 0 runs back along the previous side, so that side's turn is reversed on it.
+    let mut polish =
+        |j: usize| junctions[j].polish(img, [-curvature[(j + 3) % 4], curvature[j]], win);
+    Some([polish(0)?, polish(1)?, polish(2)?, polish(3)?])
 }
 
 #[cfg(test)]
@@ -1313,7 +1468,7 @@ mod tests {
         let err = (fit.corner[0] - c[0]).hypot(fit.corner[1] - c[1]);
         assert!(err < 0.05, "error {err}");
         // The polish keeps a clipped window's junction too.
-        let polished = fit.polish(&img, [0.0; 2], win);
+        let polished = fit.polish(&img, [0.0; 2], win).expect("polish");
         let err = (polished[0] - c[0]).hypot(polished[1] - c[1]);
         assert!(err < 0.05, "polished error {err}");
     }
@@ -1621,7 +1776,9 @@ mod tests {
             ];
             let (fit, verdict) = fit_once(&img, start, toward, [4.75; 2], win).unwrap();
             assert_eq!(verdict, Verdict::Accepted);
-            let refined = fit.polish(&img, [curvature[0], -curvature[1]], win);
+            let refined = fit
+                .polish(&img, [curvature[0], -curvature[1]], win)
+                .expect("polish");
             for (corner, sum) in [(fit.corner, &mut centre), (refined, &mut polished)] {
                 *sum += (corner[0] - c[0]).powi(2) + (corner[1] - c[1]).powi(2);
             }
@@ -1657,11 +1814,81 @@ mod tests {
         );
     }
 
+    /// A curvature that is not a number cannot be polished along: two fits from one start
+    /// leave no span to divide their turn by.
+    #[test]
+    fn a_polish_without_a_curvature_is_refused() {
+        let (side, c, t) = (24, [12.3, 11.6], 0.3f64);
+        let data = render_exact(c, t, 0.5, [0.0; 2], side);
+        let img = ImageView::new(&data, side, side, side).unwrap();
+        let t2 = t + core::f64::consts::FRAC_PI_2;
+        let toward = [[t.cos(), t.sin()], [-t2.cos(), -t2.sin()]];
+        let win = &mut Window::empty();
+        let fit = fit_x_junction(&img, c, toward, [4.75; 2], win).expect("fit");
+        // The premise: with a finite curvature, this corner is polished.
+        assert!(fit.polish(&img, [0.0; 2], win).is_some());
+        for curvature in [[f64::NAN, 0.0], [0.0, f64::INFINITY]] {
+            assert!(fit.polish(&img, curvature, win).is_none());
+        }
+        let coincident = [fit; 4];
+        assert!(side_curvatures(&coincident).iter().all(|k| !k.is_finite()));
+        assert!(polish_marker(&img, &coincident, win).is_none());
+    }
+
+    /// The AVX2 scan fills the window the portable one does, bit for bit: skewed, shrunk and
+    /// frame-clipped windows, whose rows are not whole lanes.
+    #[cfg(target_arch = "x86_64")]
+    #[test]
+    fn avx2_scan_matches_the_portable_one() {
+        use rand::prelude::*;
+        if !std::arch::is_x86_feature_detected!("avx2") {
+            return;
+        }
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(11);
+        let side = 40;
+        let data: Vec<u8> = (0..side * side).map(|_| rng.random()).collect();
+        let img = ImageView::new(&data, side, side, side).unwrap();
+        let (portable, fast) = (&mut Window::empty(), &mut Window::empty());
+        let mut pixels = 0;
+        for _ in 0..2000 {
+            let centre = [0.0, 0.0].map(|_: f64| side as f64 * (1.2 * rng.random::<f64>() - 0.1));
+            let t: f64 = core::f64::consts::TAU * rng.random::<f64>();
+            let skew: f64 = 0.3 + 2.5 * rng.random::<f64>();
+            let axes = [[t.cos(), t.sin()], [(t + skew).cos(), (t + skew).sin()]];
+            let reach = [0.0, 0.0].map(|_: f64| 1.0 + 12.0 * rng.random::<f64>());
+            let Some(scan) = Scan::new(&img, centre, axes, reach) else {
+                continue;
+            };
+            (portable.len, fast.len) = (0, 0);
+            portable.scan_portable(&img, &scan);
+            #[allow(unsafe_code, reason = "a target_feature function needs its feature")]
+            // SAFETY: AVX2 was detected above.
+            unsafe {
+                avx2::scan(fast, &img, &scan);
+            }
+            assert_eq!(portable.len, fast.len);
+            let bits = |v: &[f64]| {
+                v[..portable.len]
+                    .iter()
+                    .map(|x| x.to_bits())
+                    .collect::<Vec<_>>()
+            };
+            assert_eq!(bits(&portable.dx), bits(&fast.dx));
+            assert_eq!(bits(&portable.dy), bits(&fast.dy));
+            assert_eq!(bits(&portable.value), bits(&fast.value));
+            assert_eq!(bits(&portable.weight), bits(&fast.weight));
+            pixels += portable.len;
+        }
+        // The premise: the windows held pixels.
+        assert!(pixels > 50_000, "{pixels} pixels");
+    }
+
     /// A junction with only what [`side_curvatures`] reads.
-    fn junction_at(corner: [f64; 2], angles: [f64; 2]) -> Junction {
+    fn junction_at(corner: [f64; 2], centre: [f64; 2], angles: [f64; 2]) -> Junction {
         Junction {
             corner,
             angles,
+            centre,
             axes: [[1.0, 0.0], [0.0, 1.0]],
             reach: [1.0; 2],
             params: Params::zeros(),
@@ -1671,7 +1898,8 @@ mod tests {
     /// A 20 px square whose sides are arcs: its horizontal sides bent by 0.004 /px and its
     /// vertical ones by −0.003 /px, as a lens bends every line of one direction alike. The
     /// side curvatures are those bends, signed along the contour, and they do not move when
-    /// every junction's lines scissor (ink spread) or every side bows alike.
+    /// every junction's lines scissor (ink spread), every side bows alike, or the fits' windows
+    /// sit inside the corners (each then measures the tangent abreast of its centre).
     #[test]
     fn side_curvatures_are_the_bend_opposite_sides_do_not_share() {
         use core::f64::consts::PI;
@@ -1679,23 +1907,30 @@ mod tests {
         let corners = [[10.0f64, 10.0], [30.0, 10.0], [30.0, 30.0], [10.0, 30.0]];
         // Along the contour, sides 0 and 1 run with their line's direction and 2 and 3 against.
         let lens = [bend[0], bend[1], -bend[0], -bend[1]];
-        let junctions = |scissor: f64, shared: f64| -> [Junction; 4] {
+        let junctions = |scissor: f64, shared: f64, inset: f64| -> [Junction; 4] {
             core::array::from_fn(|j| {
+                let centre = corners[j].map(|c| c + inset * (20.0 - c).signum());
+                let span = side - 2.0 * inset;
                 let (prev, next) = ((j + 3) % 4, (j + 1) % 4);
                 let chord = |from: usize, to: usize| {
                     (corners[to][1] - corners[from][1]).atan2(corners[to][0] - corners[from][0])
                 };
                 // An arc's tangent turns by κ·length, half before the chord's direction and
                 // half after it.
-                let leaving = chord(j, next) - 0.5 * side * (lens[j] + shared);
-                let arriving = chord(prev, j) + 0.5 * side * (lens[prev] + shared);
-                junction_at(corners[j], [arriving + PI - scissor, leaving + scissor])
+                let leaving = chord(j, next) - 0.5 * span * (lens[j] + shared);
+                let arriving = chord(prev, j) + 0.5 * span * (lens[prev] + shared);
+                junction_at(
+                    corners[j],
+                    centre,
+                    [arriving + PI - scissor, leaving + scissor],
+                )
             })
         };
         let close = |got: [f64; 4]| got.iter().zip(&lens).all(|(g, w)| (g - w).abs() < 1e-12);
-        assert!(close(side_curvatures(&junctions(0.0, 0.0))));
-        assert!(close(side_curvatures(&junctions(0.02, 0.0))));
-        assert!(close(side_curvatures(&junctions(0.0, 0.002))));
+        assert!(close(side_curvatures(&junctions(0.0, 0.0, 0.0))));
+        assert!(close(side_curvatures(&junctions(0.02, 0.0, 0.0))));
+        assert!(close(side_curvatures(&junctions(0.0, 0.002, 0.0))));
+        assert!(close(side_curvatures(&junctions(0.0, 0.0, 0.8))));
     }
 
     /// A marker as a lens images it: a 24 px black square with a black connector square on
@@ -1773,7 +2008,7 @@ mod tests {
             ];
             fit_x_junction(&img, start, toward, [4.75; 2], win).expect("fit")
         });
-        let polished = polish_marker(&img, &junctions, win);
+        let polished = polish_marker(&img, &junctions, win).expect("polish");
         let rms = |corners: [[f64; 2]; 4]| {
             let sum: f64 = corners
                 .iter()
